@@ -18,4 +18,11 @@ class TrailMapperScreenTest {
             TrailMapperScreen.entries.map(TrailMapperScreen::route).distinct().size,
         )
     }
+
+    @Test
+    fun homeTabsKeepTheirOrderAndSavedNamesWithPlanFirst() {
+        // The selected tab is saved by name, and Plan is the start destination that Back returns to.
+        assertEquals(listOf("Plan", "Saved", "Explore", "Updates"), TrailMapperHomeTab.entries.map { it.name })
+        assertEquals(listOf("Plan", "Saved", "Explore", "Updates"), TrailMapperHomeTab.entries.map { it.label })
+    }
 }

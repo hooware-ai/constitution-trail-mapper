@@ -4,6 +4,21 @@
  */
 package com.trailmapper.shared
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Loop
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -59,7 +74,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PinDrop
@@ -182,9 +196,6 @@ fun App(
                             navController.navigate(TrailMapperScreen.About.route) {
                                 launchSingleTop = true
                             }
-                        },
-                        onOpenLocalGuide = {
-                            navController.navigate(TrailMapperScreen.LocalGuide.route) { launchSingleTop = true }
                         },
                         onCreateRoute = {
                             routePlannerDestinationId = null
@@ -384,7 +395,6 @@ private fun TrailMapperHome(
     onSignInWithGoogle: () -> Unit,
     onSignOut: () -> Unit,
     onOpenAbout: () -> Unit,
-    onOpenLocalGuide: () -> Unit,
     onCreateRoute: () -> Unit,
     onCreateExerciseRoute: () -> Unit,
     onNavigateToDestination: (SavedDestination) -> Unit,
@@ -499,12 +509,22 @@ private fun TrailMapperHome(
         )
     }
 
-    TrailMapperNavigationDrawer(
-        resourceLinks = resourceLinks,
-        onOpenAbout = onOpenAbout,
-        onOpenLocalGuide = onOpenLocalGuide,
-        onOpenResource = { link -> externalLinkOpener.open(link.url) },
-    ) { openMenu ->
+    var selectedTabName by rememberSaveable { mutableStateOf(TrailMapperHomeTab.Plan.name) }
+    val selectedTab = TrailMapperHomeTab.valueOf(selectedTabName)
+
+    fun selectTab(tab: TrailMapperHomeTab) {
+        if (tab != TrailMapperHomeTab.Saved) clearSavedItemEditMode()
+        selectedTabName = tab.name
+    }
+
+    // Back from another top-level tab returns to Plan, the start destination, before leaving the app.
+    PlatformBackHandler(
+        enabled = selectedTab != TrailMapperHomeTab.Plan && editingDestinationId == null && editingRouteId == null,
+        onBack = { selectTab(TrailMapperHomeTab.Plan) },
+    )
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val useNavigationRail = maxWidth >= NAVIGATION_RAIL_MIN_WIDTH
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             snackbarHost = { SnackbarHost(savedItemSnackbarHostState) },
@@ -512,9 +532,14 @@ private fun TrailMapperHome(
                 TrailMapperTopAppBar(
                     account = appState.account,
                     isResolvingAccount = appState.isResolvingAccount,
-                    onOpenMenu = openMenu,
+                    onOpenAbout = onOpenAbout,
                     onOpenAccount = { showAccountSheet = true },
                 )
+            },
+            bottomBar = {
+                if (!useNavigationRail) {
+                    HomeNavigationBar(selectedTab = selectedTab, onSelect = ::selectTab)
+                }
             },
             containerColor = MaterialTheme.colorScheme.background,
         ) { scaffoldPadding ->
@@ -529,25 +554,105 @@ private fun TrailMapperHome(
             } else {
                 scaffoldPadding.calculateLeftPadding(layoutDirection)
             }
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .consumeWindowInsets(scaffoldPadding),
-                contentPadding = PaddingValues(
-                    start = startInset + 20.dp,
-                    top = scaffoldPadding.calculateTopPadding() + 16.dp,
-                    end = endInset + 20.dp,
-                    bottom = scaffoldPadding.calculateBottomPadding() + 16.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                item {
-                    TrailInformationSection()
+            val topPadding = scaffoldPadding.calculateTopPadding()
+            val bottomPadding = scaffoldPadding.calculateBottomPadding()
+            // A rail covers the start inset itself; content then only needs its own margin.
+            val contentStart = if (useNavigationRail) 20.dp else startInset + 20.dp
+            val listPadding = PaddingValues(
+                start = contentStart,
+                top = topPadding + 16.dp,
+                end = endInset + 20.dp,
+                bottom = bottomPadding + 16.dp,
+            )
+            Row(modifier = Modifier.fillMaxSize()) {
+                if (useNavigationRail) {
+                    HomeNavigationRail(
+                        selectedTab = selectedTab,
+                        onSelect = ::selectTab,
+                        modifier = Modifier.padding(start = startInset, top = topPadding, bottom = bottomPadding),
+                    )
                 }
+                val tabModifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .consumeWindowInsets(scaffoldPadding)
+                when (selectedTab) {
+                    TrailMapperHomeTab.Plan -> LazyColumn(
+                        modifier = tabModifier,
+                        contentPadding = listPadding,
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        item {
+                            Text(
+                                text = "Plan a ride",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                        }
+                        item {
+                            PlanChoiceButton(
+                                title = "Go somewhere",
+                                description = "A trail route between two places",
+                                icon = Icons.Filled.Place,
+                                primary = true,
+                                onClick = onCreateRoute,
+                            )
+                        }
+                        item {
+                            PlanChoiceButton(
+                                title = "Make an exercise loop",
+                                description = "Start and finish in the same place",
+                                icon = Icons.Filled.Loop,
+                                primary = false,
+                                onClick = onCreateExerciseRoute,
+                            )
+                        }
+                        // The three most recent routes, one tap from launch; the full list is under Saved.
+                        if (appState.recentRoutes.isNotEmpty()) {
+                            item {
+                                RecentRoutesHeader(
+                                    actionLabel = "See all",
+                                    onAction = { selectTab(TrailMapperHomeTab.Saved) },
+                                )
+                            }
+                            items(
+                                items = appState.recentRoutes.take(PLAN_RECENT_ROUTE_COUNT),
+                                key = { entry -> "plan-recent-${entry.id}" },
+                            ) { entry ->
+                                RecentTrailRouteRow(
+                                    entry = entry,
+                                    detail = RecentTrailRouteHistorySijko.detailFor(entry, appState.recentRoutesLoadedAtEpochMillis),
+                                    openEnabled = trailRouteMapPresenter.isAvailable,
+                                    onOpen = { onOpenRecentRoute(entry) },
+                                    onRemove = { removeRecentRoute(entry) },
+                                )
+                            }
+                        }
+                        item {
+                            TrailInformationSection()
+                        }
+                        item {
+                            LocalTrailGuideShortcut(onOpen = { selectTab(TrailMapperHomeTab.Updates) })
+                        }
+                    }
 
+                    TrailMapperHomeTab.Saved -> LazyColumn(
+                        modifier = tabModifier,
+                        contentPadding = listPadding,
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        item {
+                            Text(
+                                text = "Saved",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                        }
                 if (appState.recentRoutes.isNotEmpty()) {
                     item {
-                        RecentRoutesHeader(onClear = { confirmClearRecents = true })
+                        RecentRoutesHeader(actionLabel = "Clear recents", onAction = { confirmClearRecents = true })
                     }
                     items(
                         items = appState.recentRoutes,
@@ -561,19 +666,6 @@ private fun TrailMapperHome(
                             onRemove = { removeRecentRoute(entry) },
                         )
                     }
-                }
-
-                item {
-                    HomeSectionHeader(title = "Trail maps")
-                }
-
-                item {
-                    TrailMapResources(
-                        resourceLinks = resourceLinks,
-                        externalLinkOpener = externalLinkOpener,
-                        trailNetworkMapPresenter = trailNetworkMapPresenter,
-                        onOpenLocalGuide = onOpenLocalGuide,
-                    )
                 }
 
                 item {
@@ -722,6 +814,55 @@ private fun TrailMapperHome(
                             onCancelEditMode = ::exitSavedItemEditMode,
                             onEdit = { routePendingRename = savedRoute },
                             onDelete = { routePendingDelete = savedRoute },
+                        )
+                    }
+                }
+                    }
+
+                    TrailMapperHomeTab.Explore -> LazyColumn(
+                        modifier = tabModifier,
+                        contentPadding = listPadding,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        item {
+                            Text(
+                                text = "Explore trails",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                        }
+                        if (trailNetworkMapPresenter.isAvailable) {
+                            item {
+                                TrailResourceRow(
+                                    link = TrailResourceLink(
+                                        title = "Trail Mapper map",
+                                        url = "",
+                                        description = "County trails, verified local additions and reported closure areas",
+                                    ),
+                                    onOpen = trailNetworkMapPresenter::showTrailNetwork,
+                                    external = false,
+                                )
+                            }
+                        }
+                        resourceGroupItems(
+                            groups = listOf(TrailResourceGroup.Maps, TrailResourceGroup.Community),
+                            resourceLinks = resourceLinks,
+                            onOpen = { link -> externalLinkOpener.open(link.url) },
+                        )
+                    }
+
+                    TrailMapperHomeTab.Updates -> LocalTrailGuideContent(
+                        externalLinkOpener = externalLinkOpener,
+                        title = "Local updates & rules",
+                        modifier = tabModifier.padding(top = topPadding),
+                        horizontalPadding = PaddingValues(start = contentStart, end = endInset + 20.dp),
+                        listBottomPadding = bottomPadding + 16.dp,
+                    ) {
+                        resourceGroupItems(
+                            groups = listOf(TrailResourceGroup.Notices, TrailResourceGroup.Rules),
+                            resourceLinks = resourceLinks,
+                            onOpen = { link -> externalLinkOpener.open(link.url) },
                         )
                     }
                 }
@@ -954,18 +1095,10 @@ private fun AddSavedDestinationDialog(
 private fun TrailMapperTopAppBar(
     account: TrailUserAccount?,
     isResolvingAccount: Boolean,
-    onOpenMenu: () -> Unit,
+    onOpenAbout: () -> Unit,
     onOpenAccount: () -> Unit,
 ) {
     TopAppBar(
-        navigationIcon = {
-            IconButton(onClick = onOpenMenu) {
-                Icon(
-                    imageVector = Icons.Filled.Menu,
-                    contentDescription = "Open menu",
-                )
-            }
-        },
         title = {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -990,6 +1123,12 @@ private fun TrailMapperTopAppBar(
             }
         },
         actions = {
+            IconButton(onClick = onOpenAbout) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = "About Trail Mapper",
+                )
+            }
             if (isResolvingAccount) {
                 Box(
                     modifier = Modifier.size(48.dp),
@@ -1143,7 +1282,10 @@ private fun TrailInformationSection() {
 }
 
 @Composable
-private fun RecentRoutesHeader(onClear: () -> Unit) {
+private fun RecentRoutesHeader(
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1155,9 +1297,111 @@ private fun RecentRoutesHeader(onClear: () -> Unit) {
             text = "Recent",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.semantics { heading() },
         )
-        TextButton(onClick = onClear) {
-            Text("Clear recents")
+        TextButton(onClick = onAction) {
+            Text(actionLabel)
+        }
+    }
+}
+
+/** One of Plan's two ways to start; the first is filled as the primary action. */
+@Composable
+private fun PlanChoiceButton(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    primary: Boolean,
+    onClick: () -> Unit,
+) {
+    val content: @Composable RowScope.() -> Unit = {
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(28.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(text = description, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+    val modifier = Modifier
+        .fillMaxWidth()
+        .heightIn(min = 88.dp)
+    val shape = RoundedCornerShape(16.dp)
+    val padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
+    if (primary) {
+        Button(onClick = onClick, modifier = modifier, shape = shape, contentPadding = padding, content = content)
+    } else {
+        OutlinedButton(onClick = onClick, modifier = modifier, shape = shape, contentPadding = padding, content = content)
+    }
+}
+
+@Composable
+private fun HomeNavigationBar(
+    selectedTab: TrailMapperHomeTab,
+    onSelect: (TrailMapperHomeTab) -> Unit,
+) {
+    NavigationBar {
+        TrailMapperHomeTab.entries.forEach { tab ->
+            NavigationBarItem(
+                selected = tab == selectedTab,
+                onClick = { onSelect(tab) },
+                icon = { Icon(imageVector = tab.icon(), contentDescription = null) },
+                label = { Text(tab.label) },
+            )
+        }
+    }
+}
+
+/** On wider windows the same destinations sit in a rail along the start edge. */
+@Composable
+private fun HomeNavigationRail(
+    selectedTab: TrailMapperHomeTab,
+    onSelect: (TrailMapperHomeTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    NavigationRail(modifier = modifier, containerColor = MaterialTheme.colorScheme.background) {
+        TrailMapperHomeTab.entries.forEach { tab ->
+            NavigationRailItem(
+                selected = tab == selectedTab,
+                onClick = { onSelect(tab) },
+                icon = { Icon(imageVector = tab.icon(), contentDescription = null) },
+                label = { Text(tab.label) },
+            )
+        }
+    }
+}
+
+private fun TrailMapperHomeTab.icon(): ImageVector = when (this) {
+    TrailMapperHomeTab.Plan -> Icons.Filled.Route
+    TrailMapperHomeTab.Saved -> Icons.Filled.Bookmark
+    TrailMapperHomeTab.Explore -> Icons.Filled.Map
+    TrailMapperHomeTab.Updates -> Icons.Filled.Campaign
+}
+
+/** External links under group headings; each opens the browser, and says so. */
+private fun LazyListScope.resourceGroupItems(
+    groups: List<TrailResourceGroup>,
+    resourceLinks: List<TrailResourceLink>,
+    onOpen: (TrailResourceLink) -> Unit,
+) {
+    groups.forEach { group ->
+        val links = resourceLinks.filter { link -> link.group == group }
+        if (links.isEmpty()) return@forEach
+        item(key = "group-${group.name}") {
+            Text(
+                text = group.heading,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .semantics { heading() },
+            )
+        }
+        items(items = links, key = { link -> "link-${link.url}" }) { link ->
+            TrailResourceRow(link = link, onOpen = { onOpen(link) })
         }
     }
 }
@@ -1210,6 +1454,9 @@ private fun RecentTrailRouteRow(
     }
 }
 
+private val NAVIGATION_RAIL_MIN_WIDTH = 600.dp
+private const val PLAN_RECENT_ROUTE_COUNT = 3
+
 @Composable
 private fun HomeSectionHeader(
     title: String,
@@ -1240,35 +1487,6 @@ private fun HomeSectionHeader(
 }
 
 @Composable
-private fun TrailMapResources(
-    resourceLinks: List<TrailResourceLink>,
-    externalLinkOpener: ExternalLinkOpener,
-    trailNetworkMapPresenter: TrailNetworkMapPresenter,
-    onOpenLocalGuide: () -> Unit,
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (trailNetworkMapPresenter.isAvailable) {
-            TrailResourceRow(
-                link = TrailResourceLink("Trail Mapper map", "", "County trails, verified local additions and reported closure areas"),
-                onOpen = trailNetworkMapPresenter::showTrailNetwork,
-                external = false,
-            )
-        }
-        LocalTrailGuideShortcut(onOpen = onOpenLocalGuide)
-        resourceLinks
-            .filter(TrailResourceLink::showOnHome)
-            .forEach { link ->
-                TrailResourceRow(
-                    link = link,
-                    onOpen = { externalLinkOpener.open(link.url) },
-                )
-            }
-    }
-}
-
-@Composable
 private fun TrailResourceRow(
     link: TrailResourceLink,
     onOpen: () -> Unit,
@@ -1277,7 +1495,7 @@ private fun TrailResourceRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen),
+            .clickable(onClickLabel = if (external) "Open in browser" else null, onClick = onOpen),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
