@@ -1,0 +1,87 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-09-28T15:03:24Z"
+  },
+  "title": "Trail Mapper route-to-ride",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Prototype: returning rider",
+      "is_interactive": true
+    },
+    "FirstUse.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Prototype: first use",
+      "is_interactive": true
+    },
+    "OptionA.dc.html": {
+      "x": 0,
+      "y": 1194,
+      "w": 390,
+      "h": 844,
+      "title": "A: Plan shows Recent",
+      "is_interactive": true
+    },
+    "OptionASaved.dc.html": {
+      "x": 470,
+      "y": 1194,
+      "w": 390,
+      "h": 844,
+      "title": "A: Saved, Recent tab",
+      "is_interactive": true
+    },
+    "OptionB.dc.html": {
+      "x": 1020,
+      "y": 1194,
+      "w": 390,
+      "h": 844,
+      "title": "B: Plan without Recent",
+      "is_interactive": true
+    },
+    "OptionBSaved.dc.html": {
+      "x": 1490,
+      "y": 1194,
+      "w": 390,
+      "h": 844,
+      "title": "B: Saved, Recent tab",
+      "is_interactive": true
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "FirstUse.dc.html",
+    "OptionA.dc.html",
+    "OptionASaved.dc.html",
+    "OptionB.dc.html",
+    "OptionBSaved.dc.html"
+  ],
+  "notes": {
+    "flow": {
+      "x": 0,
+      "y": -300,
+      "text": "Map-first route results (#63)",
+      "kind": "title1",
+      "maxW": 860
+    },
+    "placement": {
+      "x": 0,
+      "y": 894,
+      "text": "Where Recent lives: A (chosen) vs B",
+      "kind": "title1",
+      "maxW": 1880
+    }
+  },
+  "designSystems": []
+}
