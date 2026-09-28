@@ -7,6 +7,10 @@ package com.trailmapper.shared
 data class TrailMapperUiState(
     val savedRoutes: List<SavedTrailRoute> = emptyList(),
     val savedDestinations: List<SavedDestination> = emptyList(),
+    /** Unsaved routes planned recently, newest first; never a saved route. */
+    val recentRoutes: List<RecentTrailRoute> = emptyList(),
+    /** When [recentRoutes] was loaded, for "3 hr ago" labels. */
+    val recentRoutesLoadedAtEpochMillis: Long = 0L,
     val account: TrailUserAccount? = null,
     val isLoadingSavedRoutes: Boolean = false,
     val isLoadingSavedDestinations: Boolean = false,

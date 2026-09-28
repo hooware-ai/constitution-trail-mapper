@@ -35,6 +35,16 @@ object TrailMapperPersistenceJsonSijko {
         }.getOrNull()
     }
 
+    fun encodeRecentRoutes(routes: List<RecentTrailRoute>): String {
+        return json.encodeToString(routes)
+    }
+
+    fun decodeRecentRoutes(serializedRoutes: String): List<RecentTrailRoute>? {
+        return runCatching {
+            json.decodeFromString<List<RecentTrailRoute>>(serializedRoutes)
+        }.getOrNull()
+    }
+
     fun encodeCarriedExerciseRide(ride: CarriedExerciseRide): String = json.encodeToString(ride)
 
     fun decodeCarriedExerciseRide(serializedRide: String): CarriedExerciseRide? {

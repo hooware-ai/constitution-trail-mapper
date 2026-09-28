@@ -23,6 +23,7 @@ import com.trailmapper.android.map.AndroidTrailNetworkMapPresenter
 import com.trailmapper.android.map.AndroidTrailRouteMapPresenter
 import com.trailmapper.android.map.MapPointPickerActivity
 import com.trailmapper.android.routing.AndroidAccessNetworkProvider
+import com.trailmapper.android.routing.AndroidRecentTrailRouteStore
 import com.trailmapper.android.routing.AndroidSavedDestinationStore
 import com.trailmapper.android.routing.AndroidSavedTrailRouteStore
 import com.trailmapper.android.routing.AndroidTrailNetworkProvider
@@ -119,6 +120,7 @@ class MainActivity : ComponentActivity() {
         val savedDestinationStore = AndroidSavedDestinationStore(applicationContext)
         val completedExerciseSessionStore = AndroidCompletedExerciseSessionStore(applicationContext)
         val trailRouteShareProvider = AndroidTrailRouteShareProvider(applicationContext)
+        val recentTrailRouteStore = AndroidRecentTrailRouteStore(applicationContext)
         val developerOptionsActions = if (BuildConfig.DEBUG) {
             AndroidDeveloperOptionsActions(this)
         } else {
@@ -140,6 +142,7 @@ class MainActivity : ComponentActivity() {
                 completedExerciseSessionStore = completedExerciseSessionStore,
                 trailAccountProvider = resultBridge,
                 trailRouteShareProvider = trailRouteShareProvider,
+                recentTrailRouteStore = recentTrailRouteStore,
                 developerOptionsActions = developerOptionsActions,
             )
         }

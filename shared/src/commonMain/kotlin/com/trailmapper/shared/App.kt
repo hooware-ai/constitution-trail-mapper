@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Menu
@@ -91,6 +92,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -98,6 +101,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
 import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteSummarySijko
 import com.trailmapper.shared.routing.ExerciseRouteStatus
@@ -130,6 +134,7 @@ fun App(
     completedExerciseSessionStore: CompletedExerciseSessionStore = NoCompletedExerciseSessionStore,
     trailAccountProvider: TrailAccountProvider = NoTrailAccountProvider,
     trailRouteShareProvider: TrailRouteShareProvider = NoTrailRouteShareProvider,
+    recentTrailRouteStore: RecentTrailRouteStore = NoRecentTrailRouteStore,
     developerOptionsActions: DeveloperOptionsActions? = null,
 ) {
     MaterialTheme(colorScheme = TrailMapperColorScheme) {
@@ -142,6 +147,7 @@ fun App(
                     savedTrailRouteStore = savedTrailRouteStore,
                     savedDestinationStore = savedDestinationStore,
                     trailAccountProvider = trailAccountProvider,
+                    recentTrailRouteStore = recentTrailRouteStore,
                 )
             }
             val appState by trailMapperViewModel.uiState.collectAsStateWithLifecycle()
@@ -197,9 +203,22 @@ fun App(
                                 currentLocationAddressProvider = currentLocationAddressProvider,
                                 trailNetworkProvider = trailNetworkProvider,
                                 accessNetworkProvider = accessNetworkProvider,
-                                onRouteFound = trailRouteMapPresenter::showTrailRoute,
+                                onRouteFound = { route ->
+                                    trailRouteMapPresenter.showTrailRoute(
+                                        route,
+                                        TrailRoutePreviewRequest(
+                                            destination = TrailRoutePreviewDestination(destination.address, destination.point),
+                                        ),
+                                    )
+                                },
                             )
                         },
+                        onOpenRecentRoute = { entry ->
+                            trailRouteMapPresenter.showTrailRoute(entry.route, TrailRoutePreviewRequest(title = entry.title))
+                        },
+                        onRemoveRecentRoute = trailMapperViewModel::removeRecentRoute,
+                        onRestoreRecentRoute = trailMapperViewModel::restoreRecentRoute,
+                        onClearRecentRoutes = trailMapperViewModel::clearRecentRoutes,
                         onCreateRouteFromDestination = { destination ->
                             routePlannerDestinationId = destination.id
                             navController.navigate(TrailMapperScreen.RoutePlanner.route) {
@@ -370,6 +389,10 @@ private fun TrailMapperHome(
     onCreateExerciseRoute: () -> Unit,
     onNavigateToDestination: (SavedDestination) -> Unit,
     onCreateRouteFromDestination: (SavedDestination) -> Unit,
+    onOpenRecentRoute: (RecentTrailRoute) -> Unit,
+    onRemoveRecentRoute: (RecentTrailRoute) -> Unit,
+    onRestoreRecentRoute: (RecentTrailRoute) -> Unit,
+    onClearRecentRoutes: () -> Unit,
     onSaveDestination: (String, String, MapPoint) -> Unit,
     onRenameSavedDestination: (String, String) -> Unit,
     onDeleteSavedDestination: (String) -> Unit,
@@ -393,6 +416,20 @@ private fun TrailMapperHome(
     var routePendingDelete by remember { mutableStateOf<SavedTrailRoute?>(null) }
     val savedItemSnackbarHostState = remember { SnackbarHostState() }
     var savedItemStatusMessage by remember { mutableStateOf<String?>(null) }
+    val homeScope = rememberCoroutineScope()
+    var confirmClearRecents by remember { mutableStateOf(false) }
+
+    fun removeRecentRoute(entry: RecentTrailRoute) {
+        onRemoveRecentRoute(entry)
+        homeScope.launch {
+            savedItemSnackbarHostState.currentSnackbarData?.dismiss()
+            val result = savedItemSnackbarHostState.showSnackbar(
+                message = "Removed ${entry.title} from recents",
+                actionLabel = "Undo",
+            )
+            if (result == SnackbarResult.ActionPerformed) onRestoreRecentRoute(entry)
+        }
+    }
     val savedNavigationRoutes = SavedTrailRouteFilterSijko.navigationRoutes(appState.savedRoutes)
     val savedExerciseRoutes = SavedTrailRouteFilterSijko.exerciseRoutes(appState.savedRoutes)
 
@@ -506,6 +543,24 @@ private fun TrailMapperHome(
             ) {
                 item {
                     TrailInformationSection()
+                }
+
+                if (appState.recentRoutes.isNotEmpty()) {
+                    item {
+                        RecentRoutesHeader(onClear = { confirmClearRecents = true })
+                    }
+                    items(
+                        items = appState.recentRoutes,
+                        key = { entry -> "recent-${entry.id}" },
+                    ) { entry ->
+                        RecentTrailRouteRow(
+                            entry = entry,
+                            detail = RecentTrailRouteHistorySijko.detailFor(entry, appState.recentRoutesLoadedAtEpochMillis),
+                            openEnabled = trailRouteMapPresenter.isAvailable,
+                            onOpen = { onOpenRecentRoute(entry) },
+                            onRemove = { removeRecentRoute(entry) },
+                        )
+                    }
                 }
 
                 item {
@@ -800,6 +855,32 @@ private fun TrailMapperHome(
             },
         )
     }
+
+    if (confirmClearRecents) {
+        val count = appState.recentRoutes.size
+        AlertDialog(
+            onDismissRequest = { confirmClearRecents = false },
+            title = { Text(if (count == 1) "Clear 1 recent route?" else "Clear $count recent routes?") },
+            text = { Text("Saved routes and places aren't affected.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClearRecents = false
+                        // A Remove's Undo no longer applies once everything is cleared.
+                        savedItemSnackbarHostState.currentSnackbarData?.dismiss()
+                        onClearRecentRoutes()
+                    },
+                ) {
+                    Text("Clear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearRecents = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -1058,6 +1139,74 @@ private fun TrailInformationSection() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun RecentRoutesHeader(onClear: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Recent",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        TextButton(onClick = onClear) {
+            Text("Clear recents")
+        }
+    }
+}
+
+/** A recent, unsaved route: a clock marks it apart from saved rows, which carry a bookmark. */
+@Composable
+private fun RecentTrailRouteRow(
+    entry: RecentTrailRoute,
+    detail: String,
+    openEnabled: Boolean,
+    onOpen: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 56.dp)
+                .clickable(enabled = openEnabled, onClickLabel = "Open map", onClick = onOpen),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.History,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Column {
+                Text(
+                    text = entry.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        IconButton(onClick = onRemove) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = "Remove ${entry.title} from recents",
+            )
+        }
     }
 }
 

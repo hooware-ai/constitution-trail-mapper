@@ -6,7 +6,7 @@ package com.trailmapper.shared
 
 import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteKind
-import com.trailmapper.shared.routing.TrailRouteReverseSijko
+import com.trailmapper.shared.routing.TrailRouteIdentitySijko
 import com.trailmapper.shared.sijko.MapPoint
 import com.trailmapper.shared.sijko.MapPointLabelSijko
 import com.trailmapper.shared.sijko.SavedDestinationTitleSijko
@@ -94,7 +94,6 @@ object TrailRoutePreviewSavingSijko {
         savedRoutes: List<SavedTrailRoute>,
         route: TrailRoute,
     ): SavedTrailRoute? {
-        val reversed = TrailRouteReverseSijko.reversed(route)
-        return savedRoutes.firstOrNull { saved -> saved.route == route || saved.route == reversed }
+        return savedRoutes.firstOrNull { saved -> TrailRouteIdentitySijko.isSameRoute(saved.route, route) }
     }
 }

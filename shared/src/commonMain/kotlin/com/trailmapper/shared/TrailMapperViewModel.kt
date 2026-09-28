@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -36,6 +37,8 @@ internal class TrailMapperViewModel(
     private val savedTrailRouteStore: SavedTrailRouteStore,
     private val savedDestinationStore: SavedDestinationStore,
     private val trailAccountProvider: TrailAccountProvider,
+    private val recentTrailRouteStore: RecentTrailRouteStore = NoRecentTrailRouteStore,
+    private val nowEpochMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TrailMapperUiState())
     val uiState: StateFlow<TrailMapperUiState> = _uiState
@@ -55,6 +58,65 @@ internal class TrailMapperViewModel(
     fun refreshSavedItems() {
         refreshSavedRoutes()
         refreshSavedDestinations()
+        refreshRecentRoutes()
+    }
+
+    fun refreshRecentRoutes() {
+        viewModelScope.launch {
+            val now = nowEpochMillis()
+            val recent = try {
+                RecentTrailRouteHistorySijko.load(recentTrailRouteStore, savedTrailRouteStore, now)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                // Recent is a convenience; an unreadable history just shows nothing.
+                emptyList()
+            }
+            _uiState.update { it.copy(recentRoutes = recent, recentRoutesLoadedAtEpochMillis = now) }
+        }
+    }
+
+    // Entries removed since the last Clear; only these can be put back by Undo.
+    private val restorableRecentIds = mutableSetOf<String>()
+
+    fun removeRecentRoute(entry: RecentTrailRoute) {
+        restorableRecentIds += entry.id
+        _uiState.update { state -> state.copy(recentRoutes = state.recentRoutes.filterNot { it.id == entry.id }) }
+        viewModelScope.launch {
+            runRecentOperation { RecentTrailRouteHistorySijko.remove(recentTrailRouteStore, entry.id) }
+            refreshRecentRoutes()
+        }
+    }
+
+    /** Undo for Remove; ignored once Clear has run or the entry was already put back. */
+    fun restoreRecentRoute(entry: RecentTrailRoute) {
+        if (!restorableRecentIds.remove(entry.id)) return
+        viewModelScope.launch {
+            runRecentOperation {
+                RecentTrailRouteHistorySijko.restore(recentTrailRouteStore, savedTrailRouteStore, entry, nowEpochMillis())
+            }
+            refreshRecentRoutes()
+        }
+    }
+
+    /** Clears Recent only; saved routes and places are separate and untouched. */
+    fun clearRecentRoutes() {
+        restorableRecentIds.clear()
+        _uiState.update { it.copy(recentRoutes = emptyList()) }
+        viewModelScope.launch {
+            runRecentOperation { RecentTrailRouteHistorySijko.clear(recentTrailRouteStore) }
+            refreshRecentRoutes()
+        }
+    }
+
+    private suspend fun runRecentOperation(operation: suspend () -> Unit) {
+        try {
+            operation()
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            Unit
+        }
     }
 
     fun refreshSavedRoutes() {
@@ -101,6 +163,8 @@ internal class TrailMapperViewModel(
                         saveMessage = "${savedRoute.title} saved.",
                     )
                 }
+                runRecentOperation { RecentTrailRouteHistorySijko.forget(recentTrailRouteStore, route) }
+                refreshRecentRoutes()
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
