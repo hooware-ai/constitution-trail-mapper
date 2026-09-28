@@ -866,6 +866,8 @@ private fun TrailMapperHome(
                 TextButton(
                     onClick = {
                         confirmClearRecents = false
+                        // A Remove's Undo no longer applies once everything is cleared.
+                        savedItemSnackbarHostState.currentSnackbarData?.dismiss()
                         onClearRecentRoutes()
                     },
                 ) {

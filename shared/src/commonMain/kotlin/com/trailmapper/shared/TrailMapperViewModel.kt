@@ -76,7 +76,11 @@ internal class TrailMapperViewModel(
         }
     }
 
+    // Entries removed since the last Clear; only these can be put back by Undo.
+    private val restorableRecentIds = mutableSetOf<String>()
+
     fun removeRecentRoute(entry: RecentTrailRoute) {
+        restorableRecentIds += entry.id
         _uiState.update { state -> state.copy(recentRoutes = state.recentRoutes.filterNot { it.id == entry.id }) }
         viewModelScope.launch {
             runRecentOperation { RecentTrailRouteHistorySijko.remove(recentTrailRouteStore, entry.id) }
@@ -84,7 +88,9 @@ internal class TrailMapperViewModel(
         }
     }
 
+    /** Undo for Remove; ignored once Clear has run or the entry was already put back. */
     fun restoreRecentRoute(entry: RecentTrailRoute) {
+        if (!restorableRecentIds.remove(entry.id)) return
         viewModelScope.launch {
             runRecentOperation {
                 RecentTrailRouteHistorySijko.restore(recentTrailRouteStore, savedTrailRouteStore, entry, nowEpochMillis())
@@ -95,6 +101,7 @@ internal class TrailMapperViewModel(
 
     /** Clears Recent only; saved routes and places are separate and untouched. */
     fun clearRecentRoutes() {
+        restorableRecentIds.clear()
         _uiState.update { it.copy(recentRoutes = emptyList()) }
         viewModelScope.launch {
             runRecentOperation { RecentTrailRouteHistorySijko.clear(recentTrailRouteStore) }

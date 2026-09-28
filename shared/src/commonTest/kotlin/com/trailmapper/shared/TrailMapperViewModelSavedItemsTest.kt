@@ -234,6 +234,71 @@ class TrailMapperViewModelSavedItemsTest {
         assertEquals(listOf(savedRoute), viewModel.uiState.value.savedRoutes)
     }
 
+    @Test
+    fun anUndoLeftOverFromBeforeClearDoesNotBringTheEntryBack() = runTest(dispatcher) {
+        val now = 1_790_000_000_000L
+        val entry = RecentTrailRoute("recent-1", "To Library", trailRoute().copy(totalDistanceMeters = 4000.0), now - 60_000)
+        val recentStore = object : RecentTrailRouteStore {
+            var routes = listOf(entry)
+
+            override suspend fun recentRoutes() = routes
+
+            override suspend fun replaceRecentRoutes(routes: List<RecentTrailRoute>) {
+                this.routes = routes
+            }
+        }
+        val viewModel = TrailMapperViewModel(
+            savedTrailRouteStore = RouteStore(),
+            savedDestinationStore = DestinationStore(),
+            trailAccountProvider = NoTrailAccountProvider,
+            recentTrailRouteStore = recentStore,
+            nowEpochMillis = { now },
+        )
+        advanceUntilIdle()
+
+        viewModel.removeRecentRoute(entry)
+        advanceUntilIdle()
+        viewModel.clearRecentRoutes()
+        advanceUntilIdle()
+        viewModel.restoreRecentRoute(entry)
+        advanceUntilIdle()
+
+        assertTrue(recentStore.routes.isEmpty())
+        assertTrue(viewModel.uiState.value.recentRoutes.isEmpty())
+    }
+
+    @Test
+    fun undoRestoresARemovedEntryOnce() = runTest(dispatcher) {
+        val now = 1_790_000_000_000L
+        val entry = RecentTrailRoute("recent-1", "To Library", trailRoute().copy(totalDistanceMeters = 4000.0), now - 60_000)
+        val recentStore = object : RecentTrailRouteStore {
+            var routes = listOf(entry)
+
+            override suspend fun recentRoutes() = routes
+
+            override suspend fun replaceRecentRoutes(routes: List<RecentTrailRoute>) {
+                this.routes = routes
+            }
+        }
+        val viewModel = TrailMapperViewModel(
+            savedTrailRouteStore = RouteStore(),
+            savedDestinationStore = DestinationStore(),
+            trailAccountProvider = NoTrailAccountProvider,
+            recentTrailRouteStore = recentStore,
+            nowEpochMillis = { now },
+        )
+        advanceUntilIdle()
+
+        viewModel.removeRecentRoute(entry)
+        advanceUntilIdle()
+        viewModel.restoreRecentRoute(entry)
+        viewModel.restoreRecentRoute(entry)
+        advanceUntilIdle()
+
+        assertEquals(listOf(entry), recentStore.routes)
+        assertEquals(listOf("recent-1"), viewModel.uiState.value.recentRoutes.map { it.id })
+    }
+
     private fun viewModel(
         routeStore: RouteStore = RouteStore(),
         destinationStore: DestinationStore = DestinationStore(),

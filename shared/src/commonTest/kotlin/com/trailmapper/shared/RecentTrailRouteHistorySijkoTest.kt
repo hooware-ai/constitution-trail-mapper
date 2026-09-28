@@ -36,6 +36,33 @@ class RecentTrailRouteHistorySijkoTest {
     }
 
     @Test
+    fun aReScoredRouteIsTheSameEntryAndASavedCopyKeepsItOutOfRecent() {
+        val planned = route(1.0)
+        val rescored = planned.copy(totalCost = planned.totalCost + 1.0, requestedDistanceMeters = 2000.0)
+        var entries = RecentTrailRouteHistorySijko.recorded(emptyList(), planned, "To Library", emptyList(), NOW)
+        entries = RecentTrailRouteHistorySijko.recorded(entries, rescored, null, emptyList(), NOW + 1)
+        assertEquals(1, entries.size)
+
+        val savedCopy = SavedTrailRoute(id = "route-1", title = "Library", summary = "", route = rescored)
+        assertTrue(RecentTrailRouteHistorySijko.visible(entries, listOf(savedCopy), NOW + 2).isEmpty())
+    }
+
+    @Test
+    fun undoDoesNotDuplicateARouteReopenedWhileItWasShowing() = runTest {
+        val library = route(1.0)
+        val removed = entry("recent-1", library, NOW - 10)
+        val store = MemoryRecentStore(mutableListOf(removed))
+
+        RecentTrailRouteHistorySijko.remove(store, "recent-1")
+        // The rider reopens the same route before tapping Undo; it is recorded under a new entry.
+        RecentTrailRouteHistorySijko.record(store, RouteStore(), library, "To Library", NOW)
+        RecentTrailRouteHistorySijko.restore(store, RouteStore(), removed, NOW)
+
+        assertEquals(1, store.routes.size)
+        assertEquals(NOW, store.routes.single().lastUsedEpochMillis)
+    }
+
+    @Test
     fun theHistoryKeepsTheTwentyNewestEntries() {
         var entries = emptyList<RecentTrailRoute>()
         repeat(25) { index ->

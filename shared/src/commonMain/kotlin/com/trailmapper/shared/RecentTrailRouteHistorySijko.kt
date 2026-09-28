@@ -136,13 +136,15 @@ object RecentTrailRouteHistorySijko {
         removed
     }
 
+    /** Puts a removed entry back, unless its route has returned to Recent (or was saved) meanwhile. */
     suspend fun restore(
         store: RecentTrailRouteStore,
         savedStore: SavedTrailRouteStore,
         entry: RecentTrailRoute,
         nowEpochMillis: Long,
     ) = historyMutex.withLock {
-        val stored = store.recentRoutes().filterNot { it.id == entry.id }
+        val stored = store.recentRoutes()
+        if (stored.any { recent -> TrailRouteIdentitySijko.isSameRoute(recent.route, entry.route) }) return@withLock
         store.replaceRecentRoutes(visible(stored + entry, savedStore.savedRoutes(), nowEpochMillis))
     }
 
