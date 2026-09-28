@@ -2,7 +2,11 @@
 
 Started September 28, 2026 for #3. First flow: #17, map-first route results with separate Recent and Saved. Deliverable issue: #19.
 
-The prototype is an interactive canvas of phone screens. Its sources are in [`prototype/`](prototype/). `Main.dc.html` holds the whole flow; the other boards mount it with different settings. The files run inside the canvas runtime (`support.js`), not as plain HTML pages; its state logic is in the `Component` class at the end of `Main.dc.html`. The hosted canvas is a private Claude design artifact until shared. Google Stitch and Figma, suggested in #3, both need an account; this round didn't need either.
+**To walk the prototype, open [`prototype.html`](prototype.html) in any browser.** It is a single self-contained page with a picker for the same boards (returning rider, first use, options A and B). It needs no account or canvas; its only network use is the Google Fonts request, and it falls back to the system font without it.
+
+The sources are in [`prototype/`](prototype/): `Main.dc.html` holds the whole flow, and its state logic is the `Component` class at its end. The other boards mount it with different settings. They are authored for a Claude design canvas (a private artifact until shared), whose runtime (`support.js`) is not in this repository. [`tools/build_standalone.py`](tools/build_standalone.py) rebuilds `prototype.html` from them with the small runtime in [`tools/standalone_runtime.js`](tools/standalone_runtime.js), which covers only the template features the prototype uses. Rebuild after editing the prototype.
+
+Examples use public landmarks and parks only, never residential addresses. Google Stitch and Figma, suggested in #3, both need an account; this round didn't need either.
 
 Nothing here changes the app yet. The screen issues (#4, #5, #6, #8, #11) implement it.
 
@@ -17,11 +21,11 @@ Plan → planner → searching → **route preview** → navigation, with Save, 
 | Point-to-point planner | Start and destination are one field pattern with swap beside them. Places come from search, saved places and the map. Proposed trails is a checkbox with its explanation, off by default. **Find route** is disabled until a destination is set. A failed search is shown inline on the form, with the reason and what to try, and is not recorded anywhere. |
 | Exercise planner | The start is the same field pattern. Distance presets are 3, 5, 10 and 15 mi, plus a custom miles field validated for 0.5–100 mi with an inline hint. **Make loop** is disabled until the distance is valid. |
 | Searching | The map shows behind a progress card: "Finding a route…" or "Making your loop…", then "Checking trails, street access and current closures.", with Cancel. Cancel returns to the planner with the draft intact. |
-| **Route preview** | A successful search always opens here; nothing asks the rider to save first. The map fits the whole route. The bottom panel shows, in order: title, distance, time, the access or retraced share, closure status, proposed-trail flag, a map key, **Start navigation** (the only filled button), then **Save**, **Share**, **Edit** and **More**. More holds Directions, Reverse direction, and "Save destination as a place" (or "start" for a loop). |
+| **Route preview** | A successful search always opens here; nothing asks the rider to save first. The map fits the whole route into the area above the panel, and refits when a warning makes the panel taller. The bottom panel shows, in order: title, distance, time, the access or retraced share, closure status, proposed-trail flag, a map key, **Start navigation** (the only filled button), then **Save**, **Share**, **Edit** and **More**. More holds Directions, Reverse direction, and "Save destination as a place" (or "start" for a loop). Start navigation is disabled while closures are being checked (it reads "Checking closures…"), and stays disabled while a reported closure affects the route (see Stale routes). |
 | Save | One tap saves under the route's title. The button turns to **Saved**, and a snackbar says "Saved to Saved routes" with a **Rename** action. There is no dialog. Tapping Saved again offers **View**. |
 | Share | Opens Android's share sheet with the map image. Returning leaves the preview unchanged. |
 | Edit | Returns to the planner with the draft that produced the route: destination, or distance and preset. |
-| Navigation | Stop returns to the same preview, saved or not. Off route, a point-to-point route offers **Reroute**; a loop offers **Rejoin the loop** and **Return to start** (the existing rerouting behavior). Full navigation design stays in #10. |
+| Navigation | Stop returns to the same preview, saved or not. Off route, a point-to-point route offers **Reroute**. A loop offers two different outcomes. **Rejoin the loop** leads back onto the loop ahead of the rider. **Return to start** abandons the rest of the loop: guidance switches to "Returning to start" with the shortest way back and its own remaining distance, and going off route again offers **Reroute to start**. These are the existing rerouting behaviors. Full navigation design stays in #10. |
 
 ## Recent and Saved
 
@@ -55,7 +59,11 @@ A puts a just-planned route one tap from launch, where riders start ("ride that 
 3. **Saving moves it:** a saved route leaves Recent; Saved is its home. Deleting a saved route does not put it back in Recent. Opening a saved route does not add a Recent entry. The two lists never share an item, so Clear recents cannot touch a saved one.
 4. **Retention:** at most 20 entries. An entry is dropped 30 days after its last use. Riders can remove one entry or clear all.
 5. **Where it lives:** in app-private storage on the device only. It is never synced through the optional Google sign-in, and it is excluded from Android backup. Today `allowBackup` includes every store; #20 decides the backup rules, and the privacy copy above depends on them.
-6. **Stale routes:** opening any recent or saved route re-runs the current closure and advisory checks before the rider starts. The panel shows "Checking current closures…" and then either "Closures checked just now" or a warning: "A reported closure now affects this route" with **Recalculate** and **Review notice**, and the closure drawn on the map. Recalculate updates that entry in place, with **Undo** in the snackbar. History never implies a route is clear.
+6. **Stale routes:** opening any recent or saved route re-runs the current closure and advisory checks before the rider can start. While they run, the panel shows "Checking current closures…" and Start navigation is disabled. Then either:
+   - it shows "Closures checked just now" and Start is enabled; or
+   - it shows a warning, "A reported closure now affects this route", naming the closure (the prototype uses the real Uptown trail detour), with **Recalculate** and **Review notice**, and the closure drawn on the map.
+
+   **Safety decision:** while a reported closure affects the route, Start navigation stays disabled, with the reason "This route goes through a reported closure. Recalculate to ride around it." There is no "start anyway". This matches routing, which already excludes closed trail from new routes and reroutes. Recalculate is the way forward: it replaces that entry in place, enables Start, and offers **Undo** in the snackbar. **Review notice** opens a sheet with the notice's summary, its source and date, the detour, and **Open town notice** (the advisory's existing source link). History never implies a route is clear.
 
 ## Back and recreation
 
@@ -98,6 +106,8 @@ Touch targets are at least 48 dp. Every icon-only button has a label, for exampl
 | Relaunch, process recreation, large text, TalkBack | Implementation and device checks |
 | Retention cap and privacy copy | Copy and policy decided here; the backup rules are #20 |
 | Proposed trails flagged when used | Yes: on rows and on the preview |
+| Reopened route checked before starting | Yes: Start waits for the check; a reported closure blocks it until Recalculate; Review notice opens the notice |
+| Loop off-route choices | Yes: Rejoin the loop and Return to start lead to different guidance |
 
 ## Left for the screen issues
 
