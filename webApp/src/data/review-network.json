@@ -1,0 +1,916 @@
+{
+  "source": "Self-authored synthetic test network. Not real infrastructure. CC0.",
+  "layers": [
+    {
+      "features": [
+        {
+          "id": "fixture-h-0-0",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.49
+              ],
+              [
+                -88.98,
+                40.49
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-0-1",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.49
+              ],
+              [
+                -88.97,
+                40.49
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-0-2",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.49
+              ],
+              [
+                -88.96,
+                40.49
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-0-3",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.49
+              ],
+              [
+                -88.95,
+                40.49
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-1-0",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.5
+              ],
+              [
+                -88.98,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-1-1",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.5
+              ],
+              [
+                -88.97,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-1-2",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.5
+              ],
+              [
+                -88.96,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-1-3",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.5
+              ],
+              [
+                -88.95,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-2-0",
+          "name": "Review park connector",
+          "status": "Existing",
+          "routeRoles": [
+            "ParkConnectors"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.51
+              ],
+              [
+                -88.98,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-2-1",
+          "name": "Review park connector",
+          "status": "Existing",
+          "routeRoles": [
+            "ParkConnectors"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.51
+              ],
+              [
+                -88.97,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-2-2",
+          "name": "Review park connector",
+          "status": "Existing",
+          "routeRoles": [
+            "ParkConnectors"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.51
+              ],
+              [
+                -88.96,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-2-3",
+          "name": "Review park connector",
+          "status": "Existing",
+          "routeRoles": [
+            "ParkConnectors"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.51
+              ],
+              [
+                -88.95,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-3-0",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.52
+              ],
+              [
+                -88.98,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-3-1",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.52
+              ],
+              [
+                -88.97,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-3-2",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.52
+              ],
+              [
+                -88.96,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-3-3",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.52
+              ],
+              [
+                -88.95,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-4-0",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.53
+              ],
+              [
+                -88.98,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-4-1",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.53
+              ],
+              [
+                -88.97,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-4-2",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.53
+              ],
+              [
+                -88.96,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-h-4-3",
+          "name": "Review east–west trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.53
+              ],
+              [
+                -88.95,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-0-0",
+          "name": "Review shared roadway",
+          "status": "Existing",
+          "routeRoles": [
+            "SharedRoadways"
+          ],
+          "facilityType": "Shared Lane",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.49
+              ],
+              [
+                -88.99,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-0-1",
+          "name": "Review shared roadway",
+          "status": "Existing",
+          "routeRoles": [
+            "SharedRoadways"
+          ],
+          "facilityType": "Shared Lane",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.5
+              ],
+              [
+                -88.99,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-0-2",
+          "name": "Review shared roadway",
+          "status": "Existing",
+          "routeRoles": [
+            "SharedRoadways"
+          ],
+          "facilityType": "Shared Lane",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.51
+              ],
+              [
+                -88.99,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-0-3",
+          "name": "Review shared roadway",
+          "status": "Existing",
+          "routeRoles": [
+            "SharedRoadways"
+          ],
+          "facilityType": "Shared Lane",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.99,
+                40.52
+              ],
+              [
+                -88.99,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-1-0",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.49
+              ],
+              [
+                -88.98,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-1-1",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.5
+              ],
+              [
+                -88.98,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-1-2",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.51
+              ],
+              [
+                -88.98,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-1-3",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.98,
+                40.52
+              ],
+              [
+                -88.98,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-2-0",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.49
+              ],
+              [
+                -88.97,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-2-1",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.5
+              ],
+              [
+                -88.97,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-2-2",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.51
+              ],
+              [
+                -88.97,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-2-3",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.97,
+                40.52
+              ],
+              [
+                -88.97,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-3-0",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.49
+              ],
+              [
+                -88.96,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-3-1",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.5
+              ],
+              [
+                -88.96,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-3-2",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.51
+              ],
+              [
+                -88.96,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-3-3",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.96,
+                40.52
+              ],
+              [
+                -88.96,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-4-0",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.95,
+                40.49
+              ],
+              [
+                -88.95,
+                40.5
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-4-1",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.95,
+                40.5
+              ],
+              [
+                -88.95,
+                40.51
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-4-2",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.95,
+                40.51
+              ],
+              [
+                -88.95,
+                40.52
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-v-4-3",
+          "name": "Review north–south trail",
+          "status": "Existing",
+          "routeRoles": [
+            "TrailBranches"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.95,
+                40.52
+              ],
+              [
+                -88.95,
+                40.53
+              ]
+            ]
+          ]
+        },
+        {
+          "id": "fixture-proposed",
+          "name": "Review proposed trail",
+          "status": "Proposed",
+          "routeRoles": [
+            "TrailBranches",
+            "ProposedTrails"
+          ],
+          "facilityType": "Separated Trail",
+          "comfort": "All Ages and Abilities",
+          "paths": [
+            [
+              [
+                -88.95,
+                40.51
+              ],
+              [
+                -88.945,
+                40.515
+              ],
+              [
+                -88.95,
+                40.52
+              ]
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

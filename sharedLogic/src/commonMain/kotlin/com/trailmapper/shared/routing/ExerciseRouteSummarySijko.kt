@@ -4,8 +4,6 @@
  */
 package com.trailmapper.shared.routing
 
-import kotlin.math.round
-
 object ExerciseRouteSummarySijko {
     fun summaryFor(
         route: TrailRoute,
@@ -25,7 +23,7 @@ object ExerciseRouteSummarySijko {
 
     private fun Double.toMiles(): Double = this / MetersPerMile
 
-    private fun Double.formatMiles(): String = (round(this * 100.0) / 100.0).toString()
+    private fun Double.formatMiles(): String = formatRouteMiles(this)
 
     private const val MetersPerMile = 1_609.344
     private const val MinimumReportedRetracingMeters = 50.0

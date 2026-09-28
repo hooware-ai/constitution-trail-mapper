@@ -1,0 +1,2330 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-09-28",
+  "evidenceVerifiedAtUtc": "2026-09-28T23:16:22.538625+00:00",
+  "description": "Reviewed existing operational trails exactly matched to the explicitly CC BY 4.0 Open Data source; hashes and roles only, no geometry.",
+  "licensedItemId": "a2a54b1f94704061abc90686fbc5c220",
+  "licensedSourceUrl": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/8",
+  "license": "CC BY 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+  "licenseEvidenceUrl": "https://www.arcgis.com/sharing/rest/content/items/a2a54b1f94704061abc90686fbc5c220?f=json",
+  "licensedDomainsSha256": "a1ff430dacef5f63d3e0eb1da0c494c6af0b81b15836e75c96db85442601edd5",
+  "reviewedFeatureCount": 254,
+  "reviewedLayerCounts": {
+    "54": 59,
+    "16": 195
+  },
+  "features": [
+    {
+      "selectionLayerId": 54,
+      "objectId": 61,
+      "geometrySha256": "8f1ec6612243697fb0645091af0c7384fe3d16b4ea11116d60f8c0c7f74e80e3",
+      "attributesSha256": "28340977096db863ded8c182f624c0988392baf7fd98123017ac7967ad2ca59d",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 68,
+      "geometrySha256": "559816a92ee570e87c2e79e466bdee4b28a0f9853a3942acdebd5c69d9073f7a",
+      "attributesSha256": "5ce8995bd81c1580db3016c4463b5019c51d2127b70e75e7fcaee4a8f34b0990",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1284,
+      "geometrySha256": "9cf8c4efc724d9559e8cc8bff8d7c716ac15ec7c89b5f0bb3cbdfe42b080dfd2",
+      "attributesSha256": "a9158ec5d1b2fdb8cfd1b72ad02a9c492c4a7840559e671faf3f017c8e16706f",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1305,
+      "geometrySha256": "3d07d57b0206ecca8993768f2542293f896ed7b898986a9bad8098b9f1954180",
+      "attributesSha256": "4d9ede6dd239f7e2273e59f772ef51d6644ba392f700cf315cd304a9037d64a6",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1380,
+      "geometrySha256": "9cd03dd803d556246f387560e1e01c72fe20ed1bfd3081dba4df38fb72096907",
+      "attributesSha256": "82c681f4f111d81098097226af9b0f30af412b9aeb8986b64db1a84222a5ad84",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1483,
+      "geometrySha256": "507010d3d2c37d301e118f8d2c6727d58cee20078b0e800c3ab29be365c4427d",
+      "attributesSha256": "8d76919aa2e8c89dd38ad0c4df2c8a8caed4c9dea390a17d0a00022e09ddf8a0",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1485,
+      "geometrySha256": "74f2724f658b2373d893ee18f1673715377806f4bf8a70a4deef7671d3db339e",
+      "attributesSha256": "9ad56730a59ff788a546a067a80e7e62c429f1469ad054975adb3de48a69878d",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1546,
+      "geometrySha256": "35b03a0287476b16c49638294929baa110475e9463c72c9a8787d4a67333ca03",
+      "attributesSha256": "5c9cbf82f44bb83a1410cbb148442bbbf9b8dfe0f95fa91c89faceaa6db5c1e2",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1638,
+      "geometrySha256": "00eaa517984bb4c36a4020406a72114912a01865c1c75f99be3f15633037283e",
+      "attributesSha256": "2e8aef20d44663a90c9493a01ceec8774bd2d4c847e2b47fec138ab9ba30dc66",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1809,
+      "geometrySha256": "af9e5b8a7f50afa79a2191615008748a71999fc05bf374b976b550c467dc19cd",
+      "attributesSha256": "2dae6ec4436f3fec4a50f4fb446ec58a492be43b17f2883a703e75ebcd79dda2",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1812,
+      "geometrySha256": "736155b9899a0149a76dcb9d6154e52ea6a110461309296e69e680819822c677",
+      "attributesSha256": "dc5398433354c4eb74f0fff4764dca7f7a15554db2cda71d9e0c1d1bb28b6601",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1813,
+      "geometrySha256": "43cc61f30ba79a0e5900aa17a8027f6c42f446d812473f066967111f44be955b",
+      "attributesSha256": "05f69aa6ff7a3fed7a8afbb43d3646406253450c25c103de16a00eb577a4ac4e",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1873,
+      "geometrySha256": "bdd448164f47f6def54b458c74e43309f8c3017e474367ca9a47ce2ee1dacaf4",
+      "attributesSha256": "9ccfa71f539d5dfd1c1c2ce26d9f3b73cae5cac6a9868265edd95d1f68aec562",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1886,
+      "geometrySha256": "9e0f18c0061bcdc7030d6cd0d94f90910699ee995385caca52b825e5031a3c81",
+      "attributesSha256": "0095244990a865625e3dc4a6076006ce58c267c0be0e2e9d0407e8c12dbb433b",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1899,
+      "geometrySha256": "5fae914851bf047874cce7ca5611df7cf24afa9d9927343e04b564ebe323ac6d",
+      "attributesSha256": "846b09f6d5b769da27e122a9f3ba2ffbbc66dc128a503fac2290baebe0b39012",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1904,
+      "geometrySha256": "2b009bea23227bf6bb2e04387c20177b55055b6a41d3d6b9427bed2f9752f324",
+      "attributesSha256": "e79e6cab7ec78decc7625e49fb4fb690104093624dd1af8b8621a674ad2125d1",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1906,
+      "geometrySha256": "97d5128bfe964f1be9fb8eace5601e7aee140fcf23bc0a90141580ebcd882abb",
+      "attributesSha256": "820e17cd5c0b109ff8fde341f8f933b02ed88c362ac474dd888d5ffa86af1468",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1907,
+      "geometrySha256": "a53015321f7de50de42e429252daa8c180d814f3d43f02fd014a36acee43d535",
+      "attributesSha256": "91ed524a2249314f310658737cc8f8f843c9284a5500a82d2070c4912d89d4ed",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1930,
+      "geometrySha256": "f4f5417a090dca4ee4227f4d7e670670085eec56dcde487bce15f87290ea9c03",
+      "attributesSha256": "67fe0a0e32475209b3dc64d307b0672b1b9e1860430d6b4840a814e08707431f",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1935,
+      "geometrySha256": "24e6c187e98418fd133c4a53483e2ba427275fb3ed84bc85ee89c467872d462b",
+      "attributesSha256": "a14e126ec6a04239547dce9763a5f1f29ab68f7ee1445eee2a3e92c86c7fc613",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1939,
+      "geometrySha256": "f70cf19287e4eb2537e608380d2ada360317165889d61ec482d6e9f640a18d03",
+      "attributesSha256": "25a1053cda1b8c9739c666d4c6d4ddae11b37ea4c6590526b2a11dfd79bd6bda",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1948,
+      "geometrySha256": "953a0b42007592b87ed4ab77c1c691b8e22bfe2444262031631094b15be477d1",
+      "attributesSha256": "9fbdfd808fccd72f973e2b999611d6302dfaf222ecba7c7e4f6d08f91273e209",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1949,
+      "geometrySha256": "8a546356d12c28f9070c45f43f314b9d22c894a23ab69ffe47aad550dc4645d6",
+      "attributesSha256": "2a69a6f797f8711c427f496312f38976bf8086239a37d21d96e5c6894578951a",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1951,
+      "geometrySha256": "5be617b46b1f6e8af345c3ff8fc697ba3d41afbff65248053fc0ab516ec5faf4",
+      "attributesSha256": "79a3fc8691daf0753569be1436d39e88538346e764ceebd32662ae622664806a",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1954,
+      "geometrySha256": "a7a38aaab802a656dccd75cb762bdcc64be83acf89bc81ba8c954c53684e2531",
+      "attributesSha256": "ba35933d5640b5ccfdd571f5ab7aadc1fd7b8bc6b385040ae4f452e4ce960166",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1955,
+      "geometrySha256": "f0e988d4207a86584ff23909dbf722b271f9e1aa6882fc1d602eab9965a2b724",
+      "attributesSha256": "7f55eed0f89ec0064360b8dfc0005f295518fae3cc22621be6f55c34d2a64285",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 1996,
+      "geometrySha256": "5e2e79c99ccfc6ba5b3273bf909d093c542ac8806de75573b124bbbcfebd1c32",
+      "attributesSha256": "1d70b89547fcc23d549a4d104b2df1b134fe9080e5f268ca4ed9f299a47d1bb9",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 2010,
+      "geometrySha256": "a37b78ffe49c6135b5a0bc2690d09b7fe79bc3a9e1ba0597ce40aff7c4839545",
+      "attributesSha256": "192d6d26b635332d28007b154e6d234790c4637ad21c369c91e3955d2bcfb37d",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 2011,
+      "geometrySha256": "7e320b445d33ec15a1cfe4d5ddb9b738536c0b6f52faeb06e2cc5df96c428d33",
+      "attributesSha256": "7781fee692ad009778b5a6daafc280459b310d189f9f78ab82253ecf1635ed97",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 2165,
+      "geometrySha256": "f35f13f17b2d3915cfbd0b95681a5c45bfa5c836d405e9c021c7feee2274a377",
+      "attributesSha256": "d98475e7923cc9e31ca2b97ac0c415d552f84ebf893330f1a2fac34038ff54e9",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 2295,
+      "geometrySha256": "17f0fad574bee4a866e38808bc9be1f256ebc6397d7332cd30291bb7e79d012b",
+      "attributesSha256": "c977053ab1c40846a0a3edaf981aeb9cd10e233e7a62dd9bd9a1f8c110f6f306",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 2433,
+      "geometrySha256": "3e05d91a4171b186d93526602ae640f2be1ee71d3548a1019a1835c591c1ca19",
+      "attributesSha256": "8f6f4bc78a1521876b8933a155f3804445de851275bd314ec8f5b755eb259e65",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 2578,
+      "geometrySha256": "f4524cae4669e4273deda2f8f4e9d4f509bb0bbae877bb247e2d91de3f66718b",
+      "attributesSha256": "0ac14e6484a04dc1e375ec98a931463177d218908c617c79911c3526bab51122",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 2977,
+      "geometrySha256": "18d40badaa47ad697150f6c6e00747a4297b8e8e3b9a4761dcb57f0814c40057",
+      "attributesSha256": "537e34a953eadec6f9ca25e6fd4ffd08d28adb97001c9e61f554bee04f3624fe",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3379,
+      "geometrySha256": "3e841951aac8475f4763239edefeb4b3d8f504727a9665eba8cb9ff4a787705a",
+      "attributesSha256": "dd16580c15602519cb292351fcb75f3ed88ddc5e7659075be919d12b01d1767f",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3389,
+      "geometrySha256": "2cdc7d98881538416830fed0c180e1b2e4fb46befe81dbb22d261437307083b5",
+      "attributesSha256": "34d796d5bf2dc9c8629989b2dc0a729242a3cc734a8b790535aec5918bb4b61b",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3391,
+      "geometrySha256": "2fb12bea16fa2ccca5e7c81cb7d333bfdf280f6ffdedd1b4d26dc697de146bcf",
+      "attributesSha256": "a2e14ad397ba551bfb1d43d990c79c30e5dd1ca96acc3fb8367d9fe570c7ef38",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3779,
+      "geometrySha256": "5fd3c049dd961695d9eddbf72afb73dc5aa5c02faf5447cd565d9b5df695f9f2",
+      "attributesSha256": "0946f0e163b342656b5d027246c586f3f018c41b3a33d3552506e0f0911b210d",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3822,
+      "geometrySha256": "ac2c0514b6e28f25759e54a327101963eeaab61558e824026a9f65f74e8bb684",
+      "attributesSha256": "085c445071d5f598fb581b1ef37861785f4ad175d606f5b40967f6583194206f",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3823,
+      "geometrySha256": "224fa3e9f70933753e1adebabb0b45a1ebadff15bcd8a8484b06704315bdbb93",
+      "attributesSha256": "36a1ab7dfb488b28e22e2ca200206958db5bc66f6ea5a95f90e176c6efc868d9",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3866,
+      "geometrySha256": "5bc4ef6db613b8512c565f09af4c8cb71c3568b044be1eab888bbedf095fd3a1",
+      "attributesSha256": "56a2b567645e328c284dc8a1482621af6b95cef989998c2954ebd841c3d3caeb",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3872,
+      "geometrySha256": "0d655665da20d0878a3c7484b8e0e7a4c88cf0ade716f76ca678c850f18ea1b8",
+      "attributesSha256": "d3bd49b6563c410a76c647355254f1d374a6dc106b25de5f8dfd498dc467df73",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 3874,
+      "geometrySha256": "71c014237fa44224a7306f3b7dc09df364a412d84d41f26b6a2372a0eabc1d6c",
+      "attributesSha256": "97bfaac664d5e36d6d4d371ea425a71cf171d2f3e36de758d3994144c9491825",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4274,
+      "geometrySha256": "17c11cf2fb2fffde1234dda5ef05773a2b61b765bafeab9537b2062900bde604",
+      "attributesSha256": "6214fa1f1295731e553bb2198e1f298f37d213ef36faf756af588be5b891f2dd",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4303,
+      "geometrySha256": "261d026b264f9f19b1ef69c2085b94cd4cfab29e29a08462c1a927ab15140a05",
+      "attributesSha256": "3885d355f796ebcf7c86d04c63ccaf854e8cc27dfb8988b9b6d20a6f9b6dc253",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4304,
+      "geometrySha256": "5e976f0ce6a7b7ddb0c854ed97ab617a9de089a656b30ec7cf613630e10f59da",
+      "attributesSha256": "5f32edeed883550e630a8909608ae74131a60d84867c40a2b914100717a0e305",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4348,
+      "geometrySha256": "7e4cddbc8c473462bc7b02ce014919c6c86d40605b5ec569d7e4f91b96fddab5",
+      "attributesSha256": "ea25824b5342ab1ba0c5ebf8f70d347c3f3ec0cb7c25f4eaa99d67945e64b07d",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4349,
+      "geometrySha256": "09cda99a1801630d56afa7a6c6da28a03cf15fd838e035569e3171a5deb2b056",
+      "attributesSha256": "bc2ba05e0e38e6b7fa7d26cfc32b3b3adc2b2961b26443fd28b7d3ba5b6e553c",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4350,
+      "geometrySha256": "06311068430f2798927583c6d5515d5217fa2ad7051d7baf2c9c94b1570f5649",
+      "attributesSha256": "ab581eabf586e2dc7b57bba351fe93fc87d4dfcefa456b80248275f6d994ac68",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4351,
+      "geometrySha256": "12a050a205fe5c6bdbefb430211b365f0e86aaed0d84d02df082f241e18ce045",
+      "attributesSha256": "bd09a8830ff9e23c70f0c66253450bc38f7b798302625e74ce243e57eef864ff",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4757,
+      "geometrySha256": "4613fa831a6699ca99d9e6af2e492071802d55c8163b1ae06444958f0815022c",
+      "attributesSha256": "0d83bd718c10fc1c7973ba4a0384c8cdb752ad1fe2c39107a8d050e06fd00f6e",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4762,
+      "geometrySha256": "60b80b3d4c982b4377060957d774a2a4faebad050501b647178292d46002c610",
+      "attributesSha256": "07b5ff561b1905e6341a460621b6974404f4b94ef4fc066d07ad2985246bd6af",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4763,
+      "geometrySha256": "b88594b36fac672b2c7905e5163bf7ff1fc4c21f8f629fb7907e4622479ddc9e",
+      "attributesSha256": "072857a5bae95580ffef749d5217b8bb92fcb41bb2dc4a9408a0381b227a7478",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4766,
+      "geometrySha256": "4eac8469d273aa56ecdce82b01030e54df3a8de2de7a86d3b44c67f6abdae404",
+      "attributesSha256": "990f49592e7917124e80e18221c2416886b6e71f85a77071108b4f3a4685e893",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 4770,
+      "geometrySha256": "dd3ce56e788147d93c50453b15eb48c6199b9b6ab65088f7d3cb49bdce9265a0",
+      "attributesSha256": "123a09a77d7587dd6204ceeff01238fc979e967061d3e3583875f489896374cb",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 5167,
+      "geometrySha256": "be4ecc07460d794bb52f1b73896f9e72d6ddc5421a8961d77b388a933a06dd9e",
+      "attributesSha256": "d87c765f876a2d41d6ed64cf4bbf82fd76c62d9a07e2186d37f6d7bec7a694ec",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 5168,
+      "geometrySha256": "01b797fd4ccafd0f4b9d54b8be493cafcca37cc02041d49048a78c04f02e809d",
+      "attributesSha256": "7d7a18f3c237978c9c791676aefd8bdcb121b2047f6bc37699dc07a5f3bd9ae5",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 5169,
+      "geometrySha256": "3cbf4a100e26953225693de9017bafcb44d17a196aed32162fe52c1b5abfdd2d",
+      "attributesSha256": "61fcc72bca5bb38f8ba84444f2afdc50b4489936d3a059bc0d15d59d774f8e7b",
+      "routeRoles": [
+        "TrailBranches"
+      ]
+    },
+    {
+      "selectionLayerId": 54,
+      "objectId": 5170,
+      "geometrySha256": "3e72b1c9ce7f60f00c3deade99bd7d7a2d8087e7debe8c8cd3b09f48ba273781",
+      "attributesSha256": "f5566503d61fac5fd013209ec9def21c7195e98aa57953b1892cb3b52ad53c6a",
+      "routeRoles": [
+        "TrailBranches",
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 60,
+      "geometrySha256": "7dab377a871564c88a731e26f1e02e4c50bf0812626a143167064538b3b1f397",
+      "attributesSha256": "2e54ec0e1ebea4795dc33f70c27fdf307add97935ff097d77a04022d27fba4cc",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 69,
+      "geometrySha256": "cf6d2670b5249fcd6b799336d15842d2ac7d4e682f31fc8e82507bf1ac59a1df",
+      "attributesSha256": "6b27e081556edc32793e9316395f36c6f1ecbb6d2b5ea99405e70e05a61431c8",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 71,
+      "geometrySha256": "9dc64d9e28bf7b70085f70560b944b9786e73e802f80fc73ca7fc7141b93b93a",
+      "attributesSha256": "fe02520709815208b496d09859e26edbeeab407b6a2e93b7af07284be0060d56",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 78,
+      "geometrySha256": "2e8ad4c4e25587fe1e6810d134c355d54884d8f2fed32ed3a960905b977022ab",
+      "attributesSha256": "3319317dcae06964874456009e908a1095d1af54ea712b99d34c52ab705938a5",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 82,
+      "geometrySha256": "21e9e480fa6b77dac963fb8fc7efcbdcb340ecf5673be6d1ea4b77e6ba52ff6f",
+      "attributesSha256": "6ec340cc90be93c1e1a9a57e444fcd8bbdbdf5f5fe35b02eafd38898bb10c37b",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 91,
+      "geometrySha256": "0f4a9d98b23d0b49fd81abca640c59ee6424ae408f3e5e30671f148f96f2c3db",
+      "attributesSha256": "195a192ea44413d2bb8b298d39783db246fbc285cdf3b38dbc642167c552cfbf",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 92,
+      "geometrySha256": "06fb9f2cb672460d0c06e1e47015beb1faa9fe62ee77b19cbc6db3c4f0045089",
+      "attributesSha256": "6b32a60ec63dfac0c39cba24eaa07fc52aa3a581940c34c812a227c427edda3e",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 127,
+      "geometrySha256": "7b0190583f58fd81af38a4990d5ca050544aad4c0e5bdd332bfcd9949a225c77",
+      "attributesSha256": "5ab3838efab14e2e078582824fbd0c0c7f8f5c9bf986f4b9697e256f15154b99",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 168,
+      "geometrySha256": "fb5425269775626fb1c91ee26746f57d05adb64bd544f27659130d646eb6b34a",
+      "attributesSha256": "ffa362b01afd7cbca4af81531cee3196eb40903a83f966f6aebe07c87f0981be",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 176,
+      "geometrySha256": "a1472de435c54498e4be309a8372c6665b9a29cee2f713ca839c8dbfc33d05b3",
+      "attributesSha256": "c43dfb8fb05790623c703dfedde0a6731169e3ab35de45e0be93cbcfee3290a1",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 183,
+      "geometrySha256": "ff0866e9d6f2ad0fb7de4f3e02550544a6867f4dc3d7915a9ba66ad1cf83b256",
+      "attributesSha256": "c046c66a4422e83b371265255e9d3905c9eb822112d1bd1f6ab8fc5c3a9dfac1",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 188,
+      "geometrySha256": "5a848f470378516fb8d1a9a1cc8db8e445ae4ad6b0d7dfae5db1f58025a703ab",
+      "attributesSha256": "1f557cfc25f4a6d52ba95662bb083b881882626b76d7e4844d5c41c8161c1c6c",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 196,
+      "geometrySha256": "a11d85095e1c9eede84b12011742c0db3303877ca9680a1bec72fdc9cdd37fe4",
+      "attributesSha256": "84e6161ec3393d23a782ef4ae9d7cec070f3cfab9389b40e5505ddfd0ad98985",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 205,
+      "geometrySha256": "ac4c9aeb54168e8f6a68b210206dad1b097d16ef70088671f4e76a70100f4e92",
+      "attributesSha256": "3c057f2394adb4a0693fb5083ca36d55fb0dc0a349e7dd772d6d87814341abc9",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 211,
+      "geometrySha256": "1f603ccf62c8d0ef5f6f7921b586c61dda48dbdd70e2deeb4d54cbc4e41507f7",
+      "attributesSha256": "c191cdb5f3e177f4b2abfabcc85e9f3238949c85d89264a5b65a1e565c3d9c5d",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 234,
+      "geometrySha256": "d03aad5eeb53af49bcf1c8a3deb97f1322219148076c5a16264f2cad60070ede",
+      "attributesSha256": "0b2285526f94d01c8748b9ac6a60e4bb236caa997ed9d8ee5565f4a6bcd54d2e",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 284,
+      "geometrySha256": "f6e3993c772458c73a1c2f4737ca7ce668178cbb6af2b27d822df08d6522486f",
+      "attributesSha256": "58245235e83bf9d2ff0a68a8a42025d6f21e72e90f383876bdd39f82ef6e3985",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 285,
+      "geometrySha256": "70ede0bf9d3d2afe2d4f9329a2b8205e7995943e66e3bc4b8e17ff814bd16562",
+      "attributesSha256": "1ffeaf1aca83e234b8d35dfcb6c6f7191c116dded1c16ac0647eed0c90cd7e93",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 296,
+      "geometrySha256": "c5bd731f6b95f967cfa02e5782971d6307965c50dce9df2596c7f4af390a4115",
+      "attributesSha256": "ff2344720040f9fdd8701b82ace16247d4056abb2e38d7ff5bf8797baa56f890",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 297,
+      "geometrySha256": "c29ac3f2380e40a29960992ed6a86b6f602321e575ffccf94c89efa8c993dd0e",
+      "attributesSha256": "82366df15493428c1514aeb5b0bf50a0587272ff3f876c3bdd34264bd1cf818d",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 460,
+      "geometrySha256": "4953673c2fcf646fc4812e22335dae12786e87e768c4685fe3e6c91e5652e591",
+      "attributesSha256": "a10b68fa39b5213ef4f0a2ce66c3fc16fa87a368980ded477008a90744f549a9",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 470,
+      "geometrySha256": "7911330170f0e8ef6d20c85810913e19b9b41da32628b2e00c947c47c5fff680",
+      "attributesSha256": "493589e2319e0319ba303b67e0b2f0602c3d41b456e24ec7304629ed7a55f042",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 471,
+      "geometrySha256": "b1b4328f150f4b1e983597aa76e3260f80957477ac9890210746543403e4347c",
+      "attributesSha256": "af569aca19ffa54a5f49657b78f81965509b0c2508e6bfe8edca4772b0d90e17",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 496,
+      "geometrySha256": "70eb2543cf1dd154ace256b183bbb41c4edd0ddac4cdd20de1ecc453910c02ee",
+      "attributesSha256": "12164a5c82533be4a0d55ab701cbd3e2f6b3b189ac9daa55c2d075cec7bedcab",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1287,
+      "geometrySha256": "1f76da573331a708df716f76e6ea44e5daa1ade3989e3dd23f71100f50c34279",
+      "attributesSha256": "b791ded247c5655b8afc1cffdbf2a8b98144e3f4a012c4ba463c0df3c750b532",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1288,
+      "geometrySha256": "b54a4c056b7881e06cb3621d55910a39c710d48748b08284f77694384e5b159c",
+      "attributesSha256": "81814d2cc8f64dfd5b18413efb90a5df55a7d459a1fa3d5d804e096ebef4f10b",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1289,
+      "geometrySha256": "32db19be7d401f7307500bc26e9711ab967cc4ebb26aab72001c977406ddf7dd",
+      "attributesSha256": "7140ce52d110687adebcf4eac845ef5fad0b407e3dc19f0038eb3a9a610e11e9",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1290,
+      "geometrySha256": "8fb71e6750941bd8d7fcb93631cf887c20b7abbf755c8282370b2d2641c750ce",
+      "attributesSha256": "1ccee1ac7f58e8e54bf6fb3a5e2e893e41b6303f94690c4535ccb161a52f0e04",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1291,
+      "geometrySha256": "fbe4ac6a38198b0df7125e4d79bd7159cf3658c71ff9f8a207b0ff84c3cc5711",
+      "attributesSha256": "2cefbee122a4e9c1aaea7506cef959f1f5b4311b89aab0555b27d38ab9713b39",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1295,
+      "geometrySha256": "6a5d2357008b7f3cc4e476561d4b1f4336e29b28d1a8301105a576325bf818b0",
+      "attributesSha256": "cf1d2cd2b05ff4836a6dfe5a231aa57a8abf27e85d87c160b2ae1cf9f6458a04",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1297,
+      "geometrySha256": "20e7d05f7f1f294b4c2817ec0ba8e808249144467d3df9c8379e53eed7b4a75e",
+      "attributesSha256": "1a1b028f6c37d2c3520bc22657bba1303a0d9a377ba994ae57ef6d8f2b82d33c",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1300,
+      "geometrySha256": "740348f7a3dbde911004c327095fccbe076ee2bd35f51827c74471ae24026652",
+      "attributesSha256": "3d95ff15723c0885cbd57a461d7e8375af28c8f42aa92daf0b94050120c053bf",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1301,
+      "geometrySha256": "be556b0010369c8fb6fe20dedcb99c29147a4a270cd089e004e065b824ecd61b",
+      "attributesSha256": "090a6e71bfccb3c402c2dd5e2f75b57f74fc3d8dec0bc7a0ef24e6360e539b3f",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1307,
+      "geometrySha256": "9665fb70e33e4c663e347510b4f3482ccc0e75d4ae587c694b71db6197d98808",
+      "attributesSha256": "465820d0e0b4398f36ba5828db5ca49fcb874aa3913b7bc4faf37f5940c3b46e",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1322,
+      "geometrySha256": "154de5849d9aeea48eff6c2006f035f017047b5d6891ac0822c183e565bfb936",
+      "attributesSha256": "65fcca8556710fc0c234fdfc72f544b8f39850b28670f8434f54a58a9cb57658",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1348,
+      "geometrySha256": "556e67561d57e622f988c5311f5c2ba603dd6171912221a64f9b60858f025414",
+      "attributesSha256": "4749f23f29703b1ba21822d6bbc056ecbd78ca010798703d368b0e4809e2b2b1",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1359,
+      "geometrySha256": "5d724a69413482ae8fd240bd79c0f6f60482b8ac744714e0ce439b8391819571",
+      "attributesSha256": "844c05eb75fda993ae3f0b804e15bf36f4dabc145c2e22fccb912500aeb5c983",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1360,
+      "geometrySha256": "28625ff188bc516eeeefa24a29c0c00b96cc78df44a55fa716dec7065bb07961",
+      "attributesSha256": "80a33b274389ba3c4db280151f2d3a3e6e42539afdc729721da38cb755d706dd",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1361,
+      "geometrySha256": "16d0734144f40e1c0f98a43f3ed4c4356c0ba05e55854be9f29ac12b4a03a204",
+      "attributesSha256": "c692d294b2bcf270d6487e782de0e5ebee90b7400ac5635b437d257794f330a6",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1363,
+      "geometrySha256": "5634fa9b2f2b2e98e8a96b2ccf25b02b5e87d9352426d4a43fc255e2e2da53a8",
+      "attributesSha256": "a5ea34ef47da6482e9981fb47e443bb1858d6ed7f890f7d0690041b1e5fb6640",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1364,
+      "geometrySha256": "40dfa2b7c1f19f789f7cfce774a8a853a0a24b9ea75b6e0bbc44a18179765663",
+      "attributesSha256": "08e2eab4eba43351067237a6b4f7945d58b9231d94660e948375d78522d5c9bd",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1370,
+      "geometrySha256": "30aa90a11e07c3d0f948c0a4b89c81fcd76a672f8e9e63e189b7e8b6308f030b",
+      "attributesSha256": "cc9433989de2a8271e6d2ed46a6797147339a8bf74ef95669165e1ea2f19f128",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1382,
+      "geometrySha256": "b93be02a8ad2efd2f1d59d1a9abada30d0716f418dc6eaf7fd4ca35005390ebf",
+      "attributesSha256": "f60e7a4e259ab970d0991bf14e160b6139095778674a3c01a84dd4f6366fa3c3",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1383,
+      "geometrySha256": "555a21bcb319bc99a900cf4aae65e164ca8e98c19541bac2b832522b52424212",
+      "attributesSha256": "f0fd8952b672a2567d21c1c199fdc6e994a67785d880ce6a8d634e72b44c03eb",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1384,
+      "geometrySha256": "974301d5c917898b9742d04ad94a850e2e6efafd9ce4beab26267bcab830a3d9",
+      "attributesSha256": "f3c1b47ef0238af85d782c9becdda5c0757aad21bcaee038913286c19c64e3cf",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1401,
+      "geometrySha256": "4dfea4c3c890601a4aacc7a78f875bd1edd2e1e96c390f14e19220616bc678a8",
+      "attributesSha256": "01da7d4ca55127bd5fe918ee2c6e6d878d09515bf77e1f19c6b02646e7dc4d3e",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1411,
+      "geometrySha256": "d54945865e63695ef26a33fb696129f1f52b5e93dd94fb7c69196e56d3d582d8",
+      "attributesSha256": "7082ce7fa1becf744bc59f0db73c3894a6f389ecdf7c20eb7092784679931149",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1416,
+      "geometrySha256": "d8111a41aa01b6b497f44a627a7c427e1dfd7b7dbac3abc3e5333c1846a44340",
+      "attributesSha256": "183a955ad94806a7cbfb50626bbfd07d2f606d152e7d25f1309c7aa9b1fe8622",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1418,
+      "geometrySha256": "4c91b63d82fcdd1b1d4b2150a831bc2850b59cc57ec92ba97d61d9ea70924d31",
+      "attributesSha256": "6ffcb231687b29792d7e191dba40b3537fd0ca6eec193a737358936c6a2dcb9b",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1419,
+      "geometrySha256": "45d6739327c1493653dd13643b2b3feaf885d067939984f9be00d3ea3488b331",
+      "attributesSha256": "4af03fc3b25808ed59cc41c492e92c006425b57c2dc6c18f3c4d5777e9a3f4de",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1420,
+      "geometrySha256": "7d397c74bd0b52d4597762a76c23a1926cdf0d3ba83b5056804af97607f9e45c",
+      "attributesSha256": "a0335a3d9b16d58c7c220b94e2f857e1ba907accc026fd6f8524e7d262e22e0c",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1423,
+      "geometrySha256": "a021ccb35f38aafa18eba0f4f27c9170c2de54173b8074818ced67dc1079c57c",
+      "attributesSha256": "2ad35ae28d48eab7281f56d47e6b3a9197371f90053722cad20d524de936e9fa",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1426,
+      "geometrySha256": "733551a5d3dae2fe4db603f79f24f0029fe57a87e95f8efe72df7fb3bfaba41c",
+      "attributesSha256": "32cc124c7c55f4661db407c0ad6a7b6f52d681beec3e378976576790f424ec63",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1431,
+      "geometrySha256": "51c9d8c4599d2b98cfb2c0bb933227111d33dd05e38676a2d33673af147b341e",
+      "attributesSha256": "45f8e8fdefee022a4df0e604b7248b9ce6c5e6b80cc441b1e62a25ed63aad7b3",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1435,
+      "geometrySha256": "5626550ca39edcd128d21d9c6b0de375e1623fef8d7b75f95ba20c53deac31a2",
+      "attributesSha256": "00c0dd4b29d14acd1098021678d3963f8d3db1b454234158a8a97c42590d5562",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1441,
+      "geometrySha256": "d64c910f063c9544a00f3c1bf94eb8cf39bfeb5bc556da9270959ad44317fda3",
+      "attributesSha256": "18ad75396ed9b546e389193c5b5ca7441b685d94190a8c6cf28906e70e6e69ba",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1454,
+      "geometrySha256": "f9d635f45f5868377bc395ac16d66cfb09f7810393c85d3a5bd93e1af607be91",
+      "attributesSha256": "f988ee9f9e0b1490eaf2a9e3d1068a5790a0e3218b3a081384e862fc0334a69e",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1461,
+      "geometrySha256": "78dddbc334ae910c92852da6559fa7b10e9b4fe3253f3b9120b9f9cdbe575f80",
+      "attributesSha256": "c5c8d0b3506352c74fb29e6034ed1f157fd2eac7f1537fb593ed39792bdfe1fa",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1536,
+      "geometrySha256": "c352118870e8f746e45fa046062b9533006b1fb7c594ebfe95d4c673390c59b4",
+      "attributesSha256": "9c2d27ab3481f115d2d6bc5f3d1856a0eb03d11bd95c4500c8e7789984901205",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1544,
+      "geometrySha256": "47443da16300a143919db0b573ce4fb3e4d0b1d0b4197ef8a2fa19dc0bfd1874",
+      "attributesSha256": "4aa28fcabd27d7d943748d4b5a78f2784c66df20249a22751d76ba7e4523ad7e",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1545,
+      "geometrySha256": "c2745a1936dfacdea71fb33e7f8401df4aed3c6faffb4e32cbb781354909b0b8",
+      "attributesSha256": "c642747472a66552fc5ca65914d13bb17ffeaa134059c71be4d26c5e4cf65982",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1550,
+      "geometrySha256": "6acf15a008ae9434cc4a37c7bc9348706e1759489e3ec9ebff1aeacadf3b4ebd",
+      "attributesSha256": "cfb5e3650f71d6e8a81cc4b85a4099e001acdb3e9e5488bdb1d48c6a3147452f",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1555,
+      "geometrySha256": "b68d2ebf7e3089164322f026d69d7a9f8a3b9cb0119a8d98c398a3c24f9cfe36",
+      "attributesSha256": "7a0e524891e696f81f37facf40a366f36b471232026617a637d1003d02c3c821",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1561,
+      "geometrySha256": "3b21f1f4ba52e2e4f8bff66615343726d1b984763451e0c659563fa3240c7cb9",
+      "attributesSha256": "651658fd08104079acefb099be4ec45521f856dc34676a650dd9dd1af991398d",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1564,
+      "geometrySha256": "ca665980ebeedcf333555a26fafd78e231fbc5fbee8ad2ce998a12406a04610d",
+      "attributesSha256": "09519feb42618486c7c80c34c3bee9bcb8780a85ab3b6d5d0b1a6951029cadbc",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1575,
+      "geometrySha256": "ed7bf50b0ef45d64c118377ec4ba8dfdc062f97ccb2aa5f818c258f2aed9ad64",
+      "attributesSha256": "44fc4a4fecf773f653da5d1de44454edf6b0bc2d05c2b8eb5321174cd9a7bd59",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1576,
+      "geometrySha256": "42a535a7e00392caee2a13407eb189f154d33107c584d17d45daf1e3d3db17c8",
+      "attributesSha256": "48ef43aa95a920652f974a2431ac64ffe5f6756602e0bb7d5582a8f3ba0b98d4",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1600,
+      "geometrySha256": "cfea5e7d702e791ad5c9bc7e89d1a03aa10892bed40acce00c491fc2306fe15d",
+      "attributesSha256": "b297bf4bdf5d17c0282c58b085679071340bae3260b17128844af6f044559d0d",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1601,
+      "geometrySha256": "4f62d7c4266a84414ba33c7afc3dac25e7d79ac01d8e23fc15a8a389b97ddcb3",
+      "attributesSha256": "451de2c9de60874eae2422131fffc19a7463c90dcfc1576296fb0ba83ed5f3ad",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1635,
+      "geometrySha256": "bc7d5cc18f959fb77d162e2a85f043d1501b08c2a95cf8cc3fc1260c58ed2fdf",
+      "attributesSha256": "d3624919fda9f9d936a3df6e8ea7e1be717e5614d12922dfdf6a0bc9efd09949",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1637,
+      "geometrySha256": "7ad2c3b32e616da7bbe5a22fa230bd2b616b72d6934e25f60b9f3ead2ed72cc4",
+      "attributesSha256": "a2ddbbcdafe076829b01b1b89826f4a7da291138daadfc4e13b32168717b5a96",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1642,
+      "geometrySha256": "7399bcffa6a5e0fb81d2da3450d911b5dc20e0890a2a5443e8db4939254062c0",
+      "attributesSha256": "caef2a22a1338ceddffc725bb4f4e75bd6f9bd2822744e1ddcdf84f74fc6cf80",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1654,
+      "geometrySha256": "aebf6d2541d5d5ce3c26ef703aff3bbd69a5ea20d3d7320ca4f1526e04bfcc5c",
+      "attributesSha256": "c62b64ef4aa75a550edc00d3e5efc30ca09d96f26f8fbe43b52af168f3249597",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1655,
+      "geometrySha256": "f78b90f178235bb74f7b46e9e36af3a54c69eb2dd3fb114e493a1efbf6027281",
+      "attributesSha256": "a8800d73e1e622068ce6db7e1daadc6606c82ad7ea123dbb5ef52df770a1962d",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1684,
+      "geometrySha256": "3fd3bb2b09adfc1502183052889b7129f6f45fcb3908303ce1cd393cdb71e28a",
+      "attributesSha256": "309ac0eddc911a8d5ee21da7b464e1a36d43ec452a386a25fa29e1227bbfa027",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1693,
+      "geometrySha256": "42f6e6581a427a9c38db3eedc9ca102892ac32de060ac66bff5d0e75982c138c",
+      "attributesSha256": "a890c097e8fbda8999e3e1141fcfc396947b2c057f6493d834c8e223dfabd990",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1740,
+      "geometrySha256": "45b0aaf13a657896cdeefb0ae3c1e869764f42a783f8330dd1a8ee6f04482c17",
+      "attributesSha256": "35c9e106b8351acb20f88c57be801b71fbf288dc0c5206004f7458ff8ecb6e3c",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1741,
+      "geometrySha256": "f140a73a03805b1ce04593f8c3c07431720db5a593a5fd22e8103a5a1683b311",
+      "attributesSha256": "627df48bf4ce2fcae33f5b11f200f11dda61c9524edb9ab90e7440ce12ed4dc7",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1747,
+      "geometrySha256": "d127f5da5fd5211bfc935ce2e37988b99d0e6b36c7e4c7331f1e5d5191772c6f",
+      "attributesSha256": "390599a5693a917a3be554ce352bf196c3522dde4f676718ef0511dcdc7aedba",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1753,
+      "geometrySha256": "ec043df8782d90106be8edd147976f27744edb79d7c698665f3e692265f0d889",
+      "attributesSha256": "50de6555aabb8f042273ef974a05da8e349297e56c32f1eeb1a548da2cbe2d0c",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1767,
+      "geometrySha256": "7da13f108aa0d0dc129a2d266ecf85b5c1dec484294f488df20e42d1ff44cc37",
+      "attributesSha256": "9bb8d2e67003cafb7658c5d074e9927a3a6e8b5009e8def55a1d1bbceaa32ddf",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1773,
+      "geometrySha256": "1b4a358e71a623c7f1e0440b38a078d00fa7e6abbc7da9e7e863290e55a22102",
+      "attributesSha256": "aa0cd614d9b4836b604daacecb1d6f880c7427856f1760d55cac5bd8aaba2f6d",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1776,
+      "geometrySha256": "af84469289911958ea3f2d13954e207a3b4ff52c1926413633ccbc80be9bba5c",
+      "attributesSha256": "445a161c2b2dfca0a9ca865ca11ad6084d41d74d02e72b8db6ea76b012901997",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1779,
+      "geometrySha256": "82270961ece3aec3207e399667658478179197c345aa85dd47f648af64de05d2",
+      "attributesSha256": "38219b93550bc2791cd292f3c99c14fe5a712dbd8ae2fdfa6afdf4d0fbaf4299",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1780,
+      "geometrySha256": "4f01435f3091a7291754d692ef649a70d247606e67afe5a72f53f6b4889859fa",
+      "attributesSha256": "b6eb44d8330d3d13cdde75d358ff81afd0d3efbc5abf2b6de0e66fe4dc4f5623",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1786,
+      "geometrySha256": "930d4787c1fd0e86169ac3e32ccf5ca9f93ddbc097e4c4ea0f147d4797f99acb",
+      "attributesSha256": "6cb9772655f357d69ba48c72cb2df2bfde7df7f73a59596f6b11e4a0cd389bbf",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1804,
+      "geometrySha256": "c6652827735c8b05e456fd8beec5e2860ab82ea0cf073e187db9f65c72cf7321",
+      "attributesSha256": "28df6556e78ed871140a9d9055a3400ce6f4c241111e01cd9d06dd8edaf6c44f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1819,
+      "geometrySha256": "45105b320f2fe8eab55179d574a38864cf91a0ff8d011f8418895b7fc36ddd2e",
+      "attributesSha256": "a07e82987adb5d71b936002d5c8915263d68e0588327d9a19074849e1860e876",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1890,
+      "geometrySha256": "08a6a1d39ca8b50174f7851b58b5e78da904037124ac98684c8ebe21bcb7e076",
+      "attributesSha256": "0b5c94fc88290168108cc14eabcb185c04b423752c46fdfcd3d429c12ef723e6",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1891,
+      "geometrySha256": "cf16f1e20966fdc29d0f1c86e2457bb811cd68e78c85f9607d2e5eca2ede44e0",
+      "attributesSha256": "0160c618dccf5f514b8691b5da2179cfcb498e631002cbe8fb619ffaa856f36f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1919,
+      "geometrySha256": "40091d6c2268cac8354bc1779904a4b0294b11d71d12de691c31cdff8c565a2b",
+      "attributesSha256": "ebad101270dcf988884bcff739cc4e122327dd1c79a71378d472d0622603ef23",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 1932,
+      "geometrySha256": "6aba9efee8c0305edb4f7d20dea02dd2ebac69744ac37479f6dba5925adc0234",
+      "attributesSha256": "4975038f1c99b5c03748373d32418913e087706b70509ff2ade37d757d4b0f91",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2039,
+      "geometrySha256": "95e6b24fd39b66b9cac9c5fec33af0748e1a5b0f482fddc9a6541e96d669c018",
+      "attributesSha256": "2e3aeb284ccf6b9b1f59eacb1b08e351211960b864227391b3355afc159af0e0",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2070,
+      "geometrySha256": "b46d16777db64d40ab63434df49b5cab59ac76aabd7678549fa9a00afdc43c8d",
+      "attributesSha256": "310534f53cd759a55b55b9795e40ca45052812cd65ee8040ad944faf38928265",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2116,
+      "geometrySha256": "11a44475a4c106567d58b342946af249015115fd64e3ba5b78aedcde7361055e",
+      "attributesSha256": "b245dbdf04f52fb29274d02eb0ad8ca06c3535931d11206abc6dde0cf4423206",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2119,
+      "geometrySha256": "6b4d3b95648187aeadc99c5b62bdf77409ae74a0dfef2a701474e4db4ab97fc0",
+      "attributesSha256": "68172e555de48da32a942dbc441bd2bc1b4b9b476dea0a9ce8fe0ddbf0e2deb4",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2130,
+      "geometrySha256": "1d1f6740ffa38aa79cffc9ba452296f5cebb04c7182b1a97c5a269d6af6f5379",
+      "attributesSha256": "fd0faf97e3385c9d6063abf56182ddc6369773d8ddc1462fc19c9c954c92b3c0",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2133,
+      "geometrySha256": "1486b5cf7a5e8c1c142bd92158c2da495281f33e48f779e6c2d429293187de0b",
+      "attributesSha256": "8645353fafa00ec1e1066413759d091db9574d35553da9ce63c99cac8e1b859f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2135,
+      "geometrySha256": "536af78a63095928a6b71d1fb13ca91a0f9e4b36bf593a3ae3e6c55b3e2974bf",
+      "attributesSha256": "4ebff779118a6eac1dc5dfc9f917bf9cbe40c1d02de592d8564b8e501ba558f5",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2141,
+      "geometrySha256": "01e754e85e43355e2d46925236cd77396a2a07205186f3a0a23907c23dd0ad89",
+      "attributesSha256": "daed028d79873dea7762d0de01719f3561e4bc54f9e45e6a9b3e75f8b75b22a7",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2142,
+      "geometrySha256": "c5a6605266e569e1d50da6b295f54823e1c305386ac1408d9cc88565279ca2d7",
+      "attributesSha256": "d24579174f285e785f93610001b47b52f70dc33016b65b48935435376360d6b3",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2143,
+      "geometrySha256": "d7c470548dc953d15b74d978abac3afffca84f086f2deadd4ebf7c548a151bcf",
+      "attributesSha256": "b4866bc5c930f0a1b904118feef328c4aa3a4df3dbffe70e37f0f7b8a9d5fb9a",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2144,
+      "geometrySha256": "cf26b7b51335430b2cd3876170ae65486e4f4989ac5b7c7602d06e4c917ccc4b",
+      "attributesSha256": "e0f5d52ce88d941f73cd716228c8579bd55c859a38b57bc937295f93f9f336b1",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2145,
+      "geometrySha256": "b4eeb5043fe8ac5455c7477e8200a4b3ecb03ff7d0eae07eed1e5da823b4da6e",
+      "attributesSha256": "f9bb28917628360ecc7e6049bd6b0d2ce6b39a9ac7cddf315876e98db83a0424",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2146,
+      "geometrySha256": "b1976fea14766e1533d7630a26855f6cefbb8e9ab2261b1cb30076918c24e228",
+      "attributesSha256": "57acc54b58956df6e1849816848fae6f7476c36ba3652eddcde56647cfcaabf0",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2147,
+      "geometrySha256": "031c23162e7a7d99ba103785df8a692a0632b800d6accb8c2cb89e52d6fd68b4",
+      "attributesSha256": "8316e01be6a9a3073067f4e07208c5f41e53fc1cf1a21912cbe0d7088734843b",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2148,
+      "geometrySha256": "a176280b415ac0aef61aa9cced8b39b640efae4c774b4660233baf019f17a4a3",
+      "attributesSha256": "f53fe6900aba695df338ebb36c74b29290bc7dab25aec6ba930a13362b79bd0e",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2149,
+      "geometrySha256": "80643c0bd50f8ad41557a2bb5e081a3e2978f0cb820b3ef0ee2a9d7335b0dc83",
+      "attributesSha256": "31860984cec2a511e0a92f0ece88f7ae6a240f90591a8aeabe619eb674d2ea19",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2150,
+      "geometrySha256": "9e0d564511210bf904955b8e9a7c7203bdad4188a7babe34e75a2148450fa69c",
+      "attributesSha256": "15727fdbf794ea9c6f308c43784326dab84dea1ce0c6e74fc7561ef3e09a8e11",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2151,
+      "geometrySha256": "71bf67a82d352903236ff9ec295a4415cafb89c3407ab0d4e42ab3ae275e2eb5",
+      "attributesSha256": "ea3f62e9fe73184957d08a0a81bb33c608fb538f215f3f7c3ff07bb10eee01ef",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2157,
+      "geometrySha256": "e8c07c63e663978cbed79bdcd055fb70f026071ddead31cbffa20053b4419366",
+      "attributesSha256": "cbd5ebade475729644002a7bc826b18d849f3488d21db3c5be8d41e3d151b869",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2166,
+      "geometrySha256": "f1a3ebb9ae9d559e3af0ad8727602a8723ac28a10ee5523c2477a0afb19dd863",
+      "attributesSha256": "2328d0653a56604fefe208646e1992e39e52f83e5370a35a7e06453e57560832",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2172,
+      "geometrySha256": "1e0f016140eee8c2c2b6ca21bb1ded8994f6e5d5feefb19e92eb33a5d7890b3d",
+      "attributesSha256": "c9c2ee2415c9e30c52057751d887c03c357daf251f92b497d64e3871adf7f01f",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2181,
+      "geometrySha256": "7954fdcd410703d4ed9770319abde16185d8c253cc94d7c7423c6ff0c40c35ca",
+      "attributesSha256": "15eb3adef91c947e8f430dbcfc466f108a5dd10c2f71b6778a0020840ce7b6ad",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2200,
+      "geometrySha256": "fac25815a5b08d905085b2e6f12f7dcd9b2bc2e3f03139c2662b8786ce5bb481",
+      "attributesSha256": "4bb5de3c0bf5121bbcabdb21f62f0c98e752a5466c00efe0e5263192c547ba76",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2201,
+      "geometrySha256": "27d1634151aa448a59922d8a55971e6696e5d985c44685775dfb9a1976f376b6",
+      "attributesSha256": "29c4597bac829b541f2909fd5955ffe5eac8a9818f2f5985fa9aabc2c8344778",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2202,
+      "geometrySha256": "cd2d64dca1e9e5e11106422b6046b525a93c3bba2c86535f55bf3e0128901824",
+      "attributesSha256": "e20cf5e511f47af3b0a27dff4696b55d086b1e9441dafe24aa3338f700ca2c8d",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2203,
+      "geometrySha256": "a8dcecb099a96c42a32c02b730efb79a0eb731c89d20a39f24eec31179efb51e",
+      "attributesSha256": "d7d90e322ab5889b5c375a8d2073428ffbda2ce2113deb1938130c376dbb71a4",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2204,
+      "geometrySha256": "db5f964d6863c3fc719ee09c14c4454ff75c4e6297b446dbb37153ec4d2f5442",
+      "attributesSha256": "c0244811ad60b237b8cb03e8f4faa54b4a8b341416e32e05ea3a5301e10e7aea",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2205,
+      "geometrySha256": "533fa0e9b08d5759c33fee65587725bc0d5bccd9f28e4d637d15fedb4e673d05",
+      "attributesSha256": "5da2fa64b5a8e7cab12b5a14ddcc165642866c58aba828bb6664cc2b0295e71d",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2206,
+      "geometrySha256": "909e7c1df74bc16533fc47b9ef1b94d6e1136113f346c09d99cd4c41db18949c",
+      "attributesSha256": "1ce8b3a99f1a80b4b83765cacd09dd3e671c44c7e6e48b61fb12f75a0e467ca8",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2207,
+      "geometrySha256": "9dd731ea660ca8d1e7c10381b6bb627950a5a8feb6b15c6c5599ed1f61b16825",
+      "attributesSha256": "42ee68e270d55ff14c3ba9a6503e8c71c588a8e2115f74d756c19cb273d8958e",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2208,
+      "geometrySha256": "a0168972838305c4f0cc1896871c029882968aa8d447c6a9737cc2de6cf7952b",
+      "attributesSha256": "30d421c3ea2de40e00af3337c1d78057262b9c10cb8c7d07e00337dadc612c1e",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2209,
+      "geometrySha256": "80637351edb4e8bb8d5ab8b160d5b61bfb58b8bb9e1aa88c16e7533565f93ab8",
+      "attributesSha256": "c43de35b2c93d624bfc73e679565a29ff9b5cb84b925ba31c84773e246c0626d",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2210,
+      "geometrySha256": "b2bf38df3227a0dedaa656ba0f93ae7eec6eac0453c38621bbaf98bab692c8fa",
+      "attributesSha256": "23b0966cb2a1f1ebe3bd539ac840da87584e2e0328d1646eb78b8a8f940d6e34",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2211,
+      "geometrySha256": "af5fd5af8b857d3ea12a74304a10ac1c2442eaa10bba9ae35b11694a9d2a6b1c",
+      "attributesSha256": "e50d9d0f97f45fc92bafc227c4fbc1409aa09302272ed4eef3fe31a582ca034c",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2212,
+      "geometrySha256": "994517ebebf09674829fb13f8b04f2b76fbba9a4d76e65b801008a2f0c8113c3",
+      "attributesSha256": "7161618bdb534886c96265b1d61d8da3096a13cb2d2228dc77cce299e011f1b3",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2213,
+      "geometrySha256": "b4c0826508b8f3a2ca82adab11e290fdd4e4cabbb8a7f1ce18b41fed267d3f0b",
+      "attributesSha256": "9bc93f0a4fd52ce3d937d09de3edcd50bfcfe11ec6c8532e79f172a80451ab59",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2214,
+      "geometrySha256": "0eba7551ed1f8427ab6fb17bf2376940c47fd66f48ee655532238ea07f1b0528",
+      "attributesSha256": "b13c20fc47772eb6a134b4e394106ea3f3211ad259b351cf3fbf3f8338144cd1",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2215,
+      "geometrySha256": "c403387bc3d83d0e43b7e767bde5bc6ad0c9e8138bb1e2be82ffc9aa99b838cc",
+      "attributesSha256": "f857f1e5952b5774c764fa401c8c89d64947309b0b143cecf4e96c7bd54443e7",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2216,
+      "geometrySha256": "68f67ce0285cccbc3c216a4ece96ae23ef282feb4eef7ea55a55076b50f55675",
+      "attributesSha256": "9591909319faf7353a9afed467b764e476ed59d392fef911e7255d60b0fdffc9",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2217,
+      "geometrySha256": "7040e5592df2d2d4efe9b2f39af271fccccd6cd6824340f589ce0a093ebf1b26",
+      "attributesSha256": "28620bb49a6503598e2b9f8f471fa58334d7c54f0b3d14877f06ed2a65e81d27",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2218,
+      "geometrySha256": "7820a1caa70242dadcb4ee095171b4fc7c95a305299c65381928a1374abf3e5e",
+      "attributesSha256": "2d66e31e87e5db75c3a63d579388fa61f36156136b59637d30715c1257af1ddd",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2219,
+      "geometrySha256": "36e244f9ebfa60dd79bf428a8d45f99fae55ff4a44028c4b973ca8d73a7c6267",
+      "attributesSha256": "25b1c94f8e9b061227ee531fd5e5d7ab69798f31b61e47667e9be37f5051dd21",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2220,
+      "geometrySha256": "54904f45bab8c1cfe1eb25044f3e5bf57970ab4996e1b20073cff485288d7954",
+      "attributesSha256": "d2e78a14174fb88fa6c5778fb20e258d64149893b7960d0883e6297185a1e823",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2226,
+      "geometrySha256": "49974aa7703d4dd468c224887c453ba055a17bc344b71ea610c139d9ab094e9d",
+      "attributesSha256": "95243daece67d7758a66d74b461439a2528b8880d85106e09ca05bc46affd3e2",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2280,
+      "geometrySha256": "63991a14b5fa942c8360b3711f4f342589e8db095aa76c9e3325e492167eedae",
+      "attributesSha256": "d5b8f272b504315caca38d04db51bf276ceacf6ae1123de382f5aca3c790a62b",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2318,
+      "geometrySha256": "bda8892e91e99bafa0e448c871b094c241b4ea7cc664f2d50e9984a8ec4510a2",
+      "attributesSha256": "a9db355fa487b419a583579e8e9bccd7e0bc69033bb2270c673cb9d21bae1dfe",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2320,
+      "geometrySha256": "0386dbb5bf82833b6ef6f5160b99a12fcbc393527194b96a283f48ae72288243",
+      "attributesSha256": "3a9d46358f4b9f4fe3ca55b8f3828d5f089498cacd6957e5a79d604fc476e32a",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2321,
+      "geometrySha256": "38cedbbb4f835c879309b0db9a8f4a2427964fd60dc3ee8f6c50539b920491d9",
+      "attributesSha256": "48332e83c193a53c4e3c8a4207fbb3d3106651de3ee7623fc396e15c9f9d86a9",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2323,
+      "geometrySha256": "d83d99bf2dafc2a37c13d3c1a0d44988a60e89b4d3c6b14ef9d28e6cb995502c",
+      "attributesSha256": "be3791fc1a5b2a7904328391395931b04f4a701e697771de780294fe1c9c0ade",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2327,
+      "geometrySha256": "c1afc6bb8cc5fb09c103c963460605264f985c8b2d4f2681638659668d0cae39",
+      "attributesSha256": "94f069c6b374f965cd02fb31f1be48f0911c1df595215cdfa8f9025982a03d94",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2328,
+      "geometrySha256": "c0d3fe81880779c2f236c1b877e19d1c489af0bed77992309e0be9831e5a2e5f",
+      "attributesSha256": "3496ba4ec2653ec9fd5275988054cd6a8fd288b50ce6209dc54d46d417c50ce3",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2331,
+      "geometrySha256": "6a1b3afb7448677ec2663c44879298566fede07ba6e2bff75dd9f08e476d4882",
+      "attributesSha256": "eb258952a79d16f4fd9b236c3fdd141e79ec9b81655fe4ea0eb9726a6e7f11b4",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2335,
+      "geometrySha256": "56baa48dfe0914769094d2b5e1bafad57b9c7102c25e8287390b938d6a9e3ecd",
+      "attributesSha256": "958d218d63cf1a47a7e41c8293b9c3542a531d32933ccfd010f621dabb399247",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2336,
+      "geometrySha256": "417e4d2aff0cbf7debd7bc87b0374fcc0d16c93376dcfd7be14d9b0682ff5f79",
+      "attributesSha256": "332dba97f9e7260a0d6a923f80471bf0037c065ff13da9d39709a86c2165ae59",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2346,
+      "geometrySha256": "0c12db892d6bde205b8cb57f9894578299847f34828404b8b29da8cb4fc9c3a8",
+      "attributesSha256": "f9cdc80584d106cd717ca8a69e920665d07d01f31ba404223f4a59be1ea07bd8",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2350,
+      "geometrySha256": "ece737256d0e9b69c815712321c50200e8fccd2bbc3d884cf1696946a2c26800",
+      "attributesSha256": "fa789b5b3c3087bfc524a3cf02a8421546a9b96603e20302b0ef25b2ceab6674",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2396,
+      "geometrySha256": "b789d99ee98c6ecb96e045b31dcbfa719e07365279100ea16fe4b8f25400dd27",
+      "attributesSha256": "f8c3b241dfafc6037f6d47d6dcd4f1eb91b0b49b3368f06175b8455d81a05758",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2397,
+      "geometrySha256": "596173d2e9492d50597fe57de5ce5852e5085275ec230a49a6663bfab40bc654",
+      "attributesSha256": "bf71db1c5d42c94a7e609d8cf39666da781555c168657a88a646cf2cae61e86d",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2398,
+      "geometrySha256": "8f293b5da53f7aa4058301b88fe8368915f7793801c01280e805b2b44c71a16b",
+      "attributesSha256": "ce88bdecc0ca3c59695ee7ff16bc83367c37303c45aa00f2a61a59ddb4b0eff5",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2399,
+      "geometrySha256": "cc851a8b53983645844f1502b0dfc3c36e7e5e6584b634650706c3b2af41dacb",
+      "attributesSha256": "0d22f2a40d9fe36bdb1800378caea9748509239892224c615827599a2f5ede72",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2401,
+      "geometrySha256": "e5b7aed2b5d98d80f44240fdc85d35134323c448786ae7419bdaea6b3c09c355",
+      "attributesSha256": "5274b8adcaa9b5b0a73f48a5a0c1f510e42d4bbbadb7de7e6f2120dd6b52eafb",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2405,
+      "geometrySha256": "d080f44127dd0399845b0ac30a0ad4f743df59cddc88f9fa6dd2f2520772f9ce",
+      "attributesSha256": "1e272de57ed0520ff81cd45aec3b818e0ad44dc9f60a03a851bea1293fcb1264",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2412,
+      "geometrySha256": "c373b0361a522bc1a7f928dfa7ede7ddb89528a4b7907901868ab09834573751",
+      "attributesSha256": "4bd0f52e04f6ce7fdaa0659916130ecdb698fe157613b6f040774189022f5481",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2413,
+      "geometrySha256": "c2a418b84650dc2c9d941d2e99547da1884a370cc3f022e7e6e11cf40e8168ed",
+      "attributesSha256": "366de1dc75052c653a0d87f1f9335318b2747af2f587a72c68bfe3214db5453d",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2414,
+      "geometrySha256": "ef1d72890b533b3ca047578c3d253c9826f5465dbe76c83851c4510259a0053e",
+      "attributesSha256": "c94d8dd8f1acdb56679ea75d39704b9b29b85056351da873d94d7c90f609f350",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2415,
+      "geometrySha256": "74fed5254a792f2ae35fc818c6124c2dc2945bc939672aa9a5ebd9adb27c87c2",
+      "attributesSha256": "b458d1c8eaac9f4b6a4e0f50efb7d9f1534b3a245947e325881c6c004f68cc8a",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2416,
+      "geometrySha256": "a22f3102b7e307bb06dd96e0f4f0f1c549654bbd386ea9d4c0c8abbe513f659a",
+      "attributesSha256": "16d54fab14c7d498feb4d25bc08aed9f5e51ef2c03180d8dbf7e1eeff0123271",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2421,
+      "geometrySha256": "8fd0088717de6bcd81c5bb8428d22ab3451851209adb02f33f6341a1074ce51e",
+      "attributesSha256": "5d5227f9f12847798940f6aa415f30a7330bac3b9b25daa59fcea435f2a8b19d",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 2428,
+      "geometrySha256": "8d0ff43f4793f227c21268ba9c941ecb7f62706014e5b829f571faa6ea17cc2a",
+      "attributesSha256": "947beaff010c8ff279808e3fc3538e84f9bebd539040aac7b570a02cb2802917",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3781,
+      "geometrySha256": "ca0cf269762d47b7bf4373af9171094d7cd80e54bfad24ff1dd86f2976b31e46",
+      "attributesSha256": "e200583e2b38c4634e2cda2b9bf26d28423255646329e56dbe4d64d0ec0b74e7",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3793,
+      "geometrySha256": "f9fd6e5cea3545f5bebb4cf3ca470698ee7018f83f0982f1149f8e3149c4fd21",
+      "attributesSha256": "ae8b3319d819b270ce6c68f3ca473bd2adc9998981394f93fe8a934e749adcf2",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3807,
+      "geometrySha256": "4a27a86c49cc8bd4a38baaa440a668a044baf53819a2fc44c0fe2b56e496b56a",
+      "attributesSha256": "091d4ee8e97cc27ebdbc902514a69a2d3b985217c60b4f3e50ef545d8e61040f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3818,
+      "geometrySha256": "c61b67edc00d35e51bdeb3789c229f6430574dc4d3b744b623eb1ba0a111b254",
+      "attributesSha256": "f8d0f7fae8db40597a963dd88738030992dd1ab3e3dd9866e6f783309ea1f12c",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3819,
+      "geometrySha256": "55d83925b14c5c64f13c68f8366852888905d7ac048453331a4631dd21a48e0d",
+      "attributesSha256": "060497a1b5689fdc1a68c52589c20f12eecc0eddd53aedfba88c6f7cb650ad4f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3826,
+      "geometrySha256": "7855fe35267e654f715d24cbeaf4c0d3f7bc580b09f72442809ccb39fff26fed",
+      "attributesSha256": "895c6acba9eaa567a13ef84d77bb97e3bcd0aaf2dd18c0b40d9e90c0ed695f2f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3827,
+      "geometrySha256": "b0d6c113ba551854b2f86da7db21dd072ade9872a6d9da1ffc53085b0c2576a6",
+      "attributesSha256": "c21010f9769bf87bc20a6e1f54e8c1dfbedbe2a4a0c90f114a5cfc04a8f85e40",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3828,
+      "geometrySha256": "7d62f5817193538bd283e8903d49e37a11c244464fef9dc394d7baf67308bcbe",
+      "attributesSha256": "ac937746a0fb90a9bdefe4fd5eed399713f0060efb18a16681ce5dc54800c60f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3834,
+      "geometrySha256": "da61d6a90b4e0fe368e3fdf9593b2fec365a6a7f970a01c5fbdd3dc4f1d6829b",
+      "attributesSha256": "21aa59165e423b5733465318a7c9427c738fe8997061e446011637a6cb1dc723",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3836,
+      "geometrySha256": "5f487cbd6b3c2ec194dc66330b731908ca6e06ba1679f9d62ed8374ee3a081f3",
+      "attributesSha256": "65778acb11aa41767aeb37c4e6a3d8183fadca356194093fea7de569f60828a2",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3837,
+      "geometrySha256": "c50dfc3b1f9a10bb64f209447b5a83e26774058fe9046029c567f6aae59c1ea0",
+      "attributesSha256": "dfd8015dd801dd631ab475a46d17e9069fb01d44fed645ebc7ff4545266b5ce3",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3838,
+      "geometrySha256": "ea70b3bd2a3f21f338fe4842b45ae5565bce1e4cb8fabd7f98a0909490fdf139",
+      "attributesSha256": "111e0f8a2953ded9749408d90e4cfbad27ea020b417e4f9611dfc70378cd2462",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3840,
+      "geometrySha256": "9dc8c5c8e0026604f7bca826b9bd925eff98089b31815140e1a2c822cc73323e",
+      "attributesSha256": "1e973e330ca3df7fdd120e164b6e2796fefbbbbaeff635e3609be71d84a3f579",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3841,
+      "geometrySha256": "aca22591182d4df28e55aaf29f51b3864919568a1ed9b27817a4e49978a2e6ef",
+      "attributesSha256": "2480d7df76dfd2019a5b7dfc3331851ef459240ed89bb1f291ed8fc4946640ec",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3845,
+      "geometrySha256": "426f98d9a99557749b3f87352ab8117844d02718bb9fe3905c251ea9a37333b5",
+      "attributesSha256": "4de646d718042ff970ed8e3110fd0c15391f178fccbecb73993f3ce11dfc9e18",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3849,
+      "geometrySha256": "9a26edb8ef59be410c90328f60c419afa5e993a838ed3374569cb2aad1cc51e0",
+      "attributesSha256": "6b79cf074da0deace8375bc2b9f64ee17076ebc7b28487af36839d4f7e9faba3",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3854,
+      "geometrySha256": "90e0d17678abb1d3105564ff2dc23c27ee809d4c49bc3715692243f0394879d1",
+      "attributesSha256": "c40f4993bddf2c4a07397df795ef3a70926f3884aa2d9888e01579ac5e65c31c",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3857,
+      "geometrySha256": "193c55d2674322602b06b730fa03a401c8118bdb8c442dcb710d3ade314a95d5",
+      "attributesSha256": "e340997f3f1c3521d013da6ac69a9a9f2f6b4a11c50da9358cb46373460043bb",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3861,
+      "geometrySha256": "5c2f1537d2b43c2fe2bf639d07f55c223722536bb530144aa0cea7a74c0cfc98",
+      "attributesSha256": "53af8ac02ba6ef8cb7e235b50c559b1f57fe983e6f008815b3e872b1082473cc",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3875,
+      "geometrySha256": "4272ddd238deca76e30d288e717bac0694f4985dc32254cfff9604acd9a1ac60",
+      "attributesSha256": "f7afdc1ee26f6f71bd6f6195af2157886860f462b04d5edb6a25ad306c263d43",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3876,
+      "geometrySha256": "58a1ab4343b952a34355415363c118764dbbcbdd3e35f537ee2187344bb5c8a9",
+      "attributesSha256": "e57bf3794853223563ee0e15beefd87600c379b225c565e9af85cf13bf70782c",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 3877,
+      "geometrySha256": "f88cad3131a2112b63fe921d92ddb242d2e1ab21a23412a01aac544461546bd8",
+      "attributesSha256": "4f1d3df410e378501977471646b1d1e1bec125aa9dbcaecdac25a32ff41f7a4b",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4276,
+      "geometrySha256": "92c5280255a39e068df139fb3b9e46e505fc7ae7704cd3b4a1db9ce39b543c19",
+      "attributesSha256": "896bed9adddfb7c5cbfb8f77b98be8bfb5f7790882c19c90b9b8ef0dedd9760f",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4277,
+      "geometrySha256": "d26a0dba77b019fe10c322e861dcd60590a670651ddd2db90d7da14ef54494c5",
+      "attributesSha256": "ef790a6860e818fb67062e8ef738bfcb3626079356e990f2d100111c53035911",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4289,
+      "geometrySha256": "f9f7aa772dd041a6ba524bf2152b5f3d86bfbcc0dd220f298d63177d9410e014",
+      "attributesSha256": "f4df3947edb33583fedd6790460a9a3f57f00abeeac0373818a77be51f199bce",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4290,
+      "geometrySha256": "17c3c5593a40f792fb266f95ee7f6d319bef78a4abf79bc22685b4f560443c13",
+      "attributesSha256": "611c352eb7503d1c728a481397ad8eeb8fb52d7c67f5bc44b1d8337908000219",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4295,
+      "geometrySha256": "987abd9c817a37945bbcd68c51c63f706544c436078b2e640fa730808466307b",
+      "attributesSha256": "0e03e383e51d154a99b94cea60a342d68c0e0b17439b610d08abdc0ed0cd15d2",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4297,
+      "geometrySha256": "d37651a7f4e0236cea1f954a03a570a91e01abb195c787b8f5fdbb7fe1abbd48",
+      "attributesSha256": "bda605753303beeb436fe72f6341416e74b0c9c54a4488a7887c83168ebfe448",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4345,
+      "geometrySha256": "bdf3e89001f0e425cb72429b5e233103c18a99a1c154eb4f13f7e8bf38dc2dab",
+      "attributesSha256": "7b59baf5fcf6630b55b1c82053758f2458aa152310d4e061e552bdc4d5ea7754",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4346,
+      "geometrySha256": "71ad98977c129ecb7d7d9f5ff7b425714dc1036137d25c23d9b2437ffc5c8177",
+      "attributesSha256": "15987a2007ae2fe773434cdfec71699c1edb893cbd8b629e50ef66b080db28af",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4352,
+      "geometrySha256": "e149a644360c3633f408bbe8bf361ea732fdd2dece683de83ac5817a6458df26",
+      "attributesSha256": "c9b754e170c414b317b90dfb27bb434c85f2a91333332a0d1cfced08891e071f",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4353,
+      "geometrySha256": "c219198b4d17dd4f638371cf0204eecfa22c42d662abda4e74f06a49bbb71229",
+      "attributesSha256": "83f9164c73c7f55b6e2a5c0a3c1c99facccd39cdcc952b2fabb9d54c07e081da",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4755,
+      "geometrySha256": "1aacaa471a3f46b9bce4fb5b7a1346981592600d6825c8d7f4da98be98000f6f",
+      "attributesSha256": "af64b51e64a7aea919d2bad71926a2faf78c62ba0141a8df942c14516e262b28",
+      "routeRoles": [
+        "SharedRoadways"
+      ]
+    },
+    {
+      "selectionLayerId": 16,
+      "objectId": 4759,
+      "geometrySha256": "73bfeab27b1c0339bf2f9c4bf4bc8c917772e917de6d025c2703e611fe3fbe86",
+      "attributesSha256": "7999cdf0d6b18ef674269f499c1c8c67ec6305f59a7b171a530e4e69c7855df8",
+      "routeRoles": [
+        "ParkConnectors"
+      ]
+    }
+  ],
+  "excludedUntilVerified": [
+    {
+      "selectionLayerId": 54,
+      "objectIds": [
+        1929,
+        1952,
+        2349,
+        3824,
+        4275,
+        4772
+      ],
+      "reason": "Proposed branch geometry absent from the explicitly licensed source; redistribution basis unresolved."
+    },
+    {
+      "reason": "The 29 other licensed Open Data features are outside this reviewed routing subset."
+    }
+  ]
+}

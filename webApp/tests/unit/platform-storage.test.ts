@@ -1,0 +1,256 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  LocalRouteStore,
+  ActiveRideStore,
+  LIBRARY_KEY,
+  RECENT_MAX_AGE_MS,
+  stableRouteKey,
+  type RouteRecord,
+  type StoragePort,
+} from "../../src/platform/storage";
+import { privateRouteShare, routeGeoJson } from "../../src/platform/sharing";
+class MemoryStorage implements StoragePort {
+  values = new Map<string, string>();
+  fail = false;
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+  setItem(key: string, value: string) {
+    if (this.fail)
+      throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
+    this.values.set(key, value);
+  }
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+}
+const NOW = 2_000_000_000_000;
+const record = (key = "one", usedAt = NOW): RouteRecord => ({
+  key,
+  title: "Private home to work",
+  createdAt: NOW,
+  usedAt,
+  route: {
+    coordinates: [
+      [-89, 40],
+      [-89, 40.02],
+    ],
+  },
+  draft: {
+    destination: { label: "Private work", latitude: 40.02, longitude: -89 },
+  },
+});
+test("successful routes deduplicate, saving moves an item, opening and deleting saved never resurrect it", () => {
+  const storage = new MemoryStorage();
+  const store = new LocalRouteStore(storage, () => NOW);
+  assert.equal(store.read().state.recent.length, 0);
+  store.recordSuccess(record());
+  store.recordSuccess(record());
+  assert.equal(store.read().state.recent.length, 1);
+  assert.equal(store.save(record()).ok, true);
+  assert.equal(store.read().state.recent.length, 0);
+  store.open("one");
+  store.recordSuccess(record());
+  assert.equal(store.read().state.recent.length, 0);
+  store.deleteSaved("one");
+  assert.equal(store.read().state.recent.length, 0);
+  assert.equal(store.read().state.saved.length, 0);
+});
+test("recent routes cap at 20, expire at 30 days, and reopening updates their use", () => {
+  let now = NOW;
+  const storage = new MemoryStorage();
+  const store = new LocalRouteStore(storage, () => now);
+  for (let index = 0; index < 23; index++) {
+    now++;
+    store.recordSuccess(record(String(index), now));
+  }
+  assert.equal(store.read().state.recent.length, 20);
+  assert.equal(store.read().state.recent[0].key, "22");
+  now++;
+  store.open("3");
+  assert.equal(store.read().state.recent[0].key, "3");
+  now += RECENT_MAX_AGE_MS;
+  assert.equal(store.read().state.recent.length, 0);
+  assert.equal(JSON.parse(storage.values.get(LIBRARY_KEY)!).recent.length, 0);
+});
+test("clear recent routes preserves saved routes and places across browser reload", () => {
+  const storage = new MemoryStorage();
+  const store = new LocalRouteStore(storage, () => NOW);
+  store.save(record("saved"));
+  store.recordSuccess(record("recent"));
+  store.savePlace({
+    key: "place",
+    label: "Park",
+    latitude: 40,
+    longitude: -89,
+    createdAt: NOW,
+  });
+  store.clearRecents();
+  const reopened = new LocalRouteStore(storage, () => NOW).read();
+  assert.equal(reopened.state.saved.length, 1);
+  assert.equal(reopened.state.places.length, 1);
+  assert.equal(reopened.state.recent.length, 0);
+});
+test("quota failure never reports a route saved or removes its recent copy", () => {
+  const storage = new MemoryStorage();
+  const store = new LocalRouteStore(storage, () => NOW);
+  store.recordSuccess(record());
+  storage.fail = true;
+  const result = store.save(record());
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "quota");
+  assert.equal(result.state.saved.length, 0);
+  assert.equal(result.state.recent.length, 1);
+});
+test("corrupt and future-version data is reported and preserved until explicit reset", () => {
+  const storage = new MemoryStorage();
+  const store = new LocalRouteStore(storage, () => NOW);
+  storage.values.set(LIBRARY_KEY, "{broken");
+  assert.equal(store.read().error, "corrupt");
+  assert.equal(store.save(record()).ok, false);
+  assert.equal(storage.values.get(LIBRARY_KEY), "{broken");
+  storage.values.set(LIBRARY_KEY, '{"version":2}');
+  assert.equal(store.read().error, "unsupported-version");
+  store.reset();
+  assert.equal(store.read().ok, true);
+});
+test("stable route key ignores object-property order and no title participates unless explicitly supplied", () => {
+  assert.equal(
+    stableRouteKey({ a: 1, b: [2, 3] }),
+    stableRouteKey({ b: [2, 3], a: 1 }),
+  );
+  assert.notEqual(stableRouteKey([2, 3]), stableRouteKey([3, 2]));
+});
+test("active ride persists only route/progress and round-trips independently of recents", () => {
+  const storage = new MemoryStorage();
+  const store = new ActiveRideStore(storage);
+  store.write({
+    version: 1,
+    record: record(),
+    routeProgressMeters: 23,
+    creditedDistanceMeters: 15,
+    updatedAt: NOW,
+  });
+  assert.equal(
+    new ActiveRideStore(storage).read().state?.routeProgressMeters,
+    23,
+  );
+  store.clear();
+  assert.equal(store.read().state, null);
+});
+test("share never exposes private query, route path, hash, endpoint labels, or coordinates", () => {
+  const share = privateRouteShare(
+    "https://example.test/private-home/route?lat=40&lon=-89#destination",
+    1000,
+  );
+  assert.equal(share.url, "https://example.test/");
+  assert.doesNotMatch(
+    JSON.stringify(share),
+    /private-home|lat=|destination.*40|-89/,
+  );
+});
+test("default GeoJSON removes exact endpoint areas, private labels and draft while retaining attribution", () => {
+  const result = routeGeoJson(
+    record(),
+    [
+      [-89, 40],
+      [-89, 40.02],
+    ],
+    { action: "download" },
+  );
+  assert.equal(result.privacy, "endpoints-removed");
+  assert.match(result.attribution, /OpenStreetMap/);
+  const coordinates = result.features.flatMap(
+    (feature) => feature.geometry.coordinates,
+  );
+  assert.ok(
+    coordinates.every((point) => point[1] > 40.003 && point[1] < 40.017),
+  );
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /Private home|Private work|destination|draft/,
+  );
+});
+test("full route export needs explicit approval; a short private route fails closed", () => {
+  assert.throws(
+    () =>
+      routeGeoJson(
+        record(),
+        [
+          [-89, 40],
+          [-89, 40.02],
+        ],
+        { action: "download", includeExactEndpoints: true },
+      ),
+    /Confirm/,
+  );
+  const exact = routeGeoJson(
+    record(),
+    [
+      [-89, 40],
+      [-89, 40.02],
+    ],
+    {
+      action: "download",
+      includeExactEndpoints: true,
+      fullRouteApproved: true,
+    },
+  );
+  assert.deepEqual(exact.features[0].geometry.coordinates[0], [-89, 40]);
+  assert.throws(
+    () =>
+      routeGeoJson(
+        record(),
+        [
+          [-89, 40],
+          [-89, 40.001],
+        ],
+        { action: "download" },
+      ),
+    /too short/,
+  );
+});
+
+test("recalculation atomically replaces saved geometry without creating a recent or losing its saved home", () => {
+  const storage = new MemoryStorage();
+  const store = new LocalRouteStore(storage, () => NOW);
+  store.save(record("old"));
+  const replaced = store.replace("old", record("new"));
+  assert.equal(replaced.ok, true);
+  assert.deepEqual(
+    replaced.state.saved.map((item) => item.key),
+    ["new"],
+  );
+  assert.equal(replaced.state.recent.length, 0);
+  storage.fail = true;
+  const failed = store.replace("new", record("third"));
+  assert.equal(failed.ok, false);
+  assert.deepEqual(
+    failed.state.saved.map((item) => item.key),
+    ["new"],
+  );
+});
+test("exact GeoJSON preserves disconnected source paths without inventing connecting chords", () => {
+  const result = routeGeoJson(
+    record(),
+    [
+      [-89, 40],
+      [-89, 40.02],
+      [-88, 41],
+      [-88, 41.02],
+    ],
+    {
+      action: "download",
+      includeExactEndpoints: true,
+      fullRouteApproved: true,
+      segmentBreaks: [2],
+    },
+  );
+  assert.equal(result.features.length, 2);
+  assert.deepEqual(
+    result.features[0].geometry.coordinates.at(-1),
+    [-89, 40.02],
+  );
+  assert.deepEqual(result.features[1].geometry.coordinates[0], [-88, 41]);
+});

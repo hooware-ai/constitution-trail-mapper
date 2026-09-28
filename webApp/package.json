@@ -1,0 +1,34 @@
+{
+  "name": "trail-mapper-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build && node tools/audit-dist.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/unit/*.test.ts",
+    "test:e2e": "playwright test",
+    "build:core": "node tools/build-core.mjs",
+    "format": "prettier --write src tests tools *.ts *.json index.html",
+    "format:check": "prettier --check src tests tools *.ts *.json index.html"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
+    "@playwright/test": "^1.58.2",
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "prettier": "3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "~5.9.3",
+    "vite": "8.3.1"
+  }
+}
