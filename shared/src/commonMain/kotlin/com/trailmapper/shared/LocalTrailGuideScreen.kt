@@ -38,6 +38,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -49,12 +56,6 @@ internal fun LocalTrailGuideScreen(
     externalLinkOpener: ExternalLinkOpener,
     onBack: () -> Unit,
 ) {
-    var categoryName by rememberSaveable { mutableStateOf(LocalTrailGuideCategory.Conditions.name) }
-    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { now = Clock.System.now().toEpochMilliseconds() }
-    val entries = remember { LocalTrailGuide.entries() }
-    val category = LocalTrailGuideCategory.valueOf(categoryName)
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -67,51 +68,92 @@ internal fun LocalTrailGuideScreen(
             )
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        LocalTrailGuideContent(
+            externalLinkOpener = externalLinkOpener,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        )
+    }
+}
+
+/**
+ * The guide's freshness note, category chips and entries. The Updates tab embeds it under the app's own
+ * bars, adding its official links after the entries through [footer].
+ */
+@Composable
+internal fun LocalTrailGuideContent(
+    externalLinkOpener: ExternalLinkOpener,
+    modifier: Modifier = Modifier,
+    /** A heading above the guide, for when no top bar names it. */
+    title: String? = null,
+    horizontalPadding: PaddingValues = PaddingValues(horizontal = 20.dp),
+    listBottomPadding: Dp = 20.dp,
+    footer: LazyListScope.() -> Unit = {},
+) {
+    var categoryName by rememberSaveable { mutableStateOf(LocalTrailGuideCategory.Conditions.name) }
+    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { now = Clock.System.now().toEpochMilliseconds() }
+    val entries = remember { LocalTrailGuide.entries() }
+    val category = LocalTrailGuideCategory.valueOf(categoryName)
+
+    Column(modifier = modifier) {
+        title?.let { titleText ->
             Text(
-                LocalTrailGuide.freshnessMessage,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = titleText,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(horizontalPadding).padding(top = 16.dp).semantics { heading() },
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                LocalTrailGuideCategory.entries.forEach { item ->
-                    FilterChip(
-                        selected = category == item,
-                        onClick = { categoryName = item.name },
-                        label = { Text(item.label) },
-                    )
-                }
+        }
+        Text(
+            LocalTrailGuide.freshnessMessage,
+            modifier = Modifier.padding(horizontalPadding).padding(vertical = 12.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LocalTrailGuideCategory.entries.forEach { item ->
+                FilterChip(
+                    selected = category == item,
+                    onClick = { categoryName = item.name },
+                    label = { Text(item.label) },
+                )
             }
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                items(entries.filter { it.category == category }, key = LocalTrailGuideEntry::id) { entry ->
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
+        }
+        val layoutDirection = LocalLayoutDirection.current
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(
+                start = horizontalPadding.calculateStartPadding(layoutDirection),
+                top = 20.dp,
+                end = horizontalPadding.calculateEndPadding(layoutDirection),
+                bottom = listBottomPadding,
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            items(entries.filter { it.category == category }, key = LocalTrailGuideEntry::id) { entry ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(entry.statusAt(now), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                            Text(entry.title, style = MaterialTheme.typography.titleMedium)
-                            Text(entry.details, style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { externalLinkOpener.open(entry.source.url) }) {
-                                Text(entry.source.title, modifier = Modifier.weight(1f))
-                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
-                            }
+                        Text(entry.statusAt(now), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(entry.title, style = MaterialTheme.typography.titleMedium)
+                        Text(entry.details, style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = { externalLinkOpener.open(entry.source.url) }) {
+                            Text(entry.source.title, modifier = Modifier.weight(1f))
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
                         }
                     }
                 }
             }
+            footer()
         }
     }
 }

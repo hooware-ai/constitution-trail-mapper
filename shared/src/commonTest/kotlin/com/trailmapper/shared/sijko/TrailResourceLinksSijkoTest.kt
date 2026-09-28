@@ -1,9 +1,10 @@
 /**
- * Job: Verify official Constitution Trail resource links are present for the app menu.
+ * Job: Verify official Constitution Trail resource links are present and grouped for Explore and Updates.
  *
  */
 package com.trailmapper.shared.sijko
 
+import com.trailmapper.shared.TrailResourceGroup
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -29,15 +30,17 @@ class TrailResourceLinksSijkoTest {
     }
 
     @Test
-    fun homePrioritizesCurrentMapAndClosureSourcesOverDatedPaperMap() {
+    fun eachGroupLeadsWithItsCurrentSourceAndTheDatedPaperMapComesLast() {
         val links = TrailResourceLinksSijko.links()
+        val maps = links.filter { it.group == TrailResourceGroup.Maps }
 
-        assertEquals(
-            listOf("Latest county trail map", "County road closures and construction"),
-            links.filter { it.showOnHome }.map { it.title },
-        )
-        val downloads = links.single { it.url == "https://www.constitutiontrail.org/trail-maps" }
-        assertTrue(downloads.description.orEmpty().contains("June 2022"))
+        assertEquals("Latest county trail map", maps.first().title)
+        assertEquals("https://www.constitutiontrail.org/trail-maps", maps.last().url)
+        assertTrue(maps.last().description.orEmpty().contains("June 2022"))
+        assertEquals("County road closures and construction", links.first { it.group == TrailResourceGroup.Notices }.title)
+        assertTrue(links.filter { it.group == TrailResourceGroup.Rules }.any { it.title == "Normal trail rules" })
+        // Every group has links, so no Explore or Updates heading is left empty.
+        assertEquals(TrailResourceGroup.entries.toSet(), links.map { it.group }.toSet())
     }
 
     @Test
