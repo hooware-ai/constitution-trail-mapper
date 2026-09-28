@@ -12,6 +12,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -193,6 +194,44 @@ class TrailMapperViewModelSavedItemsTest {
         assertEquals("Saved destination was not found.", viewModel.uiState.value.destinationMessage)
         assertEquals(destination, viewModel.uiState.value.pendingNavigationDestination)
         assertEquals(listOf(destination), viewModel.uiState.value.savedDestinations)
+    }
+
+    @Test
+    fun recentRoutesHideSavedOnesAndClearingKeepsSavedRoutes() = runTest(dispatcher) {
+        val now = 1_790_000_000_000L
+        val savedRoute = savedRoute(id = "route-1", title = "Commute")
+        val routeStore = RouteStore(routes = listOf(savedRoute))
+        val unsaved = trailRoute().copy(totalDistanceMeters = 4000.0, totalCost = 4000.0)
+        val recentStore = object : RecentTrailRouteStore {
+            var routes = listOf(
+                RecentTrailRoute("recent-1", "To Library", unsaved, now - 60_000),
+                RecentTrailRoute("recent-2", "Commute again", savedRoute.route, now - 120_000),
+            )
+
+            override suspend fun recentRoutes() = routes
+
+            override suspend fun replaceRecentRoutes(routes: List<RecentTrailRoute>) {
+                this.routes = routes
+            }
+        }
+        val viewModel = TrailMapperViewModel(
+            savedTrailRouteStore = routeStore,
+            savedDestinationStore = DestinationStore(),
+            trailAccountProvider = NoTrailAccountProvider,
+            recentTrailRouteStore = recentStore,
+            nowEpochMillis = { now },
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("recent-1"), viewModel.uiState.value.recentRoutes.map { it.id })
+        assertEquals(listOf(savedRoute), viewModel.uiState.value.savedRoutes)
+
+        viewModel.clearRecentRoutes()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.recentRoutes.isEmpty())
+        assertTrue(recentStore.routes.isEmpty())
+        assertEquals(listOf(savedRoute), viewModel.uiState.value.savedRoutes)
     }
 
     private fun viewModel(

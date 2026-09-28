@@ -140,7 +140,10 @@ import com.trailmapper.shared.SavedTrailRoute
 import com.trailmapper.shared.SavedTrailRouteStore
 import com.trailmapper.shared.TrailRoutePreviewDestination
 import com.trailmapper.shared.TrailRoutePreviewRequest
+import com.trailmapper.shared.RecentTrailRouteHistorySijko
+import com.trailmapper.shared.RecentTrailRouteStore
 import com.trailmapper.shared.TrailRoutePreviewSaveController
+import com.trailmapper.android.routing.AndroidRecentTrailRouteStore
 import com.trailmapper.shared.TrailRoutePreviewSaveOutcome
 import com.trailmapper.shared.TrailRouteShareProvider
 import kotlinx.coroutines.withContext
@@ -176,6 +179,7 @@ class TrailRouteMapActivity : ComponentActivity() {
         val savedTrailRouteStore = AndroidSavedTrailRouteStore(applicationContext)
         val savedDestinationStore = AndroidSavedDestinationStore(applicationContext)
         val trailRouteShareProvider = AndroidTrailRouteShareProvider(applicationContext)
+        val recentTrailRouteStore = AndroidRecentTrailRouteStore(applicationContext)
 
         setContent {
             MaterialTheme {
@@ -193,6 +197,7 @@ class TrailRouteMapActivity : ComponentActivity() {
                             savedTrailRouteStore = savedTrailRouteStore,
                             savedDestinationStore = savedDestinationStore,
                             trailRouteShareProvider = trailRouteShareProvider,
+                            recentTrailRouteStore = recentTrailRouteStore,
                             onBack = ::finish,
                         )
                     }
@@ -203,6 +208,7 @@ class TrailRouteMapActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_ROUTE_JSON = "com.trailmapper.android.map.EXTRA_ROUTE_JSON"
+        private const val EXTRA_TITLE = "com.trailmapper.android.map.EXTRA_TITLE"
         private const val EXTRA_DESTINATION_ADDRESS = "com.trailmapper.android.map.EXTRA_DESTINATION_ADDRESS"
         private const val EXTRA_DESTINATION_LATITUDE = "com.trailmapper.android.map.EXTRA_DESTINATION_LATITUDE"
         private const val EXTRA_DESTINATION_LONGITUDE = "com.trailmapper.android.map.EXTRA_DESTINATION_LONGITUDE"
@@ -214,6 +220,7 @@ class TrailRouteMapActivity : ComponentActivity() {
         ): Intent {
             val intent = Intent(context, TrailRouteMapActivity::class.java)
                 .putExtra(EXTRA_ROUTE_JSON, TrailRouteMapJsonSijko.encode(route))
+                .putExtra(EXTRA_TITLE, preview.title)
             preview.destination?.let { destination ->
                 intent
                     .putExtra(EXTRA_DESTINATION_ADDRESS, destination.address)
@@ -237,7 +244,10 @@ class TrailRouteMapActivity : ComponentActivity() {
             } else {
                 null
             }
-            return TrailRoutePreviewRequest(destination = destination)
+            return TrailRoutePreviewRequest(
+                title = intent.getStringExtra(EXTRA_TITLE),
+                destination = destination,
+            )
         }
     }
 }
@@ -251,6 +261,7 @@ private fun TrailRouteMapScreen(
     savedTrailRouteStore: SavedTrailRouteStore,
     savedDestinationStore: SavedDestinationStore,
     trailRouteShareProvider: TrailRouteShareProvider,
+    recentTrailRouteStore: RecentTrailRouteStore,
     onBack: () -> Unit,
 ) {
     var reversedDirection by rememberSaveable(plannedRoute) { mutableStateOf(false) }
@@ -259,11 +270,27 @@ private fun TrailRouteMapScreen(
     val previewSnackbarHostState = remember { SnackbarHostState() }
     val previewScope = rememberCoroutineScope()
     val saveController = remember(plannedRoute) {
-        TrailRoutePreviewSaveController(savedTrailRouteStore, savedDestinationStore, previewScope)
+        TrailRoutePreviewSaveController(savedTrailRouteStore, savedDestinationStore, previewScope, recentTrailRouteStore)
     }
     val saveState by saveController.state.collectAsState()
     LaunchedEffect(saveController) {
         saveController.offerDestination(preview.destination)
+    }
+    // Opening a route's map puts it at the top of Recent, unless it is saved; Saved is its home then.
+    LaunchedEffect(plannedRoute) {
+        try {
+            RecentTrailRouteHistorySijko.record(
+                store = recentTrailRouteStore,
+                savedStore = savedTrailRouteStore,
+                route = plannedRoute,
+                title = preview.title ?: RecentTrailRouteHistorySijko.titleFor(plannedRoute, preview.destination?.address),
+                nowEpochMillis = System.currentTimeMillis(),
+            )
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            Unit
+        }
     }
     val directedRoute = remember(plannedRoute, reversedDirection) {
         if (reversedDirection) TrailRouteReverseSijko.reversed(plannedRoute) else plannedRoute

@@ -49,6 +49,7 @@ class TrailRoutePreviewSaveController(
     private val routeStore: SavedTrailRouteStore,
     private val destinationStore: SavedDestinationStore,
     private val scope: CoroutineScope,
+    private val recentStore: RecentTrailRouteStore = NoRecentTrailRouteStore,
 ) {
     private val _state = MutableStateFlow(TrailRoutePreviewSaveState())
     val state: StateFlow<TrailRoutePreviewSaveState> = _state.asStateFlow()
@@ -94,6 +95,14 @@ class TrailRoutePreviewSaveController(
         return try {
             val result = TrailRoutePreviewSavingSijko.saveRoute(routeStore, route)
             _state.update { state -> if (state.shownRoute == route) state.copy(savedRoute = result.item) else state }
+            // Saved is now its home; a failure here only leaves an entry the next Recent load hides.
+            try {
+                RecentTrailRouteHistorySijko.forget(recentStore, route)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                Unit
+            }
             TrailRoutePreviewSaveOutcome.Done(result.item, alreadySaved = !result.isNew)
         } catch (exception: CancellationException) {
             throw exception
