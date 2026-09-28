@@ -75,6 +75,22 @@ class AndroidSavedTrailRouteStore(
         }
     }
 
+    override suspend fun replaceRoute(
+        id: String,
+        route: TrailRoute,
+    ): SavedTrailRoute? = operationMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val existing = readRoutes()
+            val replaced = existing.firstOrNull { saved -> saved.id == id }
+                ?.copy(route = route, summary = TrailRouteSummarySijko.summaryFor(route))
+                ?: return@withContext null
+            check(writeRoutes(existing.map { saved -> if (saved.id == id) replaced else saved })) {
+                "Unable to persist saved route."
+            }
+            replaced
+        }
+    }
+
     override suspend fun deleteRoute(id: String): Boolean = operationMutex.withLock {
         withContext(Dispatchers.IO) {
             val existing = readRoutes()

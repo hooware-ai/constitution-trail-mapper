@@ -323,6 +323,61 @@ class RouteGenerationRealDataAuditTest {
         assertTrue(TrailRouteAdvisorySijko.forRoute(replacement, now).none { it.id == uptownAdvisory })
     }
 
+    @Test
+    fun aRouteSavedBeforeTheUptownClosureIsBlockedUntilRecalculatedAroundIt() {
+        val features = trailFeatures()
+        val beforeClosure = TrailRouteClosureSijko.uptownUnderpass.activeFromEpochMillis - 86_400_000L
+        val afterClosure = TrailRouteClosureSijko.uptownUnderpass.activeFromEpochMillis + 86_400_000L
+        val start = MapPoint(40.5030, -88.9838)
+        val destination = MapPoint(40.5120, -88.9840)
+        val roads = accessFeatures(listOf(start, destination))
+        // Planned while the trail was open, it rides straight through the Uptown section.
+        val stale = assertNotNull(
+            TrailRouteCalculationSijko.findRoute(
+                features, RouteLayerDefaultsSijko.defaultSelection(), start, destination,
+                AccessGraphBuilderSijko.buildGraph(roads),
+                nowEpochMillis = beforeClosure,
+            ),
+        )
+        assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(stale, beforeClosure).isEmpty())
+
+        val blocking = TrailRouteClosureGateSijko.blockingAdvisories(stale, afterClosure)
+        assertEquals(listOf(TrailRouteClosureSijko.uptownUnderpass.id), blocking.map { it.id })
+        assertEquals(TrailRouteClosureSijko.uptownUnderpass.noticeUrl, blocking.single().sourceUrl)
+
+        val outcome = TrailRouteClosureGateSijko.recalculate(features, stale, TrailRouteRerouteAccess.Roads(roads), nowEpochMillis = afterClosure)
+        val replacement = assertIs<TrailRouteRecalculationOutcome.Replacement>(outcome).route
+        assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(replacement, afterClosure).isEmpty())
+        assertEquals(stale.kind, replacement.kind)
+        val arrival = assertNotNull(TrailRouteRerouteSijko.destinationOf(replacement))
+        assertTrue(TrailDistanceSijko.metersBetween(arrival, assertNotNull(TrailRouteRerouteSijko.destinationOf(stale))) < 50.0)
+    }
+
+    @Test
+    fun aLoopThroughTheUptownClosureIsRecalculatedAtItsRequestedDistance() {
+        val features = trailFeatures()
+        val beforeClosure = TrailRouteClosureSijko.uptownUnderpass.activeFromEpochMillis - 86_400_000L
+        val afterClosure = TrailRouteClosureSijko.uptownUnderpass.activeFromEpochMillis + 86_400_000L
+        val start = MapPoint(40.50930, -88.98450)
+        val target = 3.0 * 1609.344
+        val roads = accessFeatures(listOf(start))
+        val stale = assertNotNull(
+            ExerciseRouteCalculationSijko.findRoute(
+                features, RouteLayerDefaultsSijko.defaultSelection(), start, target, emptyList(),
+                AccessGraphBuilderSijko.buildGraph(ExerciseRouteAccessNetworkFilterSijko.nearbyFeatures(roads, start, target)),
+                nowEpochMillis = beforeClosure,
+            ),
+        ).route
+        assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(stale, afterClosure).isNotEmpty(), "the loop must ride the closed section")
+
+        val outcome = TrailRouteClosureGateSijko.recalculate(features, stale, TrailRouteRerouteAccess.Roads(roads), nowEpochMillis = afterClosure)
+        val replacement = assertIs<TrailRouteRecalculationOutcome.Replacement>(outcome).route
+        assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(replacement, afterClosure).isEmpty())
+        assertEquals(TrailRouteKind.ExerciseLoop, replacement.kind)
+        assertEquals(target, replacement.requestedDistanceMeters)
+        assertTrue(TrailDistanceSijko.metersBetween(assertNotNull(TrailRouteClosureGateSijko.startOf(replacement)), start) < 400.0)
+    }
+
     private fun largestComponent(graph: TrailGraph): List<TrailGraphNode> {
         val adjacency = mutableMapOf<Int, MutableList<Int>>()
         graph.edges.forEach { edge ->

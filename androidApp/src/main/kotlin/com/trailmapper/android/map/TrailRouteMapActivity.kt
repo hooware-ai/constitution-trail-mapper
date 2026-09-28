@@ -141,6 +141,9 @@ import com.trailmapper.shared.SavedTrailRouteStore
 import com.trailmapper.shared.TrailRoutePreviewDestination
 import com.trailmapper.shared.TrailRoutePreviewRequest
 import com.trailmapper.shared.RecentTrailRouteHistorySijko
+import com.trailmapper.shared.TrailRouteRecalculationSijko
+import com.trailmapper.shared.routing.TrailRouteClosureGateSijko
+import com.trailmapper.shared.routing.TrailRouteRecalculationOutcome
 import com.trailmapper.shared.RecentTrailRouteStore
 import com.trailmapper.shared.TrailRoutePreviewSaveController
 import com.trailmapper.android.routing.AndroidRecentTrailRouteStore
@@ -292,8 +295,13 @@ private fun TrailRouteMapScreen(
             Unit
         }
     }
-    val directedRoute = remember(plannedRoute, reversedDirection) {
-        if (reversedDirection) TrailRouteReverseSijko.reversed(plannedRoute) else plannedRoute
+    // A route recalculated around an active closure replaces the plan shown, and its saved or recent entry.
+    var recalculatedPlanJson by rememberSaveable(plannedRoute) { mutableStateOf<String?>(null) }
+    val activePlan = remember(plannedRoute, recalculatedPlanJson) {
+        recalculatedPlanJson?.let(TrailRouteMapJsonSijko::decode) ?: plannedRoute
+    }
+    val directedRoute = remember(activePlan, reversedDirection) {
+        if (reversedDirection) TrailRouteReverseSijko.reversed(activePlan) else activePlan
     }
     // A replacement adopted after a confirmed departure. The saved original is never changed.
     var replacementRouteJson by rememberSaveable(plannedRoute) { mutableStateOf<String?>(null) }
@@ -318,6 +326,13 @@ private fun TrailRouteMapScreen(
     val routeAdvisories = remember(route, advisoryNowEpochMillis) {
         TrailRouteAdvisorySijko.forRoute(route, advisoryNowEpochMillis)
     }
+    // An active trail closure on the route keeps Start disabled until it is recalculated; there is no
+    // "start anyway". New routes already avoid closures; this catches routes planned before one began.
+    val blockingAdvisories = remember(route, advisoryNowEpochMillis) {
+        TrailRouteClosureGateSijko.blockingAdvisories(route, advisoryNowEpochMillis)
+    }
+    var recalculatingAroundClosure by remember { mutableStateOf(false) }
+    var closureNoRouteMessage by remember(route) { mutableStateOf<String?>(null) }
     val advisoryCorridors = remember(routeAdvisories, advisoryNowEpochMillis) {
         val ids = routeAdvisories.mapTo(mutableSetOf()) { it.id }
         TrailRouteAdvisorySijko.approximateCorridors(advisoryNowEpochMillis)
@@ -412,6 +427,93 @@ private fun TrailRouteMapScreen(
     val trailNetworkProvider = remember { AndroidTrailNetworkProvider(context.applicationContext) }
     val accessNetworkProvider = remember { AndroidAccessNetworkProvider(context.applicationContext) }
     var trailFeatures by remember { mutableStateOf<List<TrailNetworkFeature>?>(null) }
+
+    fun recalculateAroundClosure() {
+        if (recalculatingAroundClosure) return
+        val staleRoute = route
+        val previousPlanJson = recalculatedPlanJson
+        val previousReversed = reversedDirection
+        recalculatingAroundClosure = true
+        closureNoRouteMessage = null
+        coroutineScope.launch {
+            try {
+                val features = trailFeatures ?: when (val loaded = trailNetworkProvider.loadTrailNetwork()) {
+                    is TrailNetworkLoadResult.Success -> loaded.features.also { trailFeatures = it }
+                    else -> null
+                }
+                if (features == null) {
+                    closureNoRouteMessage = "Trail data is unavailable, so the route cannot be recalculated."
+                    return@launch
+                }
+                // As in a reroute: missing road data allows estimated access, but road data that failed to
+                // load stops the search rather than quietly building the route under weaker rules.
+                val access = TrailRouteRerouteSijko.accessFor(
+                    accessNetworkProvider.loadAccessNetwork(TrailRouteClosureGateSijko.accessEndpoints(staleRoute)),
+                )
+                val sessions = if (staleRoute.kind == TrailRouteKind.ExerciseLoop) {
+                    completedExerciseSessionStore.completedSessions()
+                } else {
+                    emptyList()
+                }
+                val now = System.currentTimeMillis()
+                val outcome = withContext(Dispatchers.Default) {
+                    TrailRouteClosureGateSijko.recalculate(
+                        features = features,
+                        route = staleRoute,
+                        access = access,
+                        completedSessions = sessions,
+                        nowEpochMillis = now,
+                        cancellationCheckpoint = { ensureActive() },
+                    )
+                }
+                when (outcome) {
+                    is TrailRouteRecalculationOutcome.Replacement -> {
+                        val applied = TrailRouteRecalculationSijko.apply(
+                            savedStore = savedTrailRouteStore,
+                            recentStore = recentTrailRouteStore,
+                            oldRoute = staleRoute,
+                            newRoute = outcome.route,
+                            title = preview.title
+                                ?: RecentTrailRouteHistorySijko.titleFor(staleRoute, preview.destination?.address),
+                            nowEpochMillis = now,
+                        )
+                        reversedDirection = false
+                        replacementRouteJson = null
+                        recalculatedPlanJson = TrailRouteMapJsonSijko.encode(outcome.route)
+                        val result = previewSnackbarHostState.showSnackbar(
+                            message = "Rerouted around the closure · " +
+                                "%.1f mi".format(outcome.route.totalDistanceMeters / METERS_PER_MILE),
+                            actionLabel = "Undo",
+                            duration = SnackbarDuration.Long,
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            TrailRouteRecalculationSijko.undo(
+                                savedStore = savedTrailRouteStore,
+                                recentStore = recentTrailRouteStore,
+                                applied = applied,
+                                nowEpochMillis = System.currentTimeMillis(),
+                            )
+                            recalculatedPlanJson = previousPlanJson
+                            reversedDirection = previousReversed
+                        }
+                    }
+                    is TrailRouteRecalculationOutcome.NoSafeRoute -> {
+                        closureNoRouteMessage = outcome.blockingClosures.firstOrNull()?.guidance
+                            ?: "No route around the closure was found from this start."
+                    }
+                    TrailRouteRecalculationOutcome.RoadDataFailed -> {
+                        closureNoRouteMessage = "Road data could not be loaded, so the route cannot be recalculated. Try again."
+                    }
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                closureNoRouteMessage = "The route could not be recalculated. Try again."
+            } finally {
+                recalculatingAroundClosure = false
+            }
+        }
+    }
 
     fun resetProgress() {
         maximumProgressMeters = 0.0
@@ -936,7 +1038,18 @@ private fun TrailRouteMapScreen(
                         deviation.status == TrailRouteDeviationStatus.ConfirmedOffRoute
                 }
                 ?.let { fix -> { kind: RerouteKind -> startReroute(fix, kind, requestedByRider = true) } },
+            closureBlock = blockingAdvisories.firstOrNull()?.let { advisory ->
+                RouteClosureBlock(
+                    reason = "This route goes through a reported trail closure " +
+                        "(${advisory.title.removeSuffix(" advisory")}). Recalculate to ride around it.",
+                    noRouteMessage = closureNoRouteMessage,
+                    recalculating = recalculatingAroundClosure,
+                    onRecalculate = ::recalculateAroundClosure,
+                    onReviewNotice = { reviewedAdvisoryId = advisory.id },
+                )
+            },
             onStartNavigation = {
+                if (blockingAdvisories.isNotEmpty()) return@RouteMapBottomControls
                 resetProgress()
                 carriedRideJson = null
                 deviation = TrailRouteDeviationState()
@@ -1066,6 +1179,48 @@ private fun TrailRouteMapScreen(
     }
 }
 
+/** Why Start is disabled on a route through an active closure, and how to get past it. */
+private class RouteClosureBlock(
+    val reason: String,
+    /** Why Recalculate found nothing, such as the closure's own detour guidance. */
+    val noRouteMessage: String?,
+    val recalculating: Boolean,
+    val onRecalculate: () -> Unit,
+    val onReviewNotice: () -> Unit,
+)
+
+@Composable
+private fun RouteClosureBlockPanel(block: RouteClosureBlock) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = block.reason,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+        block.noRouteMessage?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(onClick = block.onRecalculate, enabled = !block.recalculating) {
+                Text(if (block.recalculating) "Recalculating..." else "Recalculate")
+            }
+            TextButton(onClick = block.onReviewNotice) {
+                Text("Review notice")
+            }
+        }
+    }
+}
+
 /** Save, share and save-place actions for a previewed route; each confirms with a snackbar, not a dialog. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1116,6 +1271,7 @@ private fun RouteMapBottomControls(
     onShare: () -> Unit,
     onSaveDestination: (() -> Unit)?,
     saveDestinationEnabled: Boolean,
+    closureBlock: RouteClosureBlock?,
     activeNavigation: Boolean,
     navigationSnapshot: TrailRouteNavigationSnapshot?,
     navigationMessage: String?,
@@ -1212,6 +1368,8 @@ private fun RouteMapBottomControls(
                     )
                 }
 
+                closureBlock?.let { block -> RouteClosureBlockPanel(block) }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1220,6 +1378,7 @@ private fun RouteMapBottomControls(
                     Button(
                         onClick = onStartNavigation,
                         modifier = Modifier.weight(1f),
+                        enabled = closureBlock == null,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Navigation,

@@ -57,6 +57,22 @@ class IOSSavedTrailRouteStore : SavedTrailRouteStore {
         }
     }
 
+    override suspend fun replaceRoute(
+        id: String,
+        route: TrailRoute,
+    ): SavedTrailRoute? = operationMutex.withLock {
+        withContext(Dispatchers.Default) {
+            val existing = readRoutes()
+            val replaced = existing.firstOrNull { saved -> saved.id == id }
+                ?.copy(route = route, summary = TrailRouteSummarySijko.summaryFor(route))
+                ?: return@withContext null
+            writeRoutes(existing.map { saved ->
+                if (saved.id == id) replaced else saved
+            })
+            replaced
+        }
+    }
+
     override suspend fun deleteRoute(id: String): Boolean = operationMutex.withLock {
         withContext(Dispatchers.Default) {
             val existing = readRoutes()

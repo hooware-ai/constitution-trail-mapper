@@ -26,5 +26,10 @@ object NoSavedTrailRouteStore : SavedTrailRouteStore {
         title: String,
     ): SavedTrailRoute? = null
 
+    override suspend fun replaceRoute(
+        id: String,
+        route: TrailRoute,
+    ): SavedTrailRoute? = null
+
     override suspend fun deleteRoute(id: String): Boolean = false
 }
