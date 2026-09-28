@@ -371,6 +371,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                     it.copy(
                         routeDialog = routeDialog,
                         isFindingRoute = false,
+                        lastRoute = routeDialog.route,
                     )
                 }
             } catch (exception: CancellationException) {
@@ -528,7 +529,7 @@ internal class RoutePlannerViewModel : ViewModel() {
     private fun invalidateRoute() {
         routeSearchJob?.cancel()
         routeRequestVersion += 1
-        _uiState.update { it.copy(isFindingRoute = false, routeDialog = null) }
+        _uiState.update { it.copy(isFindingRoute = false, routeDialog = null, lastRoute = null) }
     }
 
     private fun cancelEndpointWork(target: RouteEndpointTarget? = null) {

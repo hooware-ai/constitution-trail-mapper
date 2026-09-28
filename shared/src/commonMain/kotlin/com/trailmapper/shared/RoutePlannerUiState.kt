@@ -4,6 +4,7 @@
  */
 package com.trailmapper.shared
 
+import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.sijko.RouteEndpointTarget
 import com.trailmapper.shared.sijko.RouteEndpoints
 import com.trailmapper.shared.sijko.RouteLayerSelection
@@ -22,6 +23,8 @@ data class RoutePlannerUiState(
     val mapPointError: String? = null,
     val routeDialog: RouteMessageDialog? = null,
     val isFindingRoute: Boolean = false,
+    /** The route found for the current endpoints, kept so the rider can reopen its map after Back. */
+    val lastRoute: TrailRoute? = null,
 ) {
     val hasPendingEndpointRequest: Boolean
         get() = resolvingLocationTarget != null ||

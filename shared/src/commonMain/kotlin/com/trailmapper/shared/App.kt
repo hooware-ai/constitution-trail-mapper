@@ -91,12 +91,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.trailmapper.shared.routing.TrailRoute
+import com.trailmapper.shared.routing.TrailRouteSummarySijko
 import com.trailmapper.shared.routing.ExerciseRouteStatus
 import com.trailmapper.shared.routing.TrailRouteKind
 import com.trailmapper.shared.routing.TrailRouteAdvisorySijko
@@ -144,6 +147,10 @@ fun App(
             val appState by trailMapperViewModel.uiState.collectAsStateWithLifecycle()
             val navController = rememberNavController()
             var routePlannerDestinationId by rememberSaveable { mutableStateOf<String?>(null) }
+            // The route map saves straight to the stores, so pick up its changes on return.
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                trailMapperViewModel.refreshSavedItems()
+            }
 
             NavHost(
                 navController = navController,
@@ -235,13 +242,6 @@ fun App(
                         },
                         externalLinkOpener = externalLinkOpener,
                         onBack = { navController.navigateUp() },
-                        onSaveRoute = trailMapperViewModel::saveRoute,
-                        onSaveDestination = { address, point ->
-                            trailMapperViewModel.saveDestination(
-                                address = address,
-                                point = point,
-                            )
-                        },
                     )
                 }
 
@@ -1514,6 +1514,16 @@ private fun ExerciseRoutePlanner(
     val keyboardController = LocalSoftwareKeyboardController.current
     var showDeveloperOptions by remember { mutableStateOf(false) }
 
+    // A new loop opens straight onto its map once; the result card stays for reopening it after Back.
+    val resultAwaitingMap = uiState.result?.takeIf { uiState.resultAwaitingMap }
+    LaunchedEffect(resultAwaitingMap) {
+        val result = resultAwaitingMap ?: return@LaunchedEffect
+        viewModel.markResultShownOnMap()
+        if (trailRouteMapPresenter.isAvailable) {
+            trailRouteMapPresenter.showTrailRoute(result.route)
+        }
+    }
+
     fun hideInput() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
@@ -1691,15 +1701,18 @@ private fun ExerciseRoutePlanner(
                                     )
                                     Text("Map")
                                 }
-                                OutlinedButton(
-                                    onClick = { onSaveRoute(result.route) },
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Bookmark,
-                                        contentDescription = null,
-                                    )
-                                    Text("Save")
+                                // With a map, the loop is saved from its map like any route.
+                                if (!trailRouteMapPresenter.isAvailable) {
+                                    OutlinedButton(
+                                        onClick = { onSaveRoute(result.route) },
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Bookmark,
+                                            contentDescription = null,
+                                        )
+                                        Text("Save")
+                                    }
                                 }
                                 if (trailRouteShareProvider.isAvailable) {
                                     IconButton(
@@ -1796,8 +1809,6 @@ private fun RoutePlanner(
     onOpenLocalGuide: () -> Unit,
     externalLinkOpener: ExternalLinkOpener,
     onBack: () -> Unit,
-    onSaveRoute: (TrailRoute) -> Unit,
-    onSaveDestination: (String, MapPoint) -> Unit,
 ) {
     val routePlannerViewModel: RoutePlannerViewModel = viewModel { RoutePlannerViewModel() }
     val uiState by routePlannerViewModel.uiState.collectAsStateWithLifecycle()
@@ -1999,6 +2010,51 @@ private fun RoutePlanner(
                     }
                 }
             }
+
+            uiState.lastRoute
+                ?.takeIf { trailRouteMapPresenter.isAvailable && !uiState.isFindingRoute }
+                ?.let { route ->
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            tonalElevation = 2.dp,
+                            color = MaterialTheme.colorScheme.surface,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Route ready",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = TrailRouteSummarySijko.summaryFor(route),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        trailRouteMapPresenter.showTrailRoute(
+                                            route,
+                                            routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
+                                        )
+                                    },
+                                ) {
+                                    Icon(imageVector = Icons.Filled.Map, contentDescription = null)
+                                    Text("Open map")
+                                }
+                            }
+                        }
+                    }
+                }
         }
     }
 
@@ -2054,8 +2110,17 @@ private fun RoutePlanner(
 
     uiState.routeDialog?.let { dialog ->
         val drawableRoute = dialog.route.takeIf { trailRouteMapPresenter.isAvailable }
-        val destinationAddress = uiState.endpoints.destination
-        val destinationPoint = uiState.endpoints.destinationPoint
+        if (drawableRoute != null) {
+            // Nothing asks the rider to save first; saving and sharing happen on the map.
+            LaunchedEffect(dialog) {
+                routePlannerViewModel.dismissRouteDialog()
+                trailRouteMapPresenter.showTrailRoute(
+                    drawableRoute,
+                    routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
+                )
+            }
+            return@let
+        }
         AlertDialog(
             onDismissRequest = routePlannerViewModel::dismissRouteDialog,
             title = { Text(dialog.title) },
@@ -2070,48 +2135,8 @@ private fun RoutePlanner(
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (drawableRoute == null) {
-                            routePlannerViewModel.dismissRouteDialog()
-                        } else {
-                            routePlannerViewModel.dismissRouteDialog()
-                            trailRouteMapPresenter.showTrailRoute(drawableRoute)
-                        }
-                    },
-                ) {
-                    Text(if (drawableRoute == null) "OK" else "View map")
-                }
-            },
-            dismissButton = if (drawableRoute == null) {
-                null
-            } else {
-                {
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (destinationPoint != null) {
-                            TextButton(
-                                onClick = {
-                                    routePlannerViewModel.dismissRouteDialog()
-                                    onSaveDestination(destinationAddress, destinationPoint)
-                                },
-                            ) {
-                                Text("Save destination")
-                            }
-                        }
-                        Row {
-                            TextButton(
-                                onClick = {
-                                    routePlannerViewModel.dismissRouteDialog()
-                                    onSaveRoute(drawableRoute)
-                                },
-                            ) {
-                                Text("Save route")
-                            }
-                            TextButton(onClick = routePlannerViewModel::dismissRouteDialog) {
-                                Text("Close")
-                            }
-                        }
-                    }
+                TextButton(onClick = routePlannerViewModel::dismissRouteDialog) {
+                    Text("OK")
                 }
             },
         )
@@ -2123,6 +2148,15 @@ private fun RoutePlanner(
             onDismiss = { showDeveloperOptions = false },
         )
     }
+}
+
+private fun routePreviewRequest(
+    destinationAddress: String,
+    destinationPoint: MapPoint?,
+): TrailRoutePreviewRequest {
+    return TrailRoutePreviewRequest(
+        destination = destinationPoint?.let { point -> TrailRoutePreviewDestination(destinationAddress, point) },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

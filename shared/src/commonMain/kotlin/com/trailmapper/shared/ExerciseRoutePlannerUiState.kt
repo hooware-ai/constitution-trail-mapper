@@ -22,6 +22,8 @@ data class ExerciseRoutePlannerUiState(
     val autocompleteError: String? = null,
     val isFindingRoute: Boolean = false,
     val result: ExerciseRouteResult? = null,
+    /** A new result the map has not shown yet; the planner opens its map once, then clears this. */
+    val resultAwaitingMap: Boolean = false,
     val searchError: String? = null,
 ) {
     val hasPendingEndpointRequest: Boolean

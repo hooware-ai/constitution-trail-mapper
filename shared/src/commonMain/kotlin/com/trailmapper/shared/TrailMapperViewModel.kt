@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import com.trailmapper.shared.routing.AccessGraphBuilderSijko
 import com.trailmapper.shared.routing.TrailGraph
 import com.trailmapper.shared.routing.TrailRoute
-import com.trailmapper.shared.routing.TrailRouteKind
 import com.trailmapper.shared.routing.TrailRouteCalculationSijko
 import com.trailmapper.shared.routing.TrailRouteSearchOutcome
 import com.trailmapper.shared.routing.TrailNetworkFeature
@@ -20,8 +19,6 @@ import com.trailmapper.shared.sijko.RouteLayerDefaultsSijko
 import com.trailmapper.shared.sijko.RouteLayerSelection
 import com.trailmapper.shared.sijko.SavedDestinationTitleSijko
 import com.trailmapper.shared.sijko.SavedItemTitleEditSijko
-import com.trailmapper.shared.sijko.SavedTrailRouteTitleSijko
-import com.trailmapper.shared.sijko.SavedExerciseRouteTitleSijko
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -94,19 +91,7 @@ internal class TrailMapperViewModel(
 
     fun saveRoute(route: TrailRoute) {
         launchSavedRouteOperation {
-            val title = if (route.kind == TrailRouteKind.ExerciseLoop) {
-                SavedExerciseRouteTitleSijko.titleFor(
-                    _uiState.value.savedRoutes.count { savedRoute ->
-                        savedRoute.route.kind == TrailRouteKind.ExerciseLoop
-                    },
-                )
-            } else {
-                SavedTrailRouteTitleSijko.titleFor(
-                    _uiState.value.savedRoutes.count { savedRoute ->
-                        savedRoute.route.kind == TrailRouteKind.Navigation
-                    },
-                )
-            }
+            val title = TrailRoutePreviewSavingSijko.defaultTitleFor(route, _uiState.value.savedRoutes)
             try {
                 val savedRoute = savedTrailRouteStore.saveRoute(route, title)
                 _uiState.update { state ->
