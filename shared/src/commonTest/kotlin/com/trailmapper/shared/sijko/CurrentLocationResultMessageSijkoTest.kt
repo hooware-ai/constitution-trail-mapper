@@ -14,7 +14,7 @@ class CurrentLocationResultMessageSijkoTest {
     fun successHasNoErrorMessage() {
         assertNull(
             CurrentLocationResultMessageSijko.messageFor(
-                CurrentLocationAddressResult.Success("100 Main St"),
+                CurrentLocationAddressResult.Success("100 Example Street"),
             ),
         )
     }

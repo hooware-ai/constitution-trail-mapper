@@ -35,7 +35,7 @@ class TrailMapperPersistenceJsonSijkoTest {
             SavedDestination(
                 id = "destination-2",
                 title = "Trailhead",
-                address = "100 E Phoenix Ave, Normal, IL",
+                address = "100 Example Avenue, Normal, IL",
                 point = MapPoint(latitude = 40.5102, longitude = -88.9893),
             ),
         )
@@ -219,7 +219,7 @@ class TrailMapperPersistenceJsonSijkoTest {
               {
                 "id":"destination-2",
                 "title":"Trailhead",
-                "address":"100 E Phoenix Ave",
+                "address":"100 Example Avenue",
                 "point":{"latitude":"not-a-number","longitude":-88.9893}
               }
             ]

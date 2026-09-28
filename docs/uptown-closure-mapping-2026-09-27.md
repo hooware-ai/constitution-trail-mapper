@@ -27,11 +27,11 @@ On the shipped network (September 27 assets), the advisory appears on:
 
 It does not appear on the central 3- and 5-mile loops.
 
-## Routing (#31)
+## Routing (earlier issue 31)
 
 From September 21, 2026, new trail routes and exercise loops exclude the closed section. `TrailRouteClosureSijko` removes feature `54:1305` between the Phoenix Avenue crossing vertex and the Uptown Circle loop entry vertex before the route graph is built. It keeps both vertices as open ends, and leaves the Collegiate branch, the circle loop and crossing streets untouched. The closure has no end date; lift it only after an official reopening notice has been reviewed.
 
-The #29 advisory uses the same closure id, notice and start date.
+The earlier detour advisory uses the same closure id, notice and start date.
 
 - **No route avoids the closure:** if a trail route exists only through the closed section, the planner says "No route avoids the Uptown trail closure" and gives the signed detour. Trail Mapper does not route the detour itself.
 - **Saved routes:** routes made earlier are not rerouted, and keep showing the advisory.

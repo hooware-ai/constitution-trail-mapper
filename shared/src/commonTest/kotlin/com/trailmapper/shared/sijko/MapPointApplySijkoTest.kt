@@ -53,12 +53,12 @@ class MapPointApplySijkoTest {
             endpoints = RouteEndpoints(start = "", destination = "Library"),
             target = RouteEndpointTarget.Start,
             point = point,
-            address = "100 N Main St, Bloomington, IL 61701",
+            address = "100 Example Street, Bloomington, IL 61701",
         )
 
         assertEquals(
             RouteEndpoints(
-                start = "100 N Main St, Bloomington, IL 61701",
+                start = "100 Example Street, Bloomington, IL 61701",
                 destination = "Library",
                 startPoint = point,
             ),

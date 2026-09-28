@@ -83,7 +83,7 @@ class TrailMapperViewModelSavedItemsTest {
         viewModel.refreshSavedDestinations()
         runCurrent()
         viewModel.saveDestination(
-            address = "900 N Main St",
+            address = "900 Example Street",
             point = MapPoint(latitude = 40.49, longitude = -88.99),
             customName = "Work",
         )
@@ -152,7 +152,7 @@ class TrailMapperViewModelSavedItemsTest {
         runCurrent()
 
         viewModel.saveDestination(
-            address = "900 N Main St",
+            address = "900 Example Street",
             point = MapPoint(latitude = 40.49, longitude = -88.99),
         )
         advanceUntilIdle()

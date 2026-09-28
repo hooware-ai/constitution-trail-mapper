@@ -114,15 +114,15 @@ Default output is ignored at `data/generated/mclean-access-roads.normalized.json
 
 `data/generated/` is ignored by Git, so each checkout refreshes its own copies. Proposed cadence:
 
-- **Access roads** (`mclean-access-roads.normalized.json`): refresh monthly and before every release build. OpenStreetMap service roads change continuously: 153 added and 90 removed by name and geometry between July 11 and September 27, 2026. TIGER local roads changed less: two features were added and three removed by name and geometry, while three otherwise unchanged features changed road class. TIGERweb also renumbered nearly every `OBJECTID` between fetches. Ride history is matched by geometry rather than feature id (#8), so renumbering alone no longer resets history.
+- **Access roads** (`mclean-access-roads.normalized.json`): refresh monthly and before every release build. OpenStreetMap service roads change continuously: 153 added and 90 removed by name and geometry between July 11 and September 27, 2026. TIGER local roads changed less: two features were added and three removed by name and geometry, while three otherwise unchanged features changed road class. TIGERweb also renumbered nearly every `OBJECTID` between fetches. Ride history is matched by geometry rather than feature id (earlier issue 8), so renumbering alone no longer resets history.
 - **County trails and verified additions**: check them at the same time. They matched upstream exactly on September 26, 2026. Refresh when they differ, and review changes to the verified additions against the manifest as described above.
 
 Procedure:
 
 1. Copy the current asset to `tmp/` (ignored) as a backup. Keep it until the new asset has been checked.
-2. Run the fetch command. Each fetch writes the new file completely before replacing the old one, so a failed run keeps the previous asset (#22). The public Overpass server sometimes rejects requests when busy; retry after a short pause.
+2. Run the fetch command. Each fetch writes the new file completely before replacing the old one, so a failed run keeps the previous asset (earlier issue 22). The public Overpass server sometimes rejects requests when busy; retry after a short pause.
 3. Compare the new file with the backup: layer feature counts, and features added or removed when matched by name and geometry rather than id.
-4. Run `./gradlew :shared:testAndroidHostTest` (the real-data suites use these assets) and `./gradlew :androidApp:assembleDebug`. The build fails if any routing asset is missing (#10). Confirm that the APK's `assets/` contains the new file.
+4. Run `./gradlew :shared:testAndroidHostTest` (the real-data suites use these assets) and `./gradlew :androidApp:assembleDebug`. The build fails if any routing asset is missing (earlier issue 10). Confirm that the APK's `assets/` contains the new file.
 5. Spot-check a few endpoints and exercise starts against the backup: route geometry, road access, and history overlap for a route planned on the previous asset.
 
 Refresh log:

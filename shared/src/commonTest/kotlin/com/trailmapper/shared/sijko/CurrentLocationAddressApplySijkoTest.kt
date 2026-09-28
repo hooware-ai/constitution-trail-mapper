@@ -14,13 +14,13 @@ class CurrentLocationAddressApplySijkoTest {
         val updated = CurrentLocationAddressApplySijko.applyAddress(
             endpoints = RouteEndpoints(start = "", destination = "Library"),
             target = RouteEndpointTarget.Start,
-            address = "100 Main St",
+            address = "100 Example Street",
             point = point,
         )
 
         assertEquals(
             RouteEndpoints(
-                start = "100 Main St",
+                start = "100 Example Street",
                 destination = "Library",
                 startPoint = point,
             ),
@@ -35,7 +35,7 @@ class CurrentLocationAddressApplySijkoTest {
         val updated = CurrentLocationAddressApplySijko.applyAddress(
             endpoints = endpoints,
             target = RouteEndpointTarget.Destination,
-            address = "100 Main St",
+            address = "100 Example Street",
             point = point,
         )
 

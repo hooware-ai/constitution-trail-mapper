@@ -1,6 +1,6 @@
 # Local cycling updates — September 27, 2026
 
-A partial recheck of the in-app local trail guide (`LocalTrailGuide.kt`) against official notices, for #7. It covers the two entries that were already showing **Recheck needed** (storm cleanup since September 8, Veterans Parkway since September 24) and trail notices published since the [September 7 review](local-cycling-updates-2026-09-07.md). The October 1 items (Hamilton/Rhodes closure, Hershey roadwork) are left for the review due on or after October 1.
+A partial recheck of the in-app local trail guide (`LocalTrailGuide.kt`) against official notices, for #1. It covers the two entries that were already showing **Recheck needed** (storm cleanup since September 8, Veterans Parkway since September 24) and trail notices published since the [September 7 review](local-cycling-updates-2026-09-07.md). The October 1 items (Hamilton/Rhodes closure, Hershey roadwork) are left for the review due on or after October 1.
 
 As before, an estimated completion date does not confirm reopening, and a proposal or funding decision does not make a route usable.
 
@@ -23,4 +23,4 @@ Not added: Normal's [South Constitution Boulevard closure](https://www.normalil.
 
 ## Routing gap
 
-Trail Mapper's routes still use the county trail geometry through Uptown. They do not follow the Phoenix–Broadway–Beaufort detour and show no route advisory for it. The guide entry says so. A route advisory like the Hamilton/Rhodes one needs mapped detour geometry and is tracked in #29.
+Trail Mapper's routes still use the county trail geometry through Uptown. They do not follow the Phoenix–Broadway–Beaufort detour and show no route advisory for it. The guide entry says so. A route advisory like the Hamilton/Rhodes one needs mapped detour geometry and is tracked in earlier issue 29.
