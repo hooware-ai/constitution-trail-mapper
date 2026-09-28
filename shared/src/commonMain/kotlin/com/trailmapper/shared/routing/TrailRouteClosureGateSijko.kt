@@ -8,6 +8,17 @@ import com.trailmapper.shared.CompletedExerciseSession
 import com.trailmapper.shared.sijko.MapPoint
 import kotlin.time.Clock
 
+/** How recalculating a blocked route came out. */
+sealed interface TrailRouteRecalculationOutcome {
+    data class Replacement(val route: TrailRoute) : TrailRouteRecalculationOutcome
+
+    /** No route avoids the closure; [blockingClosures] carry the official detour guidance. */
+    data class NoSafeRoute(val blockingClosures: List<TrailRouteClosure>) : TrailRouteRecalculationOutcome
+
+    /** Road data exists but failed to load; nothing was searched, and the rider can try again. */
+    data object RoadDataFailed : TrailRouteRecalculationOutcome
+}
+
 object TrailRouteClosureGateSijko {
     /**
      * The advisories for active trail closures that [route] rides through. A route found today already
@@ -34,16 +45,23 @@ object TrailRouteClosureGateSijko {
     /**
      * Plans [route] again under today's rules: active closures excluded, its own layers, reviewed hazards
      * weighed. A point-to-point route keeps its start and destination; a loop keeps its start and the
-     * distance it was asked for. A result that still rides through a closure is not offered.
+     * distance it was asked for. A result that still rides through a closure is not offered. As in a
+     * reroute, road data that failed to load stops the search; only data that does not exist for the area
+     * lets it continue with estimated access.
      */
     fun recalculate(
         features: List<TrailNetworkFeature>,
         route: TrailRoute,
-        accessFeatures: List<AccessNetworkFeature>?,
+        access: TrailRouteRerouteAccess,
         completedSessions: List<CompletedExerciseSession> = emptyList(),
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
         cancellationCheckpoint: () -> Unit = {},
-    ): TrailRouteRerouteOutcome {
+    ): TrailRouteRecalculationOutcome {
+        val accessFeatures = when (access) {
+            is TrailRouteRerouteAccess.Roads -> access.features
+            TrailRouteRerouteAccess.NotAvailable -> null
+            TrailRouteRerouteAccess.LoadFailed -> return TrailRouteRecalculationOutcome.RoadDataFailed
+        }
         val start = startOf(route) ?: return noRouteFor(route, nowEpochMillis)
         val replacement = if (route.kind == TrailRouteKind.ExerciseLoop) {
             val targetMeters = route.requestedDistanceMeters ?: route.totalDistanceMeters
@@ -69,21 +87,21 @@ object TrailRouteClosureGateSijko {
             }
             when (val outcome = TrailRouteRerouteSijko.pointToPoint(features, route, start, accessGraph, cancellationCheckpoint, nowEpochMillis)) {
                 is TrailRouteRerouteOutcome.Replacement -> outcome.route
-                is TrailRouteRerouteOutcome.NoSafeRoute -> return outcome
+                is TrailRouteRerouteOutcome.NoSafeRoute -> return TrailRouteRecalculationOutcome.NoSafeRoute(outcome.blockingClosures)
             }
         }
         return replacement
             ?.takeIf { blockingAdvisories(it, nowEpochMillis).isEmpty() }
-            ?.let(TrailRouteRerouteOutcome::Replacement)
+            ?.let(TrailRouteRecalculationOutcome::Replacement)
             ?: noRouteFor(route, nowEpochMillis)
     }
 
     private fun noRouteFor(
         route: TrailRoute,
         nowEpochMillis: Long,
-    ): TrailRouteRerouteOutcome.NoSafeRoute {
+    ): TrailRouteRecalculationOutcome.NoSafeRoute {
         val blockingIds = blockingAdvisories(route, nowEpochMillis).mapTo(mutableSetOf()) { it.id }
-        return TrailRouteRerouteOutcome.NoSafeRoute(
+        return TrailRouteRecalculationOutcome.NoSafeRoute(
             TrailRouteClosureSijko.activeClosures(nowEpochMillis).filter { it.id in blockingIds },
         )
     }

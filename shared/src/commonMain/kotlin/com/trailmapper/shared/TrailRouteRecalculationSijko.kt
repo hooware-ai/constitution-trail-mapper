@@ -1,27 +1,25 @@
 /**
- * Job: Put a route recalculated around a closure in place of the old one in Saved and Recent, and undo that.
+ * Job: Put a route recalculated around a closure in place of the old one in Saved or Recent, and undo that exactly.
  *
  */
 package com.trailmapper.shared
 
 import com.trailmapper.shared.routing.TrailRoute
-import com.trailmapper.shared.routing.TrailRouteIdentitySijko
 
 object TrailRouteRecalculationSijko {
-    /** What [apply] changed, so [undo] can put it back. */
+    /** What [apply] changed, holding the originals exactly as stored so [undo] restores them. */
     data class Applied(
-        val oldRoute: TrailRoute,
         val newRoute: TrailRoute,
-        /** The saved entry that now holds [newRoute], keeping its name; null when the route was not saved. */
-        val savedRouteId: String?,
-        /** The Recent entry [newRoute] replaced, with its name; null when there was none. */
-        val replacedRecent: RecentTrailRoute?,
+        /** The saved entry before it took [newRoute], in its stored direction; null when the route was not saved. */
+        val originalSaved: SavedTrailRoute?,
+        /** The Recent entry [newRoute] replaced; null when it was saved or had no entry. */
+        val originalRecent: RecentTrailRoute?,
     )
 
     /**
-     * The saved entry for [oldRoute], if any, keeps its id and name with [newRoute] inside. A Recent entry
-     * for it is replaced by one for [newRoute] under the same title; an unsaved route with no entry gets
-     * one titled [title].
+     * A saved route keeps its entry, id and name with [newRoute] inside; Saved is its only home, so Recent is
+     * not touched. An unsaved route's Recent entry is replaced under its title (else [title]) in one write.
+     * Either way a single store write makes the change, so a failure leaves everything as it was.
      */
     suspend fun apply(
         savedStore: SavedTrailRouteStore,
@@ -32,18 +30,18 @@ object TrailRouteRecalculationSijko {
         nowEpochMillis: Long,
     ): Applied {
         val saved = TrailRoutePreviewSavingSijko.savedMatch(savedStore, oldRoute)
-        val savedRouteId = saved?.let { savedStore.replaceRoute(it.id, newRoute)?.id }
-        val replacedRecent = recentStore.recentRoutes()
-            .firstOrNull { entry -> TrailRouteIdentitySijko.isSameRoute(entry.route, oldRoute) }
-        RecentTrailRouteHistorySijko.forget(recentStore, oldRoute)
-        RecentTrailRouteHistorySijko.record(
+        if (saved != null && savedStore.replaceRoute(saved.id, newRoute) != null) {
+            return Applied(newRoute, originalSaved = saved, originalRecent = null)
+        }
+        val (replaced, _) = RecentTrailRouteHistorySijko.replace(
             store = recentStore,
             savedStore = savedStore,
-            route = newRoute,
-            title = replacedRecent?.title ?: title,
+            oldRoute = oldRoute,
+            newRoute = newRoute,
+            title = title,
             nowEpochMillis = nowEpochMillis,
         )
-        return Applied(oldRoute, newRoute, savedRouteId, replacedRecent)
+        return Applied(newRoute, originalSaved = null, originalRecent = replaced)
     }
 
     suspend fun undo(
@@ -52,10 +50,11 @@ object TrailRouteRecalculationSijko {
         applied: Applied,
         nowEpochMillis: Long,
     ) {
-        applied.savedRouteId?.let { id -> savedStore.replaceRoute(id, applied.oldRoute) }
-        RecentTrailRouteHistorySijko.forget(recentStore, applied.newRoute)
-        applied.replacedRecent?.let { entry ->
-            RecentTrailRouteHistorySijko.restore(recentStore, savedStore, entry, nowEpochMillis)
+        val saved = applied.originalSaved
+        if (saved != null) {
+            savedStore.replaceRoute(saved.id, saved.route)
+        } else {
+            RecentTrailRouteHistorySijko.revert(recentStore, savedStore, applied.newRoute, applied.originalRecent, nowEpochMillis)
         }
     }
 }

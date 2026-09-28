@@ -141,9 +141,9 @@ import com.trailmapper.shared.SavedTrailRouteStore
 import com.trailmapper.shared.TrailRoutePreviewDestination
 import com.trailmapper.shared.TrailRoutePreviewRequest
 import com.trailmapper.shared.RecentTrailRouteHistorySijko
-import com.trailmapper.shared.AccessNetworkLoadResult
 import com.trailmapper.shared.TrailRouteRecalculationSijko
 import com.trailmapper.shared.routing.TrailRouteClosureGateSijko
+import com.trailmapper.shared.routing.TrailRouteRecalculationOutcome
 import com.trailmapper.shared.RecentTrailRouteStore
 import com.trailmapper.shared.TrailRoutePreviewSaveController
 import com.trailmapper.android.routing.AndroidRecentTrailRouteStore
@@ -432,6 +432,7 @@ private fun TrailRouteMapScreen(
         if (recalculatingAroundClosure) return
         val staleRoute = route
         val previousPlanJson = recalculatedPlanJson
+        val previousReversed = reversedDirection
         recalculatingAroundClosure = true
         closureNoRouteMessage = null
         coroutineScope.launch {
@@ -444,12 +445,11 @@ private fun TrailRouteMapScreen(
                     closureNoRouteMessage = "Trail data is unavailable, so the route cannot be recalculated."
                     return@launch
                 }
-                val roads = when (
-                    val access = accessNetworkProvider.loadAccessNetwork(TrailRouteClosureGateSijko.accessEndpoints(staleRoute))
-                ) {
-                    is AccessNetworkLoadResult.Success -> access.features
-                    else -> null
-                }
+                // As in a reroute: missing road data allows estimated access, but road data that failed to
+                // load stops the search rather than quietly building the route under weaker rules.
+                val access = TrailRouteRerouteSijko.accessFor(
+                    accessNetworkProvider.loadAccessNetwork(TrailRouteClosureGateSijko.accessEndpoints(staleRoute)),
+                )
                 val sessions = if (staleRoute.kind == TrailRouteKind.ExerciseLoop) {
                     completedExerciseSessionStore.completedSessions()
                 } else {
@@ -460,14 +460,14 @@ private fun TrailRouteMapScreen(
                     TrailRouteClosureGateSijko.recalculate(
                         features = features,
                         route = staleRoute,
-                        accessFeatures = roads,
+                        access = access,
                         completedSessions = sessions,
                         nowEpochMillis = now,
                         cancellationCheckpoint = { ensureActive() },
                     )
                 }
                 when (outcome) {
-                    is TrailRouteRerouteOutcome.Replacement -> {
+                    is TrailRouteRecalculationOutcome.Replacement -> {
                         val applied = TrailRouteRecalculationSijko.apply(
                             savedStore = savedTrailRouteStore,
                             recentStore = recentTrailRouteStore,
@@ -494,11 +494,15 @@ private fun TrailRouteMapScreen(
                                 nowEpochMillis = System.currentTimeMillis(),
                             )
                             recalculatedPlanJson = previousPlanJson
+                            reversedDirection = previousReversed
                         }
                     }
-                    is TrailRouteRerouteOutcome.NoSafeRoute -> {
+                    is TrailRouteRecalculationOutcome.NoSafeRoute -> {
                         closureNoRouteMessage = outcome.blockingClosures.firstOrNull()?.guidance
                             ?: "No route around the closure was found from this start."
+                    }
+                    TrailRouteRecalculationOutcome.RoadDataFailed -> {
+                        closureNoRouteMessage = "Road data could not be loaded, so the route cannot be recalculated. Try again."
                     }
                 }
             } catch (exception: CancellationException) {

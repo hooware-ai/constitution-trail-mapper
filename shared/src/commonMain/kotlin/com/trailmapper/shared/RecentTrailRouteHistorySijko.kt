@@ -115,6 +115,51 @@ object RecentTrailRouteHistorySijko {
         )
     }
 
+    /**
+     * Puts [newRoute] in the place of the entry holding [oldRoute], under that entry's title (else [title]),
+     * in one write, so a failed write leaves the history as it was. Returns the replaced entry, if any, and
+     * the new one.
+     */
+    suspend fun replace(
+        store: RecentTrailRouteStore,
+        savedStore: SavedTrailRouteStore,
+        oldRoute: TrailRoute,
+        newRoute: TrailRoute,
+        title: String?,
+        nowEpochMillis: Long,
+    ): Pair<RecentTrailRoute?, RecentTrailRoute> = historyMutex.withLock {
+        val stored = store.recentRoutes()
+        val replaced = stored.firstOrNull { entry -> TrailRouteIdentitySijko.isSameRoute(entry.route, oldRoute) }
+        val entry = RecentTrailRoute(
+            id = replaced?.id ?: randomId(),
+            title = replaced?.title ?: title ?: titleFor(newRoute, destinationAddress = null),
+            route = newRoute,
+            lastUsedEpochMillis = nowEpochMillis,
+        )
+        store.replaceRecentRoutes(visible(listOf(entry) + without(stored, oldRoute, newRoute), savedStore.savedRoutes(), nowEpochMillis))
+        replaced to entry
+    }
+
+    /** Undoes [replace] in one write: [newRoute]'s entry goes, and [original] comes back if there was one. */
+    suspend fun revert(
+        store: RecentTrailRouteStore,
+        savedStore: SavedTrailRouteStore,
+        newRoute: TrailRoute,
+        original: RecentTrailRoute?,
+        nowEpochMillis: Long,
+    ) = historyMutex.withLock {
+        val stored = store.recentRoutes()
+        val others = if (original == null) without(stored, newRoute) else without(stored, newRoute, original.route)
+        store.replaceRecentRoutes(visible(listOfNotNull(original) + others, savedStore.savedRoutes(), nowEpochMillis))
+    }
+
+    private fun without(
+        entries: List<RecentTrailRoute>,
+        vararg routes: TrailRoute,
+    ): List<RecentTrailRoute> = entries.filterNot { entry ->
+        routes.any { route -> TrailRouteIdentitySijko.isSameRoute(entry.route, route) }
+    }
+
     /** Called once a route is saved: it now lives in Saved, so it leaves Recent. */
     suspend fun forget(
         store: RecentTrailRouteStore,

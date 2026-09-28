@@ -345,8 +345,8 @@ class RouteGenerationRealDataAuditTest {
         assertEquals(listOf(TrailRouteClosureSijko.uptownUnderpass.id), blocking.map { it.id })
         assertEquals(TrailRouteClosureSijko.uptownUnderpass.noticeUrl, blocking.single().sourceUrl)
 
-        val outcome = TrailRouteClosureGateSijko.recalculate(features, stale, roads, nowEpochMillis = afterClosure)
-        val replacement = assertIs<TrailRouteRerouteOutcome.Replacement>(outcome).route
+        val outcome = TrailRouteClosureGateSijko.recalculate(features, stale, TrailRouteRerouteAccess.Roads(roads), nowEpochMillis = afterClosure)
+        val replacement = assertIs<TrailRouteRecalculationOutcome.Replacement>(outcome).route
         assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(replacement, afterClosure).isEmpty())
         assertEquals(stale.kind, replacement.kind)
         val arrival = assertNotNull(TrailRouteRerouteSijko.destinationOf(replacement))
@@ -370,8 +370,8 @@ class RouteGenerationRealDataAuditTest {
         ).route
         assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(stale, afterClosure).isNotEmpty(), "the loop must ride the closed section")
 
-        val outcome = TrailRouteClosureGateSijko.recalculate(features, stale, roads, nowEpochMillis = afterClosure)
-        val replacement = assertIs<TrailRouteRerouteOutcome.Replacement>(outcome).route
+        val outcome = TrailRouteClosureGateSijko.recalculate(features, stale, TrailRouteRerouteAccess.Roads(roads), nowEpochMillis = afterClosure)
+        val replacement = assertIs<TrailRouteRecalculationOutcome.Replacement>(outcome).route
         assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(replacement, afterClosure).isEmpty())
         assertEquals(TrailRouteKind.ExerciseLoop, replacement.kind)
         assertEquals(target, replacement.requestedDistanceMeters)

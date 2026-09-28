@@ -71,6 +71,36 @@ class TrailRouteClosureGateSijkoTest {
     }
 
     @Test
+    fun roadDataThatFailedToLoadStopsRecalculationButMissingRoadDataDoesNot() {
+        val start = MapPoint(latitude = 40.0, longitude = -89.0)
+        val end = MapPoint(latitude = 40.009, longitude = -89.0)
+        val trail = TrailNetworkFeature(
+            id = "straight",
+            status = TrailFeatureStatus.Existing,
+            routeRoles = setOf(TrailNetworkRole.TrailBranches),
+            facilityType = TrailFacilityType.UrbanTrail,
+            comfortLevel = TrailComfortLevel.AllAgesAndAbilities,
+            paths = listOf(listOf(start, end)),
+        )
+        val route = TrailRoute(
+            segments = listOf(TrailRouteSegment(type = TrailRouteSegmentType.Trail, points = listOf(start, end))),
+            totalDistanceMeters = 1000.0,
+            ordinaryAccessDistanceMeters = 0.0,
+            totalCost = 1000.0,
+        )
+
+        assertEquals(
+            TrailRouteRecalculationOutcome.RoadDataFailed,
+            TrailRouteClosureGateSijko.recalculate(listOf(trail), route, TrailRouteRerouteAccess.LoadFailed),
+        )
+        // No road data for the area is how planning works too: it searches with estimated access.
+        assertTrue(
+            TrailRouteClosureGateSijko.recalculate(listOf(trail), route, TrailRouteRerouteAccess.NotAvailable) is
+                TrailRouteRecalculationOutcome.Replacement,
+        )
+    }
+
+    @Test
     fun recalculationNeedsRoadsAtTheStartAndAPointToPointDestination() {
         val start = MapPoint(latitude = 40.506900, longitude = -88.984250)
         val end = MapPoint(latitude = 40.509170, longitude = -88.982741)
