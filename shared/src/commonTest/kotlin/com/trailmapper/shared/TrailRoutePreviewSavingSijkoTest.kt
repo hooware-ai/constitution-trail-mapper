@@ -30,10 +30,11 @@ class TrailRoutePreviewSavingSijkoTest {
     fun savingReadsTheStoreSoTheTitleFollowsWhatIsAlreadySaved() = runTest {
         val store = RouteStore(routes = listOf(savedRoute("a", TrailRouteKind.ExerciseLoop)))
 
-        val saved = TrailRoutePreviewSavingSijko.saveRoute(store, route(TrailRouteKind.ExerciseLoop))
+        val saved = TrailRoutePreviewSavingSijko.saveRoute(store, route(TrailRouteKind.ExerciseLoop).copy(totalCost = 7.0))
 
-        assertEquals("Exercise route 2", saved.title)
-        assertEquals(saved, store.routes.first())
+        assertTrue(saved.isNew)
+        assertEquals("Exercise route 2", saved.item.title)
+        assertEquals(saved.item, store.routes.first())
     }
 
     @Test
@@ -56,15 +57,23 @@ class TrailRoutePreviewSavingSijkoTest {
         val named = TrailRoutePreviewSavingSijko.saveDestination(
             store,
             TrailRoutePreviewDestination(address = "Normal Public Library, Normal, IL", point = point),
-        )
+        ).item
         assertEquals("Normal Public Library", named.title)
         assertEquals("Normal Public Library, Normal, IL", named.address)
         assertEquals(point, named.point)
 
+        // The same place again is the existing entry, not a second one.
+        val again = TrailRoutePreviewSavingSijko.saveDestination(
+            store,
+            TrailRoutePreviewDestination(address = "Library", point = point),
+        )
+        assertEquals(named, again.item)
+        assertEquals(1, store.destinations.size)
+
         val unnamed = TrailRoutePreviewSavingSijko.saveDestination(
             store,
-            TrailRoutePreviewDestination(address = " ", point = point),
-        )
+            TrailRoutePreviewDestination(address = " ", point = MapPoint(latitude = 40.49, longitude = -88.9875)),
+        ).item
         assertTrue(unnamed.address.isNotBlank())
     }
 
