@@ -41,5 +41,15 @@ internal class RouteStore(
         title: String,
     ): SavedTrailRoute? = null
 
+    override suspend fun replaceRoute(
+        id: String,
+        route: TrailRoute,
+    ): SavedTrailRoute? {
+        val existing = routes.firstOrNull { it.id == id } ?: return null
+        val replaced = existing.copy(route = route)
+        routes = routes.map { if (it.id == id) replaced else it }
+        return replaced
+    }
+
     override suspend fun deleteRoute(id: String): Boolean = false
 }
