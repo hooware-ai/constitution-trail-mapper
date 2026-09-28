@@ -115,10 +115,18 @@ object RecentTrailRouteHistorySijko {
         )
     }
 
+    /** What [replace] took out of the history, so [revert] can put each entry back as it was. */
+    data class Replacement(
+        /** The entry that held the old route. */
+        val replaced: RecentTrailRoute?,
+        /** An entry that already held the new route; the new route keeps one entry, so it made way. */
+        val displaced: RecentTrailRoute?,
+        val entry: RecentTrailRoute,
+    )
+
     /**
      * Puts [newRoute] in the place of the entry holding [oldRoute], under that entry's title (else [title]),
-     * in one write, so a failed write leaves the history as it was. Returns the replaced entry, if any, and
-     * the new one.
+     * in one write, so a failed write leaves the history as it was.
      */
     suspend fun replace(
         store: RecentTrailRouteStore,
@@ -127,30 +135,36 @@ object RecentTrailRouteHistorySijko {
         newRoute: TrailRoute,
         title: String?,
         nowEpochMillis: Long,
-    ): Pair<RecentTrailRoute?, RecentTrailRoute> = historyMutex.withLock {
+    ): Replacement = historyMutex.withLock {
         val stored = store.recentRoutes()
         val replaced = stored.firstOrNull { entry -> TrailRouteIdentitySijko.isSameRoute(entry.route, oldRoute) }
+        val displaced = stored.firstOrNull { entry ->
+            entry != replaced && TrailRouteIdentitySijko.isSameRoute(entry.route, newRoute)
+        }
         val entry = RecentTrailRoute(
-            id = replaced?.id ?: randomId(),
-            title = replaced?.title ?: title ?: titleFor(newRoute, destinationAddress = null),
+            id = replaced?.id ?: displaced?.id ?: randomId(),
+            title = replaced?.title ?: displaced?.title ?: title ?: titleFor(newRoute, destinationAddress = null),
             route = newRoute,
             lastUsedEpochMillis = nowEpochMillis,
         )
         store.replaceRecentRoutes(visible(listOf(entry) + without(stored, oldRoute, newRoute), savedStore.savedRoutes(), nowEpochMillis))
-        replaced to entry
+        Replacement(replaced, displaced, entry)
     }
 
-    /** Undoes [replace] in one write: [newRoute]'s entry goes, and [original] comes back if there was one. */
+    /**
+     * Undoes [replace] in one write: [newRoute]'s entry goes, and each of [originals] (the replaced and any
+     * displaced entry) comes back as it was.
+     */
     suspend fun revert(
         store: RecentTrailRouteStore,
         savedStore: SavedTrailRouteStore,
         newRoute: TrailRoute,
-        original: RecentTrailRoute?,
+        originals: List<RecentTrailRoute>,
         nowEpochMillis: Long,
     ) = historyMutex.withLock {
         val stored = store.recentRoutes()
-        val others = if (original == null) without(stored, newRoute) else without(stored, newRoute, original.route)
-        store.replaceRecentRoutes(visible(listOfNotNull(original) + others, savedStore.savedRoutes(), nowEpochMillis))
+        val others = without(stored, newRoute, *originals.map { it.route }.toTypedArray())
+        store.replaceRecentRoutes(visible(originals + others, savedStore.savedRoutes(), nowEpochMillis))
     }
 
     private fun without(

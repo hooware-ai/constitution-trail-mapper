@@ -14,6 +14,8 @@ object TrailRouteRecalculationSijko {
         val originalSaved: SavedTrailRoute?,
         /** The Recent entry [newRoute] replaced; null when it was saved or had no entry. */
         val originalRecent: RecentTrailRoute?,
+        /** An entry [newRoute] already had in Recent, which made way for the replacement; restored by undo. */
+        val displacedRecent: RecentTrailRoute? = null,
     )
 
     /**
@@ -33,7 +35,7 @@ object TrailRouteRecalculationSijko {
         if (saved != null && savedStore.replaceRoute(saved.id, newRoute) != null) {
             return Applied(newRoute, originalSaved = saved, originalRecent = null)
         }
-        val (replaced, _) = RecentTrailRouteHistorySijko.replace(
+        val replacement = RecentTrailRouteHistorySijko.replace(
             store = recentStore,
             savedStore = savedStore,
             oldRoute = oldRoute,
@@ -41,7 +43,12 @@ object TrailRouteRecalculationSijko {
             title = title,
             nowEpochMillis = nowEpochMillis,
         )
-        return Applied(newRoute, originalSaved = null, originalRecent = replaced)
+        return Applied(
+            newRoute = newRoute,
+            originalSaved = null,
+            originalRecent = replacement.replaced,
+            displacedRecent = replacement.displaced,
+        )
     }
 
     suspend fun undo(
@@ -54,7 +61,13 @@ object TrailRouteRecalculationSijko {
         if (saved != null) {
             savedStore.replaceRoute(saved.id, saved.route)
         } else {
-            RecentTrailRouteHistorySijko.revert(recentStore, savedStore, applied.newRoute, applied.originalRecent, nowEpochMillis)
+            RecentTrailRouteHistorySijko.revert(
+                store = recentStore,
+                savedStore = savedStore,
+                newRoute = applied.newRoute,
+                originals = listOfNotNull(applied.originalRecent, applied.displacedRecent),
+                nowEpochMillis = nowEpochMillis,
+            )
         }
     }
 }

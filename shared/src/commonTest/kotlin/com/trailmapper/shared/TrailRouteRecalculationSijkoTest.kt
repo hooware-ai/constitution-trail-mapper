@@ -90,6 +90,35 @@ class TrailRouteRecalculationSijkoTest {
     }
 
     @Test
+    fun undoKeepsAnEntryTheRecalculatedRouteAlreadyHad() = runTest {
+        val staleEntry = RecentTrailRoute(id = "recent-a", title = "To Tipton Park", route = stale, lastUsedEpochMillis = NOW - 60_000)
+        val safeEntry = RecentTrailRoute(id = "recent-b", title = "Park loop", route = recalculated, lastUsedEpochMillis = NOW - 120_000)
+        val recentStore = MemoryRecentStore(listOf(staleEntry, safeEntry))
+
+        val applied = TrailRouteRecalculationSijko.apply(RouteStore(), recentStore, stale, recalculated, null, NOW)
+
+        // One entry per route: the recalculation takes the stale entry's place, and B's own entry makes way.
+        assertEquals(listOf("To Tipton Park"), recentStore.routes.map { it.title })
+        assertEquals(safeEntry, applied.displacedRecent)
+
+        TrailRouteRecalculationSijko.undo(RouteStore(), recentStore, applied, NOW + 1)
+        assertEquals(listOf(staleEntry, safeEntry), recentStore.routes)
+    }
+
+    @Test
+    fun whenOnlyTheRecalculatedRouteWasRecentItsEntryKeepsItsNameAndUndoRestoresIt() = runTest {
+        val safeEntry = RecentTrailRoute(id = "recent-b", title = "Park loop", route = recalculated, lastUsedEpochMillis = NOW - 120_000)
+        val recentStore = MemoryRecentStore(listOf(safeEntry))
+
+        val applied = TrailRouteRecalculationSijko.apply(RouteStore(), recentStore, stale, recalculated, "To Library", NOW)
+
+        assertEquals(listOf("recent-b" to "Park loop"), recentStore.routes.map { it.id to it.title })
+
+        TrailRouteRecalculationSijko.undo(RouteStore(), recentStore, applied, NOW + 1)
+        assertEquals(listOf(safeEntry), recentStore.routes)
+    }
+
+    @Test
     fun anUnsavedRouteWithoutARecentEntryIsRecordedUnderTheGivenTitle() = runTest {
         val recentStore = MemoryRecentStore()
 
