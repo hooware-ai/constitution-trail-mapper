@@ -65,6 +65,7 @@ internal class ExerciseRoutePlannerViewModel(
                 isResolvingAutocomplete = false,
                 autocompleteError = null,
                 result = null,
+                resultAwaitingMap = false,
                 searchError = null,
             )
         }
@@ -82,6 +83,7 @@ internal class ExerciseRoutePlannerViewModel(
             it.copy(
                 targetMilesText = text,
                 result = null,
+                resultAwaitingMap = false,
                 searchError = null,
             )
         }
@@ -95,6 +97,7 @@ internal class ExerciseRoutePlannerViewModel(
             it.copy(
                 proposedTrailsEnabled = enabled,
                 result = null,
+                resultAwaitingMap = false,
                 searchError = null,
             )
         }
@@ -166,6 +169,7 @@ internal class ExerciseRoutePlannerViewModel(
                                 isResolvingMapPoint = false,
                                 mapPointError = null,
                                 result = null,
+                                resultAwaitingMap = false,
                                 searchError = null,
                             )
                         }
@@ -235,6 +239,7 @@ internal class ExerciseRoutePlannerViewModel(
                                 isResolvingAutocomplete = false,
                                 autocompleteError = null,
                                 result = null,
+                                resultAwaitingMap = false,
                                 searchError = null,
                             )
                         }
@@ -395,6 +400,10 @@ internal class ExerciseRoutePlannerViewModel(
         _uiState.update { it.copy(autocompleteError = null) }
     }
 
+    fun markResultShownOnMap() {
+        _uiState.update { it.copy(resultAwaitingMap = false) }
+    }
+
     fun dismissSearchError() {
         _uiState.update { it.copy(searchError = null) }
     }
@@ -429,6 +438,7 @@ internal class ExerciseRoutePlannerViewModel(
                                 isResolvingLocation = false,
                                 locationError = null,
                                 result = null,
+                                resultAwaitingMap = false,
                                 searchError = null,
                             )
                         }
@@ -542,6 +552,7 @@ internal class ExerciseRoutePlannerViewModel(
                 isFindingRoute = false,
                 searchError = error,
                 result = result ?: it.result,
+                resultAwaitingMap = result != null || it.resultAwaitingMap,
             )
         }
     }

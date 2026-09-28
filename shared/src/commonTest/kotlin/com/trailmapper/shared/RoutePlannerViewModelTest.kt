@@ -4,6 +4,11 @@
  */
 package com.trailmapper.shared
 
+import com.trailmapper.shared.routing.TrailComfortLevel
+import com.trailmapper.shared.routing.TrailFacilityType
+import com.trailmapper.shared.routing.TrailFeatureStatus
+import com.trailmapper.shared.routing.TrailNetworkFeature
+import com.trailmapper.shared.routing.TrailNetworkRole
 import com.trailmapper.shared.sijko.MapPoint
 import com.trailmapper.shared.sijko.RouteEndpointTarget
 import com.trailmapper.shared.sijko.TrailRouteLayer
@@ -355,6 +360,42 @@ class RoutePlannerViewModelTest {
         runCurrent()
         assertEquals("Requested start", viewModel.uiState.value.endpoints.start)
         assertFalse(viewModel.uiState.value.hasPendingEndpointRequest)
+    }
+
+    @Test
+    fun aFoundRouteStaysAvailableUntilAnEndpointChanges() = runTest(dispatcher) {
+        val viewModel = plannerWithEndpoints()
+        val trail = TrailNetworkFeature(
+            id = "straight",
+            status = TrailFeatureStatus.Existing,
+            routeRoles = setOf(TrailNetworkRole.TrailBranches),
+            facilityType = TrailFacilityType.UrbanTrail,
+            comfortLevel = TrailComfortLevel.AllAgesAndAbilities,
+            paths = listOf(listOf(point(), savedDestination().point)),
+        )
+        val provider = object : TrailNetworkProvider {
+            override suspend fun loadTrailNetwork() = TrailNetworkLoadResult.Success(listOf(trail))
+        }
+
+        viewModel.findTrailRoute(provider, NoAccessNetworkProvider)
+        repeat(200) {
+            runCurrent()
+            if (!viewModel.uiState.value.isFindingRoute) return@repeat
+            withContext(Dispatchers.Default) { kotlinx.coroutines.delay(5) }
+        }
+
+        val state = viewModel.uiState.value
+        assertFalse(state.isFindingRoute)
+        val route = kotlin.test.assertNotNull(state.lastRoute, "${state.routeDialog}")
+        assertEquals(route, state.routeDialog?.route)
+
+        // The map dismisses the dialog; the route stays for reopening after Back.
+        viewModel.dismissRouteDialog()
+        assertEquals(route, viewModel.uiState.value.lastRoute)
+
+        viewModel.requestMapPoint(RouteEndpointTarget.Destination, immediateMapProvider())
+        runCurrent()
+        assertNull(viewModel.uiState.value.lastRoute)
     }
 
     private fun TestScope.plannerWithEndpoints(): RoutePlannerViewModel {

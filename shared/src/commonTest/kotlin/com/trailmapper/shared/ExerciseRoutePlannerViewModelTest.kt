@@ -314,6 +314,46 @@ class ExerciseRoutePlannerViewModelTest {
         assertNull(viewModel.uiState.value.autocompleteError)
     }
 
+    @Test
+    fun aNewLoopAwaitsItsMapOnceAndARepeatFailureDoesNotReopenIt() = runTest(dispatcher) {
+        val viewModel = plannerWithStart()
+        val accessProvider = FakeAccessNetworkProvider(AccessNetworkLoadResult.Unavailable)
+        assertFalse(viewModel.uiState.value.resultAwaitingMap)
+
+        viewModel.findExerciseRoute(
+            FakeTrailNetworkProvider(TrailNetworkLoadResult.Success(listOf(existingSquareFeature(point())))),
+            accessProvider,
+        )
+        awaitSearchSettled(viewModel)
+        assertNotNull(viewModel.uiState.value.result)
+        assertTrue(viewModel.uiState.value.resultAwaitingMap)
+
+        viewModel.markResultShownOnMap()
+        assertFalse(viewModel.uiState.value.resultAwaitingMap)
+
+        // A failed refresh keeps the shown result without opening its map again.
+        viewModel.findExerciseRoute(FakeTrailNetworkProvider(TrailNetworkLoadResult.Error("refresh failed")), accessProvider)
+        awaitSearchSettled(viewModel)
+        assertNotNull(viewModel.uiState.value.result)
+        assertFalse(viewModel.uiState.value.resultAwaitingMap)
+    }
+
+    @Test
+    fun changingTheInputDropsAResultThatWasNeverShown() = runTest(dispatcher) {
+        val viewModel = plannerWithStart()
+        viewModel.findExerciseRoute(
+            FakeTrailNetworkProvider(TrailNetworkLoadResult.Success(listOf(existingSquareFeature(point())))),
+            FakeAccessNetworkProvider(AccessNetworkLoadResult.Unavailable),
+        )
+        awaitSearchSettled(viewModel)
+        assertTrue(viewModel.uiState.value.resultAwaitingMap)
+
+        viewModel.setTargetMilesText("1")
+
+        assertNull(viewModel.uiState.value.result)
+        assertFalse(viewModel.uiState.value.resultAwaitingMap)
+    }
+
     private fun planner(
         store: FakeSessionStore = FakeSessionStore(),
         now: Long = NOW,

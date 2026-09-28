@@ -9,5 +9,8 @@ import com.trailmapper.shared.routing.TrailRoute
 interface TrailRouteMapPresenter {
     val isAvailable: Boolean
 
-    fun showTrailRoute(route: TrailRoute)
+    fun showTrailRoute(
+        route: TrailRoute,
+        preview: TrailRoutePreviewRequest = TrailRoutePreviewRequest(),
+    )
 }

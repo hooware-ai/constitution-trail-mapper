@@ -55,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -121,6 +122,27 @@ import com.trailmapper.shared.routing.TrailRouteTurnInstructionSijko
 import com.trailmapper.shared.sijko.MapPickerDefaultsSijko
 import com.trailmapper.shared.sijko.MapPoint
 import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import com.trailmapper.android.routing.AndroidSavedDestinationStore
+import com.trailmapper.android.routing.AndroidSavedTrailRouteStore
+import com.trailmapper.android.routing.AndroidTrailRouteShareProvider
+import com.trailmapper.shared.SavedDestinationStore
+import com.trailmapper.shared.SavedTrailRoute
+import com.trailmapper.shared.SavedTrailRouteStore
+import com.trailmapper.shared.TrailRoutePreviewDestination
+import com.trailmapper.shared.TrailRoutePreviewRequest
+import com.trailmapper.shared.TrailRoutePreviewSaveController
+import com.trailmapper.shared.TrailRoutePreviewSaveOutcome
+import com.trailmapper.shared.TrailRouteShareProvider
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
@@ -149,7 +171,11 @@ class TrailRouteMapActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val route = TrailRouteMapJsonSijko.decode(intent.getStringExtra(EXTRA_ROUTE_JSON))
+        val preview = previewRequestFrom(intent)
         val completedExerciseSessionStore = AndroidCompletedExerciseSessionStore(applicationContext)
+        val savedTrailRouteStore = AndroidSavedTrailRouteStore(applicationContext)
+        val savedDestinationStore = AndroidSavedDestinationStore(applicationContext)
+        val trailRouteShareProvider = AndroidTrailRouteShareProvider(applicationContext)
 
         setContent {
             MaterialTheme {
@@ -163,6 +189,10 @@ class TrailRouteMapActivity : ComponentActivity() {
                         TrailRouteMapScreen(
                             plannedRoute = route,
                             completedExerciseSessionStore = completedExerciseSessionStore,
+                            preview = preview,
+                            savedTrailRouteStore = savedTrailRouteStore,
+                            savedDestinationStore = savedDestinationStore,
+                            trailRouteShareProvider = trailRouteShareProvider,
                             onBack = ::finish,
                         )
                     }
@@ -173,10 +203,41 @@ class TrailRouteMapActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_ROUTE_JSON = "com.trailmapper.android.map.EXTRA_ROUTE_JSON"
+        private const val EXTRA_DESTINATION_ADDRESS = "com.trailmapper.android.map.EXTRA_DESTINATION_ADDRESS"
+        private const val EXTRA_DESTINATION_LATITUDE = "com.trailmapper.android.map.EXTRA_DESTINATION_LATITUDE"
+        private const val EXTRA_DESTINATION_LONGITUDE = "com.trailmapper.android.map.EXTRA_DESTINATION_LONGITUDE"
 
-        fun createIntent(context: Context, route: TrailRoute): Intent {
-            return Intent(context, TrailRouteMapActivity::class.java)
+        fun createIntent(
+            context: Context,
+            route: TrailRoute,
+            preview: TrailRoutePreviewRequest = TrailRoutePreviewRequest(),
+        ): Intent {
+            val intent = Intent(context, TrailRouteMapActivity::class.java)
                 .putExtra(EXTRA_ROUTE_JSON, TrailRouteMapJsonSijko.encode(route))
+            preview.destination?.let { destination ->
+                intent
+                    .putExtra(EXTRA_DESTINATION_ADDRESS, destination.address)
+                    .putExtra(EXTRA_DESTINATION_LATITUDE, destination.point.latitude)
+                    .putExtra(EXTRA_DESTINATION_LONGITUDE, destination.point.longitude)
+            }
+            return intent
+        }
+
+        private fun previewRequestFrom(intent: Intent): TrailRoutePreviewRequest {
+            val destination = if (
+                intent.hasExtra(EXTRA_DESTINATION_LATITUDE) && intent.hasExtra(EXTRA_DESTINATION_LONGITUDE)
+            ) {
+                TrailRoutePreviewDestination(
+                    address = intent.getStringExtra(EXTRA_DESTINATION_ADDRESS).orEmpty(),
+                    point = MapPoint(
+                        latitude = intent.getDoubleExtra(EXTRA_DESTINATION_LATITUDE, 0.0),
+                        longitude = intent.getDoubleExtra(EXTRA_DESTINATION_LONGITUDE, 0.0),
+                    ),
+                )
+            } else {
+                null
+            }
+            return TrailRoutePreviewRequest(destination = destination)
         }
     }
 }
@@ -186,9 +247,24 @@ class TrailRouteMapActivity : ComponentActivity() {
 private fun TrailRouteMapScreen(
     plannedRoute: TrailRoute,
     completedExerciseSessionStore: CompletedExerciseSessionStore,
+    preview: TrailRoutePreviewRequest,
+    savedTrailRouteStore: SavedTrailRouteStore,
+    savedDestinationStore: SavedDestinationStore,
+    trailRouteShareProvider: TrailRouteShareProvider,
     onBack: () -> Unit,
 ) {
     var reversedDirection by rememberSaveable(plannedRoute) { mutableStateOf(false) }
+    // Saving happens here, after the rider has seen the whole route; nothing asked them to save first.
+    var renameText by rememberSaveable(plannedRoute) { mutableStateOf<String?>(null) }
+    val previewSnackbarHostState = remember { SnackbarHostState() }
+    val previewScope = rememberCoroutineScope()
+    val saveController = remember(plannedRoute) {
+        TrailRoutePreviewSaveController(savedTrailRouteStore, savedDestinationStore, previewScope)
+    }
+    val saveState by saveController.state.collectAsState()
+    LaunchedEffect(saveController) {
+        saveController.offerDestination(preview.destination)
+    }
     val directedRoute = remember(plannedRoute, reversedDirection) {
         if (reversedDirection) TrailRouteReverseSijko.reversed(plannedRoute) else plannedRoute
     }
@@ -200,6 +276,10 @@ private fun TrailRouteMapScreen(
         ?: CarriedExerciseRide()
     val route = remember(directedRoute, replacementRouteJson) {
         replacementRouteJson?.let(TrailRouteMapJsonSijko::decode) ?: directedRoute
+    }
+    // Save always acts on the route on screen, including a replacement kept after a reroute and Stop.
+    LaunchedEffect(saveController, route) {
+        saveController.show(route)
     }
     // The route a replacement superseded, drawn faintly so the rider can see what changed.
     var supersededRoute by remember(plannedRoute) { mutableStateOf<TrailRoute?>(null) }
@@ -743,9 +823,76 @@ private fun TrailRouteMapScreen(
             }
         }
 
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+        ) {
+        SnackbarHost(hostState = previewSnackbarHostState)
         RouteMapBottomControls(
             route = route,
             routeInstructions = routeInstructions,
+            isSaved = saveState.savedRoute != null,
+            saveEnabled = saveState.canSaveRoute,
+            onSave = {
+                previewScope.launch {
+                    when (val outcome = saveController.saveShownRoute()) {
+                        is TrailRoutePreviewSaveOutcome.Done -> {
+                            val message = if (outcome.alreadySaved) {
+                                "Already saved as ${outcome.item.title}"
+                            } else {
+                                "Saved to Saved routes as ${outcome.item.title}"
+                            }
+                            val result = previewSnackbarHostState.showSnackbar(
+                                message = message,
+                                actionLabel = "Rename",
+                                duration = SnackbarDuration.Long,
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                renameText = saveController.state.value.savedRoute?.title ?: outcome.item.title
+                            }
+                        }
+                        TrailRoutePreviewSaveOutcome.Failed ->
+                            previewSnackbarHostState.showSnackbar("Unable to save route.")
+                        TrailRoutePreviewSaveOutcome.Ignored -> Unit
+                    }
+                }
+            },
+            onShare = {
+                val saved = saveState.savedRoute
+                trailRouteShareProvider.share(
+                    SavedTrailRoute(
+                        id = saved?.id ?: UNSAVED_SHARE_ID,
+                        title = saved?.title
+                            ?: if (route.kind == TrailRouteKind.ExerciseLoop) "Exercise route" else "Trail route",
+                        summary = TrailRouteSummarySijko.summaryFor(route),
+                        route = route,
+                    ),
+                )
+            },
+            onSaveDestination = if (saveState.destination != null && saveState.savedDestination == null) {
+                {
+                    previewScope.launch {
+                        when (val outcome = saveController.saveDestination()) {
+                            is TrailRoutePreviewSaveOutcome.Done -> previewSnackbarHostState.showSnackbar(
+                                if (outcome.alreadySaved) {
+                                    "${outcome.item.title} is already in your places"
+                                } else {
+                                    "Saved ${outcome.item.title} to your places"
+                                },
+                            )
+                            TrailRoutePreviewSaveOutcome.Failed ->
+                                previewSnackbarHostState.showSnackbar("Unable to save destination.")
+                            TrailRoutePreviewSaveOutcome.Ignored -> Unit
+                        }
+                    }
+                }
+            } else {
+                null
+            },
+            saveDestinationEnabled = saveState.canSaveDestination,
             activeNavigation = activeNavigation,
             navigationSnapshot = navigationSnapshot,
             navigationMessage = navigationMessage,
@@ -802,11 +949,46 @@ private fun TrailRouteMapScreen(
                 navigationMessage = null
                 navigationMessageIsError = false
             },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 12.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        }
+    }
+
+    renameText?.let { text ->
+        AlertDialog(
+            onDismissRequest = { renameText = null },
+            title = { Text("Rename route") },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { renameText = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        renameText = null
+                        previewScope.launch {
+                            val renamed = saveController.renameSavedRoute(text)
+                            if (renamed == null) {
+                                previewSnackbarHostState.showSnackbar("Unable to rename route.")
+                            } else {
+                                previewSnackbarHostState.showSnackbar("Renamed to ${renamed.title}")
+                            }
+                        }
+                    },
+                    enabled = text.isNotBlank(),
+                ) {
+                    Text("Save name")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameText = null }) {
+                    Text("Cancel")
+                }
+            },
         )
     }
 
@@ -857,10 +1039,56 @@ private fun TrailRouteMapScreen(
     }
 }
 
+/** Save, share and save-place actions for a previewed route; each confirms with a snackbar, not a dialog. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RoutePreviewActions(
+    isSaved: Boolean,
+    saveEnabled: Boolean,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+    onSaveDestination: (() -> Unit)?,
+    saveDestinationEnabled: Boolean,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        // Disabled until the saved-state lookup finishes and while a save is in flight.
+        TextButton(onClick = onSave, enabled = saveEnabled) {
+            Icon(
+                imageVector = if (isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(if (isSaved) "Saved" else "Save", modifier = Modifier.padding(start = 6.dp))
+        }
+        TextButton(onClick = onShare) {
+            Icon(
+                imageVector = Icons.Filled.Share,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text("Share", modifier = Modifier.padding(start = 6.dp))
+        }
+        onSaveDestination?.let { saveDestination ->
+            TextButton(onClick = saveDestination, enabled = saveDestinationEnabled) {
+                Text("Save destination")
+            }
+        }
+    }
+}
+
 @Composable
 private fun RouteMapBottomControls(
     route: TrailRoute,
     routeInstructions: List<TrailRouteInstruction>,
+    isSaved: Boolean,
+    saveEnabled: Boolean,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+    onSaveDestination: (() -> Unit)?,
+    saveDestinationEnabled: Boolean,
     activeNavigation: Boolean,
     navigationSnapshot: TrailRouteNavigationSnapshot?,
     navigationMessage: String?,
@@ -980,6 +1208,14 @@ private fun RouteMapBottomControls(
                         Text("Directions")
                     }
                 }
+                RoutePreviewActions(
+                    isSaved = isSaved,
+                    saveEnabled = saveEnabled,
+                    onSave = onSave,
+                    onShare = onShare,
+                    onSaveDestination = onSaveDestination,
+                    saveDestinationEnabled = saveDestinationEnabled,
+                )
                 if (canReverse) {
                     ReverseDirectionControl(reversedDirection = reversedDirection, onReverse = onReverseDirection)
                 }
@@ -1345,6 +1581,9 @@ private const val RIDDEN_OVERLAY_WIDTH = 20f
 private const val TURNAROUND_MARKER_Z_INDEX = 5f
 private val RIDDEN_OVERLAY_COLOR = Color(0x99FFFFFF)
 private const val DEFAULT_ROUTE_ZOOM = 13f
+
+// The share image cache file name for a route that has not been saved.
+private const val UNSAVED_SHARE_ID = "unsaved-route"
 private const val ROUTE_CAMERA_PADDING_PIXELS = 140
 private const val MINIMUM_BOUNDS_POINT_COUNT = 2
 private const val MINIMUM_DRAWABLE_SEGMENT_POINT_COUNT = 2
