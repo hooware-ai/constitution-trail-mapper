@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-09-07",
+  "description": "Explicitly reviewed existing bicycle paths missing from the county routing layers. Source geometry is retained; no connecting lines are invented.",
+  "license": "Open Database License (ODbL) 1.0",
+  "attribution": "© OpenStreetMap contributors",
+  "licenseUrl": "https://www.openstreetmap.org/copyright",
+  "features": [
+    {
+      "wayId": 1424898800,
+      "version": 2,
+      "geometrySha256": "14090dc58d2db123e94e1ff1bf146702b7d458d964bfd1ef0e313912b5b5f5fb",
+      "name": "Route 66 - Morris/Veterans to Greenwood",
+      "routeRole": "TrailBranches",
+      "requiredTags": { "highway": "path", "surface": "asphalt" },
+      "bicycleEvidence": "The city's completed project 109 describes a 10-foot multi-use path, and its project polygon follows this exact OSM way. No bicycle prohibition is present in the way tags.",
+      "sources": [
+        "https://services3.arcgis.com/8EQ1HhogM827boPC/arcgis/rest/services/InfrastructureProjects_public_3ee04a974bbf470d9d9e6b3a05a2e5ab/FeatureServer/0/query?objectIds=109&outFields=*&returnGeometry=true&outSR=4326&f=pjson"
+      ]
+    },
+    {
+      "wayId": 854311297,
+      "version": 4,
+      "geometrySha256": "63971644d922e6b992ee361afed2c0fae3ded031feff4dd3f9fbd85ceb215093",
+      "name": "COUNTRY Financial Trail - Birky Pond",
+      "routeRole": "ParkConnectors",
+      "requiredTags": { "highway": "path", "surface": "asphalt", "bicycle": "designated", "foot": "designated" },
+      "bicycleEvidence": "OSM designates bicycle use. Heartland confirmed the trail opening on October 24, 2025; its August 2026 campus map shows the existing pond circuit.",
+      "sources": [
+        "https://www.heartland.edu/news/2025/10.2025CFTrailRibbonCutting102425.html",
+        "https://www.heartland.edu/documents/about/hccCampusMap.pdf"
+      ]
+    },
+    {
+      "wayId": 854311298,
+      "version": 2,
+      "geometrySha256": "57ed5e93ad97868802197dadc896b041db92f3c4a9d8bb27f8a50b39bc26d032",
+      "name": "COUNTRY Financial Trail - existing pond bridge",
+      "routeRole": "ParkConnectors",
+      "requiredTags": { "highway": "path", "surface": "asphalt", "bicycle": "designated", "bridge": "yes" },
+      "bicycleEvidence": "Existing OSM bicycle-designated bridge, also drawn on Heartland's August 2026 campus map. This is not an assumption that every bridge or pavilion in the 2025 construction announcement has been completed.",
+      "sources": [
+        "https://www.heartland.edu/documents/about/hccCampusMap.pdf",
+        "https://www.heartland.edu/news/2025/10.2025CFTrailRibbonCutting102425.html"
+      ]
+    },
+    {
+      "wayId": 1281779634,
+      "version": 2,
+      "geometrySha256": "f0b23d41c025d70d95957019772e11f181bf03580d1e3d735e762c5bb3a0181b",
+      "name": "COUNTRY Financial Trail - north pond path",
+      "routeRole": "ParkConnectors",
+      "requiredTags": { "highway": "path", "surface": "asphalt", "bicycle": "designated", "foot": "designated" },
+      "bicycleEvidence": "OSM bicycle-designated asphalt path on the opened pond trail; no new coordinate or connection is added.",
+      "sources": [
+        "https://www.heartland.edu/news/2025/10.2025CFTrailRibbonCutting102425.html",
+        "https://www.heartland.edu/documents/about/hccCampusMap.pdf"
+      ]
+    }
+  ],
+  "excludedUntilVerified": [
+    "Birky Pond connection to Constitution Trail at Raab Road: shown schematically on the August 2026 campus map, but no precise source line was found. The pond loop remains a separate graph component; do not bridge the 26.7-meter gap by increasing snapping tolerance.",
+    "Stone Roller Circle to Benjamin School short connector: project 101 is complete, but the missing county segment overlaps an OSM grass footway without an explicit bicycle designation. Do not import the entire grass way or infer its surface from the project polygon.",
+    "Future West Normal, Veterans Parkway, Uptown, Lafayette/Hamilton and Chenoa projects do not acquire existing status through this supplement."
+  ]
+}
