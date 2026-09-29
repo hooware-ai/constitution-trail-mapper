@@ -449,3 +449,31 @@ test("native deviation status overrides generic fallback and accepted hook rejec
   await flush();
   assert.equal(accepts, 2);
 });
+
+test("routing becoming unavailable clears guidance immediately but keeps route, progress and credit, and needs a fresh evaluation", async () => {
+  const f = fixture();
+  f.controller.start(record);
+  await f.fix(100);
+  f.advance(5000);
+  await f.fix(140);
+  assert.equal(f.controller.state.phase, "navigating");
+  const credited = f.controller.state.creditedDistanceMeters;
+  f.controller.routingUnavailable();
+  const lost = f.controller.state;
+  assert.equal(lost.phase, "location-lost");
+  assert.equal(lost.guidance, null);
+  assert.match(lost.message, /Restart route planning/);
+  assert.equal(lost.record?.key, "route");
+  assert.equal(lost.routeProgressMeters, 140);
+  assert.equal(lost.creditedDistanceMeters, credited);
+  // Recovery does not resume by itself: only a fresh accepted evaluation does, without crediting the gap.
+  f.advance(1000);
+  await f.fix(500);
+  assert.equal(f.controller.state.phase, "navigating");
+  assert.equal(f.controller.state.creditedDistanceMeters, credited);
+});
+test("routing unavailability with no ride is ignored", () => {
+  const f = fixture();
+  f.controller.routingUnavailable();
+  assert.equal(f.controller.state.phase, "idle");
+});

@@ -168,7 +168,27 @@ export function App() {
     setError("");
     try {
       await client.recover();
-      if (clientRef.current === client) success("Route planning restarted");
+      if (clientRef.current !== client) return;
+      success("Route planning restarted");
+      // A Saved/Recent or restored route whose inspection was interrupted keeps its geometry: inspect it again.
+      if (screen === "preview" && selected && !preview && !nav.record) {
+        const token = ++operation.current;
+        setChecking(true);
+        try {
+          const inspected = routeOkay(
+            await client.call<RouteResult>({
+              op: "inspect",
+              route: selected.route,
+              now: Date.now(),
+            }),
+          );
+          if (token === operation.current) setPreview(inspected);
+        } catch (e) {
+          if (token === operation.current) setError(errorText(e));
+        } finally {
+          if (token === operation.current) setChecking(false);
+        }
+      }
     } catch (e) {
       if (clientRef.current === client) setError(errorText(e));
     }
@@ -191,7 +211,10 @@ export function App() {
     clientRef.current = client;
     setRoutingDown(false);
     client.onUnavailableChange = (down) => {
-      if (!disposed) setRoutingDown(down);
+      if (disposed) return;
+      setRoutingDown(down);
+      // Existing turn guidance must not outlive the worker that produced it.
+      if (down) controllerRef.current?.routingUnavailable();
     };
     setBootError("");
     setNetwork(null);

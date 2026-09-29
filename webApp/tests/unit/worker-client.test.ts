@@ -144,7 +144,7 @@ test("recover starts a replacement, re-boots it and the next call succeeds witho
   assert.deepEqual(changes, [true, false]);
   client.dispose();
 });
-test("a call made while recovery boots waits for it and fails if the replacement also crashes", async () => {
+test("a call made while recovery boots is refused and the recovery fails if the replacement also crashes", async () => {
   const workers: FakeWorker[] = [];
   const client = new RoutingClient(() => {
     const w = new FakeWorker();
@@ -208,6 +208,83 @@ test("a boot-time terminal error rejects boot in rider language and can be recov
   workers[0].crash();
   await rejected;
   await client.recover();
+  assert.equal(client.isUnavailable, false);
+  client.dispose();
+});
+
+test("a failed replacement boot keeps routing unavailable and a later rider attempt starts a third worker", async () => {
+  const workers: FakeWorker[] = [];
+  const changes: boolean[] = [];
+  const client = new RoutingClient(() => {
+    const w = new FakeWorker();
+    if (workers.length === 1)
+      // The first replacement boots with an ordinary error (for example the data fetch failed).
+      w.postMessage = (message: any) => {
+        w.sent.push(message);
+        queueMicrotask(() =>
+          w.onmessage?.({
+            data: {
+              id: message.id,
+              result: { ok: false, error: "data failed" },
+            },
+          }),
+        );
+      };
+    workers.push(w);
+    return w as any;
+  });
+  client.onUnavailableChange = (down) => changes.push(down);
+  await client.call({ op: "boot" });
+  workers[0].crash();
+  await assert.rejects(client.recover(), /data failed/);
+  assert.equal(client.isUnavailable, true);
+  assert.equal(workers.length, 2);
+  // Still refused while unavailable, and another rider-triggered attempt is possible.
+  await assert.rejects(client.call({ op: "plan" }), RoutingUnavailableError);
+  await client.recover();
+  assert.equal(client.isUnavailable, false);
+  assert.equal(workers.length, 3);
+  assert.deepEqual(changes, [true, false]);
+  client.dispose();
+});
+test("a replacement boot that times out is terminated and retryable", async () => {
+  const workers: FakeWorker[] = [];
+  const client = new RoutingClient(() => {
+    const w = new FakeWorker();
+    if (workers.length === 1)
+      w.postMessage = (message: any) => void w.sent.push(message);
+    workers.push(w);
+    return w as any;
+  }, 5);
+  await client.call({ op: "boot" });
+  workers[0].crash();
+  await assert.rejects(client.recover(), /too long/);
+  assert.equal(workers[1].terminated, true);
+  assert.equal(client.isUnavailable, true);
+  await client.recover();
+  assert.equal(client.isUnavailable, false);
+  assert.equal(workers.length, 3);
+  client.dispose();
+});
+test("no request is accepted while a replacement is still initializing", async () => {
+  const workers: FakeWorker[] = [];
+  const client = new RoutingClient(() => {
+    const w = new FakeWorker();
+    if (workers.length === 1)
+      w.postMessage = (message: any) => void w.sent.push(message);
+    workers.push(w);
+    return w as any;
+  });
+  await client.call({ op: "boot" });
+  workers[0].crash();
+  const recovering = client.recover();
+  assert.equal(client.recover(), recovering);
+  await assert.rejects(client.call({ op: "plan" }), RoutingUnavailableError);
+  assert.equal(workers[1].sent.length, 1);
+  workers[1].onmessage?.({
+    data: { id: workers[1].sent[0].id, result: { ok: true } },
+  });
+  await recovering;
   assert.equal(client.isUnavailable, false);
   client.dispose();
 });

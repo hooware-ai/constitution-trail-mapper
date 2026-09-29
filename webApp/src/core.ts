@@ -26,6 +26,7 @@ export class RoutingClient {
   private ready: Promise<unknown> = Promise.resolve();
   private disposed = false;
   private unavailable: RoutingUnavailableError | null = null;
+  private recovering: Promise<unknown> | null = null;
   /** Notified when the client enters or leaves the terminally-failed state. */
   onUnavailableChange: ((unavailable: boolean) => void) | null = null;
   constructor(
@@ -104,46 +105,68 @@ export class RoutingClient {
   /** Rehydrate the selected dataset after killing the old worker; subsequent calls await readiness. */
   cancel(): Promise<unknown> {
     if (this.disposed) return Promise.resolve();
+    // A failed worker is only ever replaced by an explicit recover().
+    if (this.unavailable) return this.recovering ?? Promise.resolve();
     ++this.generation;
     this.worker.terminate();
     this.fail(new Error("Search cancelled."));
-    return this.restart();
+    this.ready = this.startWorker();
+    this.ready.catch((error) => {
+      if (error instanceof RoutingUnavailableError) this.markUnavailable();
+    });
+    return this.ready;
   }
   /**
    * Explicit, rider-initiated replacement of a terminally failed worker. Never called automatically,
-   * so a persistent fault cannot loop; a second failure simply leaves routing unavailable again.
+   * so a persistent fault cannot loop. Routing stays unavailable (and requests are refused) until the
+   * replacement has finished initializing; if that fails or times out the rider can simply try again.
    */
   recover(): Promise<unknown> {
-    if (this.disposed || !this.unavailable) return this.ready;
+    if (this.disposed) return Promise.resolve();
+    if (this.recovering) return this.recovering;
+    if (!this.unavailable) return this.ready;
     ++this.generation;
     this.worker.terminate();
-    return this.restart();
+    const attempt = this.startWorker().then(
+      () => {
+        this.recovering = null;
+        this.unavailable = null;
+        this.onUnavailableChange?.(false);
+      },
+      (error) => {
+        this.recovering = null;
+        this.markUnavailable();
+        throw error;
+      },
+    );
+    this.recovering = attempt;
+    this.ready = attempt;
+    void attempt.catch(() => {});
+    return attempt;
   }
-  private restart(): Promise<unknown> {
-    const wasUnavailable = this.unavailable !== null;
-    this.unavailable = null;
+  private startWorker(): Promise<unknown> {
     try {
       this.worker = this.spawn();
     } catch {
-      const error = new RoutingUnavailableError();
-      this.unavailable = error;
-      this.ready = Promise.reject(error);
-      void this.ready.catch(() => {});
-      if (!wasUnavailable) this.onUnavailableChange?.(true);
-      return this.ready;
+      return Promise.reject(new RoutingUnavailableError());
     }
-    if (wasUnavailable) this.onUnavailableChange?.(false);
-    this.ready = this.bootRequest
+    const booted = this.bootRequest
       ? this.send(this.bootRequest)
       : Promise.resolve();
-    void this.ready.catch(() => {});
-    return this.ready;
+    void booted.catch(() => {});
+    return booted;
+  }
+  private markUnavailable() {
+    if (this.unavailable) return;
+    this.unavailable = new RoutingUnavailableError();
+    this.onUnavailableChange?.(true);
   }
   private terminalFailure() {
     this.worker.terminate();
-    this.unavailable = new RoutingUnavailableError();
+    const first = !this.unavailable;
+    this.unavailable ??= new RoutingUnavailableError();
     this.fail(this.unavailable);
-    this.onUnavailableChange?.(true);
+    if (first) this.onUnavailableChange?.(true);
   }
   private fail(error: Error) {
     for (const p of this.pending.values()) {
