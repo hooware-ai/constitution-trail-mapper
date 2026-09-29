@@ -1869,6 +1869,7 @@ private fun ExerciseRoutePlanner(
                     checked = uiState.proposedTrailsEnabled,
                     onCheckedChange = viewModel::setProposedTrailsEnabled,
                     modifier = Modifier.fillMaxWidth(),
+                    supportingText = TrailMapperAbout.PROPOSED_TRAILS_CAUTION,
                 )
             }
 
@@ -2241,6 +2242,7 @@ private fun RoutePlanner(
                         routePlannerViewModel.setLayerChecked(TrailRouteLayer.ProposedTrails, it)
                     },
                     modifier = Modifier.fillMaxWidth(),
+                    supportingText = TrailMapperAbout.PROPOSED_TRAILS_CAUTION,
                 )
             }
 
@@ -2685,6 +2687,7 @@ private fun RouteLayer(
     checked: Boolean,
     modifier: Modifier = Modifier,
     onCheckedChange: ((Boolean) -> Unit)? = null,
+    supportingText: String? = null,
 ) {
     Row(
         modifier = modifier.heightIn(min = 48.dp),
@@ -2696,10 +2699,19 @@ private fun RouteLayer(
             enabled = onCheckedChange != null,
             modifier = Modifier.size(48.dp),
         )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            supportingText?.let { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
