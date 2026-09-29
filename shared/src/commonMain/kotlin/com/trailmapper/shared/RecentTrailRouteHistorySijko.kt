@@ -7,7 +7,7 @@ package com.trailmapper.shared
 import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteIdentitySijko
 import com.trailmapper.shared.routing.TrailRouteKind
-import kotlin.math.roundToInt
+import com.trailmapper.shared.sijko.TrailMilesTextSijko
 import kotlin.random.Random
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -16,7 +16,6 @@ object RecentTrailRouteHistorySijko {
     const val MAXIMUM_ENTRIES = 20
     const val RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000
 
-    private const val METERS_PER_MILE = 1609.344
     private const val MINUTE_MILLIS = 60_000L
     private const val HOUR_MILLIS = 60 * MINUTE_MILLIS
     private const val DAY_MILLIS = 24 * HOUR_MILLIS
@@ -212,10 +211,7 @@ object RecentTrailRouteHistorySijko {
         store.replaceRecentRoutes(emptyList())
     }
 
-    private fun milesText(meters: Double): String {
-        val tenths = (meters / METERS_PER_MILE * 10).roundToInt()
-        return "${tenths / 10}.${tenths % 10}"
-    }
+    private fun milesText(meters: Double): String = TrailMilesTextSijko.milesText(meters)
 
     private fun randomId(): String = "recent-" + Random.nextLong().toULong().toString(16)
 }
