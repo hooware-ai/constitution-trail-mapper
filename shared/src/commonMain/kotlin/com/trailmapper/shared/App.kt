@@ -150,6 +150,7 @@ import com.trailmapper.shared.sijko.ExerciseRouteFormSijko
 import com.trailmapper.shared.sijko.CurrentLocationEndpointAvailabilitySijko
 import com.trailmapper.shared.sijko.LocationPermissionRevokeStatus
 import com.trailmapper.shared.sijko.MapPoint
+import com.trailmapper.shared.sijko.PlannerScrollTargetSijko
 import com.trailmapper.shared.sijko.RouteEndpointTarget
 import com.trailmapper.shared.sijko.RouteSearchAvailabilitySijko
 import com.trailmapper.shared.sijko.SavedItemAccessibilityMessageSijko
@@ -1781,7 +1782,15 @@ private fun ExerciseRoutePlanner(
     val keyboardController = LocalSoftwareKeyboardController.current
     var showDeveloperOptions by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    ScrollToFindItemOnArrival(listState = listState, arrival = uiState.searchError)
+    ScrollToItemOnArrival(
+        listState = listState,
+        arrival = uiState.searchError,
+        // A repeat failure keeps the earlier result, whose card follows the button item.
+        itemsAfterTarget = PlannerScrollTargetSijko.itemsAfterTarget(
+            revealingButtonItem = true,
+            resultCardShown = uiState.result != null,
+        ),
+    )
 
     // A new loop opens straight onto its map once; the result card stays for reopening it after Back.
     val resultAwaitingMap = uiState.result?.takeIf { uiState.resultAwaitingMap }
@@ -2126,10 +2135,14 @@ private fun RoutePlanner(
     val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     // A failed search or a route that cannot open a map appears below Find; scroll so its reason is seen.
-    ScrollToFindItemOnArrival(
+    val failedSearch = uiState.routeNotice?.takeIf { it.route == null }
+    ScrollToItemOnArrival(
         listState = listState,
-        arrival = uiState.routeNotice?.takeIf { it.route == null }
-            ?: uiState.lastRoute.takeIf { !trailRouteMapPresenter.isAvailable },
+        arrival = failedSearch ?: uiState.lastRoute.takeIf { !trailRouteMapPresenter.isAvailable },
+        itemsAfterTarget = PlannerScrollTargetSijko.itemsAfterTarget(
+            revealingButtonItem = failedSearch != null,
+            resultCardShown = uiState.lastRoute != null && !uiState.isFindingRoute,
+        ),
     )
 
     LaunchedEffect(
@@ -2766,21 +2779,22 @@ private fun AddressAutocompletePanel(
 }
 
 /**
- * Scrolls a planner's list to its last item when [arrival] appears. The button item that holds a failed
- * search's reason and its Try again action is the last item (a found route's card, which follows it, is
- * the last when there is no map), so this reveals it whether or not the button is on screen. It waits
- * for the arrival to lay out and reads the item count rather than the visible items.
+ * Scrolls a planner's list to the item [itemsAfterTarget] places from its end when [arrival] appears. It
+ * waits for the arrival to lay out and counts items rather than looking at the visible ones, so it works
+ * when the target is off screen. The button item, which holds a failed search's reason and Try again, is
+ * followed by at most a result card.
  */
 @Composable
-private fun ScrollToFindItemOnArrival(
+private fun ScrollToItemOnArrival(
     listState: LazyListState,
     arrival: Any?,
+    itemsAfterTarget: Int,
 ) {
     LaunchedEffect(arrival) {
         if (arrival == null) return@LaunchedEffect
         withFrameNanos { }
         val itemCount = snapshotFlow { listState.layoutInfo.totalItemsCount }.first { count -> count > 0 }
-        listState.animateScrollToItem(itemCount - 1)
+        listState.animateScrollToItem(PlannerScrollTargetSijko.targetIndex(itemCount, itemsAfterTarget))
     }
 }
 
