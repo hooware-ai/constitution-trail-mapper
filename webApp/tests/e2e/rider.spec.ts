@@ -551,3 +551,67 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+test("a reroute that resolves after location was lost is not adopted", async ({
+  page,
+}) => {
+  // Hold the worker's reroute answer so the rider's state can change first.
+  await page.addInitScript(() => {
+    const Original = window.Worker;
+    const held: Array<() => void> = [];
+    let released = false;
+    (window as any).__releaseReroute = () => {
+      released = true;
+      held.splice(0).forEach((f) => f());
+    };
+    window.Worker = class extends Original {
+      private rerouteIds = new Set<number>();
+      postMessage(message: any, ...rest: any[]) {
+        if (message?.request?.op === "reroute") this.rerouteIds.add(message.id);
+        (super.postMessage as any)(message, ...rest);
+      }
+      set onmessage(handler: ((e: MessageEvent) => void) | null) {
+        super.onmessage = handler
+          ? (event: MessageEvent) => {
+              if (!released && this.rerouteIds.has(event.data?.id))
+                held.push(() => handler(event));
+              else handler(event);
+            }
+          : null;
+      }
+      get onmessage() {
+        return super.onmessage;
+      }
+    } as typeof Worker;
+  });
+  await page.clock.install();
+  await plan(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await acceptedFix(page, 40.51, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.509, -88.96);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.5085, -88.96);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.508, -88.96);
+  await expect(
+    page.getByRole("heading", { name: "You are off route", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Reroute", exact: true }).click();
+  // Location is lost before the worker's answer is delivered.
+  await page.evaluate(() => (window as any).__gps.failure());
+  await page.evaluate(() => (window as any).__releaseReroute());
+  await expect(
+    page.getByText("your current route was kept", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Returning to start" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reroute" })).toHaveCount(0);
+});

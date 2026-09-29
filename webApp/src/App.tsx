@@ -33,7 +33,6 @@ import {
   ForegroundNavigationController,
   bindNavigationLifecycle,
   browserLocationPort,
-  usableFix,
   type NavigationState,
 } from "./platform/navigation";
 import { acquirePlannerLocation } from "./platform/plannerLocation";
@@ -622,13 +621,8 @@ export function App() {
     }
   }
   async function reroute(mode: "rejoin" | "return" | "destination") {
-    if (
-      !selected ||
-      !nav.fix ||
-      !usableFix(nav.fix, Date.now()) ||
-      !clientRef.current
-    )
-      return;
+    const request = controllerRef.current?.rerouteRequest();
+    if (!selected || !nav.fix || !request || !clientRef.current) return;
     const token = ++operation.current;
     setBusy(true);
     setError("");
@@ -644,6 +638,13 @@ export function App() {
         }),
       );
       if (token !== operation.current) return;
+      // Guidance may have been discarded or the rider may have moved while the worker computed.
+      if (controllerRef.current?.rerouteStaleReason(request)) {
+        setError(
+          "Your position changed while the new route was being found, so your current route was kept. Choose a reroute again if you still need one.",
+        );
+        return;
+      }
       if (!result.canNavigate)
         throw new Error(
           result.warnings.join(" ") ||

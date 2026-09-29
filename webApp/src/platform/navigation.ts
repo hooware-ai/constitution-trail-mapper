@@ -66,6 +66,8 @@ export interface NavigationDependencies {
   ) => Promise<NavigationGuidance>;
 }
 export const MAX_FIX_AGE_MS = 15_000;
+/** A reroute computed for a rider who has since moved further than this is not for where they are now. */
+export const REROUTE_MAX_DRIFT_METERS = 100;
 export const MAX_FIX_ACCURACY_METERS = 35;
 const FUTURE_TOLERANCE_MS = 5_000;
 const DEVIATION_MIN_GAP_MS = 4_000;
@@ -98,6 +100,29 @@ const initialState = (wakeLock: WakeLockStatus): NavigationState => ({
   creditedDistanceMeters: 0,
   wakeLock,
 });
+function distanceMeters(a: LocationFix, b: LocationFix): number {
+  const rad = Math.PI / 180,
+    dLat = (b.latitude - a.latitude) * rad,
+    dLon = (b.longitude - a.longitude) * rad,
+    h =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(a.latitude * rad) *
+        Math.cos(b.latitude * rad) *
+        Math.sin(dLon / 2) ** 2;
+  return 2 * 6_371_008.8 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+/** What a reroute was computed against; compare with `rerouteStaleReason` before adopting it. */
+export interface RerouteRequest {
+  recordKey: string;
+  epoch: number;
+  fix: LocationFix;
+}
+export type RerouteStaleReason =
+  | "ride-changed"
+  | "interrupted"
+  | "location-lost"
+  | "back-on-route"
+  | "moved";
 /** Foreground-only orchestration. Matching and route instructions are supplied by shared Kotlin. */
 export class ForegroundNavigationController {
   state: NavigationState;
@@ -105,6 +130,8 @@ export class ForegroundNavigationController {
   private visible = true;
   private generation = 0;
   private sequence = 0;
+  /** Changes whenever guidance is discarded (restart, stop, hide/show, location loss), never on accepted fixes. */
+  private epoch = 0;
   private watchId: number | null = null;
   private timer: unknown;
   private watchStartedAt = 0;
@@ -194,9 +221,28 @@ export class ForegroundNavigationController {
       this.persist();
     }
   }
+  /** Snapshot for an asynchronous reroute; null unless the rider is confirmed off route with a credible fix. */
+  rerouteRequest(): RerouteRequest | null {
+    const { record, fix, phase } = this.state;
+    if (!record || !fix || phase !== "off-route") return null;
+    if (!usableFix(fix, this.clock.now())) return null;
+    return { recordKey: record.key, epoch: this.epoch, fix };
+  }
+  /** Why a delayed reroute must not replace the active route, or null when it still applies. */
+  rerouteStaleReason(request: RerouteRequest): RerouteStaleReason | null {
+    const { record, fix, phase } = this.state;
+    if (!record || record.key !== request.recordKey) return "ride-changed";
+    if (this.epoch !== request.epoch) return "interrupted";
+    if (!fix || !usableFix(fix, this.clock.now())) return "location-lost";
+    if (phase !== "off-route") return "back-on-route";
+    if (distanceMeters(request.fix, fix) > REROUTE_MAX_DRIFT_METERS)
+      return "moved";
+    return null;
+  }
   private invalidate(): void {
     ++this.generation;
     ++this.sequence;
+    ++this.epoch;
     if (this.watchId !== null) this.deps.location?.clearWatch(this.watchId);
     this.watchId = null;
     if (this.timer !== undefined) this.clock.clearInterval(this.timer);
@@ -255,6 +301,7 @@ export class ForegroundNavigationController {
   }
   private lose(phase: NavigationPhase, message: string): void {
     ++this.sequence;
+    ++this.epoch;
     this.lastProgress = null;
     this.needsReacquisition = true;
     this.offRouteSince = null;

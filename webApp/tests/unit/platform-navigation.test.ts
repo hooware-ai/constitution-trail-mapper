@@ -449,3 +449,78 @@ test("native deviation status overrides generic fallback and accepted hook rejec
   await flush();
   assert.equal(accepts, 2);
 });
+
+async function offRoute() {
+  const f = fixture();
+  f.controller.start(record);
+  await f.fix(100);
+  f.advance(1000);
+  await f.fix(100, {}, 120);
+  f.advance(5000);
+  await f.fix(100, {}, 120);
+  assert.equal(f.controller.state.phase, "off-route");
+  const request = f.controller.rerouteRequest();
+  assert.ok(request);
+  return { f, request };
+}
+test("a reroute request only exists while confirmed off route with a credible fix", async () => {
+  const f = fixture();
+  f.controller.start(record);
+  assert.equal(f.controller.rerouteRequest(), null);
+  await f.fix(100);
+  assert.equal(f.controller.rerouteRequest(), null);
+  const { request } = await offRoute();
+  assert.equal(request.recordKey, "route");
+});
+test("a reroute result still applies after ordinary accepted fixes near the request point", async () => {
+  const { f, request } = await offRoute();
+  f.advance(1000);
+  await f.fix(100, { latitude: 40.0001 }, 120);
+  assert.equal(f.controller.rerouteStaleReason(request), null);
+});
+test("location loss, hide/show and a restarted ride each invalidate a delayed reroute", async () => {
+  for (const interrupt of [
+    (f: ReturnType<typeof fixture>) => f.callbacks.at(-1)!.failure({ code: 2 }),
+    (f: ReturnType<typeof fixture>) => {
+      f.controller.setVisible(false);
+      f.controller.setVisible(true);
+    },
+    (f: ReturnType<typeof fixture>) => f.controller.start(record),
+  ]) {
+    const { f, request } = await offRoute();
+    interrupt(f);
+    assert.notEqual(f.controller.rerouteStaleReason(request), null);
+  }
+});
+test("a stopped or replaced ride never adopts a reroute made for the previous one", async () => {
+  const stopped = await offRoute();
+  stopped.f.controller.stop();
+  assert.equal(
+    stopped.f.controller.rerouteStaleReason(stopped.request),
+    "ride-changed",
+  );
+  const replaced = await offRoute();
+  replaced.f.controller.start({ ...record, key: "other" });
+  assert.equal(
+    replaced.f.controller.rerouteStaleReason(replaced.request),
+    "ride-changed",
+  );
+});
+test("a reroute is rejected once the rider rejoined the route or moved materially", async () => {
+  const rejoined = await offRoute();
+  rejoined.f.advance(1000);
+  await rejoined.f.fix(110, {}, 0);
+  assert.equal(
+    rejoined.f.controller.rerouteStaleReason(rejoined.request),
+    "back-on-route",
+  );
+  const moved = await offRoute();
+  moved.f.advance(1000);
+  await moved.f.fix(100, { latitude: 40.002 }, 120);
+  assert.equal(moved.f.controller.rerouteStaleReason(moved.request), "moved");
+});
+test("an aged-out fix loses location and invalidates a delayed reroute", async () => {
+  const { f, request } = await offRoute();
+  f.advance(20_000);
+  assert.equal(f.controller.rerouteStaleReason(request), "interrupted");
+});
