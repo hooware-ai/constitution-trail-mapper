@@ -149,6 +149,51 @@ internal class RoutePlannerViewModel : ViewModel() {
         )
     }
 
+    private var discardHook: (() -> Unit)? = null
+
+    /** Called once when the rider really leaves the planner, so its draft can be removed. */
+    fun setDiscardHook(hook: (() -> Unit)?) {
+        discardHook = hook
+    }
+
+    override fun onCleared() {
+        discard()
+        super.onCleared()
+    }
+
+    internal fun discard() {
+        discardHook?.invoke()
+        discardHook = null
+    }
+
+    /** What to keep so this form survives the process being killed; null while it is still empty. */
+    fun toDraft(nowEpochMillis: Long): RoutePlannerDraft? {
+        val state = _uiState.value
+        val untouched = state.endpoints == RouteEndpoints() &&
+            state.routeLayers == RouteLayerDefaultsSijko.defaultSelection() &&
+            state.lastRoute == null
+        if (untouched) return null
+        return RoutePlannerDraft(
+            savedAtEpochMillis = nowEpochMillis,
+            endpoints = state.endpoints,
+            routeLayers = state.routeLayers,
+            lastRoute = state.lastRoute,
+        )
+    }
+
+    /** Puts a draft back on a brand-new ViewModel only; a live form is never overwritten. */
+    fun restoreDraft(draft: RoutePlannerDraft) {
+        if (isPrepared) {
+            return
+        }
+        isPrepared = true
+        _uiState.value = RoutePlannerUiState(
+            endpoints = draft.endpoints,
+            routeLayers = draft.routeLayers,
+            lastRoute = draft.lastRoute,
+        )
+    }
+
     fun prefillDestination(destination: SavedDestination) {
         cancelEndpointWork(RouteEndpointTarget.Destination)
         invalidateRoute()

@@ -72,6 +72,61 @@ internal class ExerciseRoutePlannerViewModel(
         requestAutocompletePredictions(text, autocompleteProvider)
     }
 
+    private var discardHook: (() -> Unit)? = null
+
+    /** Called once when the rider really leaves the planner, so its draft can be removed. */
+    fun setDiscardHook(hook: (() -> Unit)?) {
+        discardHook = hook
+    }
+
+    override fun onCleared() {
+        discard()
+        super.onCleared()
+    }
+
+    internal fun discard() {
+        discardHook?.invoke()
+        discardHook = null
+    }
+
+    /** What to keep so this form survives the process being killed; null while it is still empty. */
+    fun toDraft(nowEpochMillis: Long): ExercisePlannerDraft? {
+        val state = _uiState.value
+        if (isUntouched(state)) return null
+        return ExercisePlannerDraft(
+            savedAtEpochMillis = nowEpochMillis,
+            startAddress = state.startAddress,
+            startPoint = state.startPoint,
+            targetMilesText = state.targetMilesText,
+            proposedTrailsEnabled = state.proposedTrailsEnabled,
+            result = state.result,
+        )
+    }
+
+    /** Puts a draft back only while the form is still empty; a live form is never overwritten. */
+    fun restoreDraft(draft: ExercisePlannerDraft) {
+        if (!isUntouched(_uiState.value)) {
+            return
+        }
+        _uiState.update {
+            it.copy(
+                startAddress = draft.startAddress,
+                startPoint = draft.startPoint,
+                targetMilesText = draft.targetMilesText,
+                proposedTrailsEnabled = draft.proposedTrailsEnabled,
+                result = draft.result,
+                resultAwaitingMap = false,
+            )
+        }
+    }
+
+    private fun isUntouched(state: ExerciseRoutePlannerUiState): Boolean =
+        state.startAddress.isBlank() &&
+            state.startPoint == null &&
+            state.targetMilesText.isBlank() &&
+            !state.proposedTrailsEnabled &&
+            state.result == null
+
     fun updateStartText(
         text: String,
         autocompleteProvider: AddressAutocompleteProvider,

@@ -4,6 +4,9 @@
  */
 package com.trailmapper.shared.routing
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class ExerciseRouteResult(
     val route: TrailRoute,
     val status: ExerciseRouteStatus,

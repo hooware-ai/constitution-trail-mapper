@@ -20,6 +20,7 @@ class TrailMapperAboutTest {
         assertTrue(dataAndPrivacy.contains("Google sign-in is optional"))
         assertTrue(dataAndPrivacy.contains("does not sync"))
         assertTrue(dataAndPrivacy.contains("request it for routing or navigation"))
+        assertTrue(dataAndPrivacy.contains("not finished is also kept on this device, out of backups"))
     }
 
     @Test
