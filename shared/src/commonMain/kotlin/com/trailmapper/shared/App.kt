@@ -135,6 +135,7 @@ import com.trailmapper.shared.sijko.MapPoint
 import com.trailmapper.shared.sijko.RouteEndpointTarget
 import com.trailmapper.shared.sijko.RouteSearchAvailabilitySijko
 import com.trailmapper.shared.sijko.SavedItemAccessibilityMessageSijko
+import com.trailmapper.shared.sijko.SavedItemSnackbarSijko
 import com.trailmapper.shared.sijko.SavedItemStatusQueue
 import com.trailmapper.shared.sijko.SavedTrailRouteFilterSijko
 import com.trailmapper.shared.sijko.SavedDestinationEditorSaveAvailabilitySijko
@@ -423,6 +424,7 @@ private fun TrailMapperHome(
             val result = savedItemSnackbarHostState.showSnackbar(
                 message = "Removed ${entry.title} from recents",
                 actionLabel = "Undo",
+                duration = SavedItemSnackbarSijko.undoDuration,
             )
             if (result == SnackbarResult.ActionPerformed) onRestoreRecentRoute(entry)
         }
@@ -433,7 +435,7 @@ private fun TrailMapperHome(
     // Status messages show one at a time, each once, so a second never replaces the first.
     LaunchedEffect(statusQueue.current?.id) {
         val message = statusQueue.current ?: return@LaunchedEffect
-        savedItemSnackbarHostState.showSnackbar(message.text)
+        savedItemSnackbarHostState.showSnackbar(message.text, duration = SavedItemSnackbarSijko.statusDuration)
         statusQueue = statusQueue.complete(message.id)
     }
 
