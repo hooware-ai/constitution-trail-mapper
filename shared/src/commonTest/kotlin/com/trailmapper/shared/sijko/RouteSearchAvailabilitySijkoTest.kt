@@ -42,13 +42,20 @@ class RouteSearchAvailabilitySijkoTest {
         )
         assertNull(RouteSearchAvailabilitySijko.unresolvedHint(RouteEndpointTarget.Destination, endpoints))
         assertEquals(
-            "Choose a suggestion, your current location, or a point on the map so the route ends where you mean.",
+            "Choose a suggestion or a point on the map so the route ends where you mean.",
             RouteSearchAvailabilitySijko.unresolvedHint(
                 RouteEndpointTarget.Destination,
                 RouteEndpoints(destination = "Library"),
             ),
         )
         assertNull(RouteSearchAvailabilitySijko.unresolvedHint(RouteEndpointTarget.Start, RouteEndpoints()))
+        // Current location is a Start-only shortcut, so the Destination hint must not offer it.
+        assertFalse(
+            RouteSearchAvailabilitySijko.unresolvedHint(
+                RouteEndpointTarget.Destination,
+                RouteEndpoints(destination = "Library"),
+            ).orEmpty().contains("current location"),
+        )
     }
 
     @Test

@@ -54,6 +54,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -1775,6 +1777,8 @@ private fun ExerciseRoutePlanner(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var showDeveloperOptions by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    ScrollToFindItemOnArrival(listState = listState, arrival = uiState.searchError)
 
     // A new loop opens straight onto its map once; the result card stays for reopening it after Back.
     val resultAwaitingMap = uiState.result?.takeIf { uiState.resultAwaitingMap }
@@ -1818,6 +1822,7 @@ private fun ExerciseRoutePlanner(
             scaffoldPadding.calculateLeftPadding(layoutDirection)
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .consumeWindowInsets(scaffoldPadding),
@@ -1887,7 +1892,7 @@ private fun ExerciseRoutePlanner(
                 )
             }
 
-            item {
+            item(key = FIND_ITEM_KEY) {
                 val canCreate = ExerciseRouteFormSijko.canCreate(
                     startAddress = uiState.startAddress,
                     startPoint = uiState.startPoint,
@@ -2116,6 +2121,13 @@ private fun RoutePlanner(
     var showDeveloperOptions by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val listState = rememberLazyListState()
+    // A failed search or a route that cannot open a map appears below Find; scroll so its reason is seen.
+    ScrollToFindItemOnArrival(
+        listState = listState,
+        arrival = uiState.routeNotice?.takeIf { it.route == null }
+            ?: uiState.lastRoute.takeIf { !trailRouteMapPresenter.isAvailable },
+    )
 
     LaunchedEffect(
         initialDestinationId,
@@ -2179,6 +2191,7 @@ private fun RoutePlanner(
             scaffoldPadding.calculateLeftPadding(layoutDirection)
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .consumeWindowInsets(scaffoldPadding),
@@ -2301,7 +2314,7 @@ private fun RoutePlanner(
                 )
             }
 
-            item {
+            item(key = FIND_ITEM_KEY) {
                 val canFind = RouteSearchAvailabilitySijko.canSearch(uiState.endpoints) &&
                     !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest
                 val findRoute = {
@@ -2746,6 +2759,25 @@ private fun AddressAutocompletePanel(
                 )
             }
         }
+    }
+}
+
+private const val FIND_ITEM_KEY = "find"
+
+/**
+ * Brings the button item to the top of the list when [arrival] appears, so a failed search's reason and
+ * its recovery action are not left below the old scroll position (large text, landscape).
+ */
+@Composable
+private fun ScrollToFindItemOnArrival(
+    listState: LazyListState,
+    arrival: Any?,
+) {
+    LaunchedEffect(arrival) {
+        if (arrival == null) return@LaunchedEffect
+        val findItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { item -> item.key == FIND_ITEM_KEY }
+            ?: return@LaunchedEffect
+        listState.animateScrollToItem(findItem.index)
     }
 }
 

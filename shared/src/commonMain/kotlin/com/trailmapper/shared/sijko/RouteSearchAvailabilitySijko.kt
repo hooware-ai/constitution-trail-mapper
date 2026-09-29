@@ -23,8 +23,13 @@ object RouteSearchAvailabilitySijko {
             RouteEndpointTarget.Destination -> endpoints.destination to endpoints.destinationPoint
         }
         if (text.isBlank() || point != null) return null
-        val end = if (target == RouteEndpointTarget.Start) "starts" else "ends"
-        return "Choose a suggestion, your current location, or a point on the map so the route $end where you mean."
+        // Current location can only fill Start, so only Start's hint offers it.
+        return when (target) {
+            RouteEndpointTarget.Start ->
+                "Choose a suggestion, your current location, or a point on the map so the route starts where you mean."
+            RouteEndpointTarget.Destination ->
+                "Choose a suggestion or a point on the map so the route ends where you mean."
+        }
     }
 
     /** What is still missing from an empty field, in the order the rider would fill them; null once ready. */

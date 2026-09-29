@@ -56,7 +56,7 @@ class RoutePlannerViewModelTest {
 
         val notice = viewModel.uiState.value.routeNotice
         assertEquals("Choose both points", notice?.title)
-        assertTrue(notice?.message.orEmpty().contains("suggestion, your current location, or a point on the map"))
+        assertTrue(notice?.message.orEmpty().contains("suggestion or a point on the map"))
         assertFalse(notice?.message.orEmpty().contains("geocoding"))
         assertNull(notice?.route)
         assertFalse(notice?.retryable ?: true)

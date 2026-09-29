@@ -326,7 +326,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 it.copy(
                     routeNotice = RouteNotice(
                         title = "Choose both points",
-                        message = "Choose a start and a destination from a suggestion, your current location, or a point on the map.",
+                        message = "Choose a start and a destination from a suggestion or a point on the map. Your current location works for the start.",
                         retryable = false,
                     ),
                 )
