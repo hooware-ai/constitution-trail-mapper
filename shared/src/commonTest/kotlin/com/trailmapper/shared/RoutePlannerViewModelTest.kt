@@ -195,7 +195,7 @@ class RoutePlannerViewModelTest {
         val newPredictions = CompletableDeferred<List<AddressAutocompletePrediction>>()
         val provider = object : AddressAutocompleteProvider by NoAddressAutocompleteProvider {
             override val isAvailable = true
-            override suspend fun predictions(query: String, target: RouteEndpointTarget) =
+            override suspend fun predictions(query: String, target: RouteEndpointTarget, proximity: MapPoint?) =
                 withContext(NonCancellable) {
                     if (query == "Old query") oldPredictions.await() else newPredictions.await()
                 }
@@ -303,6 +303,7 @@ class RoutePlannerViewModelTest {
                         override suspend fun predictions(
                             query: String,
                             target: RouteEndpointTarget,
+                            proximity: MapPoint?,
                         ): List<AddressAutocompletePrediction> {
                             gate.await()
                             return listOf(prediction())

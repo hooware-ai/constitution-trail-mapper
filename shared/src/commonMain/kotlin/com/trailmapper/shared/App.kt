@@ -133,6 +133,7 @@ import com.trailmapper.shared.routing.ExerciseRouteStatus
 import com.trailmapper.shared.routing.TrailRouteKind
 import com.trailmapper.shared.routing.TrailRouteAdvisorySijko
 import com.trailmapper.shared.sijko.AddressPlaceholderVisibilitySijko
+import com.trailmapper.shared.sijko.AddressPredictionRankingSijko
 import com.trailmapper.shared.sijko.CurrentLocationEndpointAvailabilitySijko
 import com.trailmapper.shared.sijko.LocationPermissionRevokeStatus
 import com.trailmapper.shared.sijko.MapPoint
@@ -2648,9 +2649,13 @@ private fun AddressAutocompletePanel(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    if (suggestion.secondaryText.isNotBlank()) {
+                    val rowDetail = listOfNotNull(
+                        suggestion.secondaryText.takeIf(String::isNotBlank),
+                        AddressPredictionRankingSijko.distanceText(suggestion),
+                    ).joinToString(" · ")
+                    if (rowDetail.isNotEmpty()) {
                         Text(
-                            text = suggestion.secondaryText,
+                            text = rowDetail,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

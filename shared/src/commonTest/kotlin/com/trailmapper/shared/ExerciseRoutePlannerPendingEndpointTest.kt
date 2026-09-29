@@ -202,6 +202,7 @@ class ExerciseRoutePlannerPendingEndpointTest {
         override suspend fun predictions(
             query: String,
             target: RouteEndpointTarget,
+            proximity: MapPoint?,
         ): List<AddressAutocompletePrediction> = predictions.await()
 
         override suspend fun resolvePrediction(

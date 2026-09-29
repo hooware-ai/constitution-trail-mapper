@@ -14,6 +14,8 @@ import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteSummarySijko
 import com.trailmapper.shared.routing.TrailNetworkFeature
 import com.trailmapper.shared.sijko.AddressAutocompleteQuerySijko
+import com.trailmapper.shared.sijko.AddressPredictionRankingSijko
+import com.trailmapper.shared.sijko.AutocompleteProximitySijko
 import com.trailmapper.shared.sijko.CurrentLocationAddressApplySijko
 import com.trailmapper.shared.sijko.CurrentLocationEndpointAvailabilitySijko
 import com.trailmapper.shared.sijko.CurrentLocationResultMessageSijko
@@ -499,7 +501,10 @@ internal class RoutePlannerViewModel : ViewModel() {
                 )
             }
             try {
-                val predictions = provider.predictions(query, target)
+                val proximity = AutocompleteProximitySijko.anchorFor(target, _uiState.value.endpoints)
+                val predictions = AddressPredictionRankingSijko.rankNearestFirst(
+                    provider.predictions(query, target, proximity),
+                )
                 currentCoroutineContext().ensureActive()
                 _uiState.update { state ->
                     if (state.autocompleteTarget == target) {

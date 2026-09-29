@@ -511,6 +511,7 @@ class ExerciseRoutePlannerViewModelTest {
         override suspend fun predictions(
             query: String,
             target: RouteEndpointTarget,
+            proximity: MapPoint?,
         ): List<AddressAutocompletePrediction> {
             queries += query
             if (query == "Old address") {
