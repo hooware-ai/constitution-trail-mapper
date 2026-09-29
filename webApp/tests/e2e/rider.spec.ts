@@ -551,3 +551,42 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+test("a crashed routing worker is reported at once and an explicit restart recovers without losing the draft", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Original = window.Worker;
+    const created: Worker[] = [];
+    (window as any).__workers = created;
+    window.Worker = class extends Original {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        created.push(this);
+      }
+    } as typeof Worker;
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await choose(page, "Destination", "Review trailhead · South");
+  await page.evaluate(() => {
+    const workers = (window as any).__workers as Worker[];
+    workers.at(-1)!.dispatchEvent(new ErrorEvent("error"));
+  });
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  const alert = page.getByRole("alert").filter({
+    hasText: "Route planning stopped unexpectedly",
+  });
+  await expect(alert).toBeVisible({ timeout: 2000 });
+  await expect(alert).not.toContainText(/Kotlin|rebuild/i);
+  await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+    "Review trailhead · East",
+  );
+  await alert.getByRole("button", { name: "Restart route planning" }).click();
+  await expect(alert).toHaveCount(0);
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+});

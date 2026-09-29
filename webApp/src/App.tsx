@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RoutingClient } from "./core";
+import { RoutingClient, ROUTING_UNAVAILABLE_MESSAGE } from "./core";
 import { MapView } from "./MapView";
 import { AccessConnections } from "./AccessConnections";
 import {
@@ -109,6 +109,7 @@ export function App() {
     [popup, setPopup] = useState<Popup>(null);
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
+    [routingDown, setRoutingDown] = useState(false),
     [busy, setBusy] = useState(false),
     [checking, setChecking] = useState(false),
     [online, setOnline] = useState(navigator.onLine),
@@ -161,6 +162,17 @@ export function App() {
       );
     return result.ok;
   }
+  async function restartRouting() {
+    const client = clientRef.current;
+    if (!client) return;
+    setError("");
+    try {
+      await client.recover();
+      if (clientRef.current === client) success("Route planning restarted");
+    } catch (e) {
+      if (clientRef.current === client) setError(errorText(e));
+    }
+  }
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -177,6 +189,10 @@ export function App() {
       unsubscribe: undefined | (() => void);
     const client = new RoutingClient();
     clientRef.current = client;
+    setRoutingDown(false);
+    client.onUnavailableChange = (down) => {
+      if (!disposed) setRoutingDown(down);
+    };
     setBootError("");
     setNetwork(null);
     setSessionReady(false);
@@ -904,7 +920,15 @@ export function App() {
               )}
             </div>
           )}
-          {error && (
+          {routingDown && network && (
+            <div className="error" role="alert">
+              <p>{ROUTING_UNAVAILABLE_MESSAGE}</p>
+              <button onClick={() => void restartRouting()}>
+                Restart route planning
+              </button>
+            </div>
+          )}
+          {error && !(routingDown && error === ROUTING_UNAVAILABLE_MESSAGE) && (
             <div className="error" role="alert">
               <p>{error}</p>
               <button onClick={() => setError("")}>Dismiss</button>
