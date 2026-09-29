@@ -47,7 +47,7 @@ object TrailRouteSummarySijko {
         return if (this < 0.05) {
             "0.00"
         } else {
-            (kotlin.math.round(this * 100.0) / 100.0).toString()
+            formatRouteMiles(this)
         }
     }
 

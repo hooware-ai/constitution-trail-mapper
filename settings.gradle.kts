@@ -21,3 +21,6 @@ rootProject.name = "TrailMapper"
 
 include(":androidApp")
 include(":shared")
+
+include(":sharedLogic")
+include(":webBridge")

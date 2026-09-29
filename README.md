@@ -67,3 +67,7 @@ The routing engine should treat approved trail-map layers as the graph:
 Unlisted roads should only be short access stubs between an address and the approved graph.
 
 The current source-chain and extraction plan are documented in `docs/routing-data-plan.md`.
+
+## Web review app
+
+A separate browser entry point is available in webApp. It shares the routing core through sharedLogic and webBridge. See [local web setup and verification](docs/web/README.md), [architecture](docs/web/architecture.md), and the [data redistribution gate](docs/web/data-rights.md). The default static build uses synthetic review fixtures; real local data is never automatically copied into it.

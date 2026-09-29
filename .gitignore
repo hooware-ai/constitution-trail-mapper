@@ -32,3 +32,9 @@ iosApp/**/*.xcuserstate
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+node_modules/
+webApp/dist/
+webApp/test-results/
+webApp/playwright-report/
+webApp/output/

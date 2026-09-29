@@ -32,11 +32,13 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "Shared"
             isStatic = true
+            export(projects.sharedLogic)
         }
     }
 
     sourceSets {
         commonMain.dependencies {
+            api(projects.sharedLogic)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
