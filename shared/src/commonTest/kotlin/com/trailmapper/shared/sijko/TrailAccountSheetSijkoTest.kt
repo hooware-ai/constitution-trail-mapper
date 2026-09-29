@@ -38,10 +38,18 @@ class TrailAccountSheetSijkoTest {
     }
 
     @Test
-    fun waitingOnGoogleWinsOverEverythingElse() {
+    fun waitingOnGoogleShowsSigningInAndHidesOldProblems() {
         assertEquals(
-            TrailAccountSheetContent.SigningIn,
-            TrailAccountSheetSijko.contentFor(account, true, "Sign-in failed."),
+            TrailAccountSheetContent.InProgress(TrailAccountSheetSijko.SIGNING_IN_LABEL),
+            TrailAccountSheetSijko.contentFor(account = null, isResolvingAccount = true, message = "Sign-in failed."),
+        )
+    }
+
+    @Test
+    fun aPendingSignOutSaysSigningOutNotSigningIn() {
+        assertEquals(
+            TrailAccountSheetContent.InProgress(TrailAccountSheetSijko.SIGNING_OUT_LABEL),
+            TrailAccountSheetSijko.contentFor(account = account, isResolvingAccount = true, message = null),
         )
     }
 

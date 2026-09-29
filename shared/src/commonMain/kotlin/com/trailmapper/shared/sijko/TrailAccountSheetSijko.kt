@@ -7,8 +7,8 @@ package com.trailmapper.shared.sijko
 import com.trailmapper.shared.TrailUserAccount
 
 sealed interface TrailAccountSheetContent {
-    /** Waiting on Google; the sheet shows progress and no action to press. */
-    data object SigningIn : TrailAccountSheetContent
+    /** Waiting on Google or on sign-out; the sheet shows [label] as progress and no action to press. */
+    data class InProgress(val label: String) : TrailAccountSheetContent
 
     /** [problem] is a failure to explain; [notice] is neutral news such as having signed out. */
     data class SignedOut(
@@ -29,6 +29,10 @@ object TrailAccountSheetSijko {
 
     const val SIGNED_OUT_NOTICE = "Signed out. Your saved routes and places are still on this device."
 
+    const val SIGNING_IN_LABEL = "Signing in with Google…"
+
+    const val SIGNING_OUT_LABEL = "Signing out…"
+
     const val PRIVACY_LINK_LABEL = "How Trail Mapper handles your data"
 
     fun contentFor(
@@ -36,7 +40,9 @@ object TrailAccountSheetSijko {
         isResolvingAccount: Boolean,
         message: String?,
     ): TrailAccountSheetContent = when {
-        isResolvingAccount -> TrailAccountSheetContent.SigningIn
+        // Only a signed-in rider can be signing out, so a pending operation with an account is a sign-out.
+        isResolvingAccount && account != null -> TrailAccountSheetContent.InProgress(SIGNING_OUT_LABEL)
+        isResolvingAccount -> TrailAccountSheetContent.InProgress(SIGNING_IN_LABEL)
         account != null -> TrailAccountSheetContent.SignedIn(account)
         message == SIGNED_OUT_NOTICE -> TrailAccountSheetContent.SignedOut(problem = null, notice = message)
         else -> TrailAccountSheetContent.SignedOut(problem = message, notice = null)

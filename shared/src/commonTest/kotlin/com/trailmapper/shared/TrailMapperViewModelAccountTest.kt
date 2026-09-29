@@ -6,6 +6,7 @@ package com.trailmapper.shared
 
 import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteKind
+import com.trailmapper.shared.sijko.TrailAccountSheetContent
 import com.trailmapper.shared.sijko.TrailAccountSheetSijko
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -13,11 +14,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 
@@ -81,6 +84,36 @@ class TrailMapperViewModelAccountTest {
     }
 
     @Test
+    fun aDelayedSignOutShowsSigningOutUntilItFinishes() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val provider = FakeAccountProvider(
+            signInResult = TrailAccountResult.Success(account),
+            current = account,
+            signOutGate = gate,
+        )
+        val viewModel = viewModel(provider)
+        advanceUntilIdle()
+
+        viewModel.signOut()
+        runCurrent()
+
+        val pending = viewModel.uiState.value
+        assertEquals(
+            TrailAccountSheetContent.InProgress(TrailAccountSheetSijko.SIGNING_OUT_LABEL),
+            TrailAccountSheetSijko.contentFor(pending.account, pending.isResolvingAccount, pending.accountMessage),
+        )
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        val done = viewModel.uiState.value
+        assertEquals(
+            TrailAccountSheetContent.SignedOut(problem = null, notice = TrailAccountSheetSijko.SIGNED_OUT_NOTICE),
+            TrailAccountSheetSijko.contentFor(done.account, done.isResolvingAccount, done.accountMessage),
+        )
+    }
+
+    @Test
     fun retryingAfterAFailureClearsTheOldError() = runTest(dispatcher) {
         val provider = FakeAccountProvider(signInResult = TrailAccountResult.Error("Could not reach Google."))
         val viewModel = viewModel(provider)
@@ -106,12 +139,15 @@ class TrailMapperViewModelAccountTest {
     private class FakeAccountProvider(
         var signInResult: TrailAccountResult,
         private val current: TrailUserAccount? = null,
+        private val signOutGate: CompletableDeferred<Unit>? = null,
     ) : TrailAccountProvider {
         override suspend fun currentAccount(): TrailUserAccount? = current
 
         override suspend fun signIn(): TrailAccountResult = signInResult
 
-        override suspend fun signOut() = Unit
+        override suspend fun signOut() {
+            signOutGate?.await()
+        }
     }
 
     private class OneRouteStore : SavedTrailRouteStore {
