@@ -452,6 +452,51 @@ class WebRoutingBridgeTest {
         assertEquals(1000.0, result["progress"]!!.jsonPrimitive.double)
     }
 
+    /** Shorter repeated junction: the completed pass is only ~196 m behind the supported one. */
+    private fun shortRepeatedJunctionLoop(): TrailRoute {
+        val path = listOf(
+            0.0 to -1000.0, 0.0 to 0.0, 25.0 to 0.0, 25.0 to 75.0, 4.0 to 75.0, 4.0 to 0.0,
+            4.0 to 600.0, -100.0 to 600.0, -100.0 to 0.0, 0.0 to 0.0, 0.0 to -1000.0,
+        ).map { (east, north) -> at(east, north) }
+        return TrailRoute(
+            segments = path.zipWithNext().map { (from, to) -> TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(from, to)) },
+            totalDistanceMeters = 3600.0, ordinaryAccessDistanceMeters = 0.0, totalCost = 1.0, kind = TrailRouteKind.ExerciseLoop,
+        )
+    }
+
+    @Test fun anUnchangedLocationKeepsTheSupportedPassEvenWhenTheCompletedPassIsOnlyAShortDistanceBehind() {
+        val loop = shortRepeatedJunctionLoop()
+        for (initial in listOf<JsonObject?>(null, buildJsonObject { put("maximumProgress", 1200.0) })) {
+            val resumed = snapshot(loop, at(0.0, 0.0), progress = 1200.0, resume = true, state = initial)
+            assertEquals(1196.0, resumed["progress"]!!.jsonPrimitive.double, 10.0)
+            var state = resumed["state"]!!.jsonObject
+            var progress = resumed["progress"]!!.jsonPrimitive.double
+            // Several identical ordinary fixes: a stationary rider never switches to the completed pass.
+            repeat(3) {
+                val same = snapshot(loop, at(0.0, 0.0), progress = progress, resume = false, state = state)
+                assertFalse(same["ambiguous"]!!.jsonPrimitive.boolean)
+                assertEquals(1196.0, same["progress"]!!.jsonPrimitive.double, 10.0)
+                assertFalse(same["arrived"]!!.jsonPrimitive.boolean)
+                state = same["state"]!!.jsonObject
+                progress = same["progress"]!!.jsonPrimitive.double
+            }
+            // Real forward movement up the supported pass continues from there.
+            val ahead = snapshot(loop, at(4.0, 30.0), progress = progress, resume = false, state = state)
+            assertEquals(1226.0, ahead["progress"]!!.jsonPrimitive.double, 10.0)
+        }
+    }
+
+    @Test fun realBackwardMovementWithKnownPreviousPositionDoesNotJumpToTheDistantPass() {
+        val loop = outAndBackLoop()
+        val first = snapshot(loop, at(0.0, 1000.0), progress = 1000.0, resume = true)
+        val back = snapshot(loop, at(0.0, 939.0), progress = first["progress"]!!.jsonPrimitive.double, resume = false, state = first["state"]!!.jsonObject)
+        assertFalse(back["ambiguous"]!!.jsonPrimitive.boolean)
+        assertEquals(939.0, back["progress"]!!.jsonPrimitive.double, 5.0)
+        // A teleport to a place the rider cannot have reached, that only matches a far pass, is not guessed.
+        val teleport = snapshot(loop, at(0.0, 1800.0), progress = back["progress"]!!.jsonPrimitive.double, resume = false, state = back["state"]!!.jsonObject)
+        assertTrue(teleport["ambiguous"]!!.jsonPrimitive.boolean || kotlin.math.abs(teleport["progress"]!!.jsonPrimitive.double - 939.0) < 900.0)
+    }
+
     @Test fun anOrdinaryLoopFixAfterReacquisitionDoesNotBecomeAmbiguous() {
         val result = snapshot(squareLoop(), at(1000.0, 500.0), progress = 1400.0, resume = true)
         assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)

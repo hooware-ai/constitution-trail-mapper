@@ -841,3 +841,58 @@ test("61 m of ordinary backtracking on the outbound pass never jumps to the retu
   expect(stored.routeProgressMeters).toBeLessThan(1100);
   expect(stored.creditedDistanceMeters).toBe(2000);
 });
+
+test("a stationary rider on a short repeated junction never switches to the completed pass", async ({
+  page,
+}) => {
+  await seedLoopRide(
+    page,
+    [
+      [0, -1000],
+      [0, 0],
+      [25, 0],
+      [25, 75],
+      [4, 75],
+      [4, 0],
+      [4, 600],
+      [-100, 600],
+      [-100, 0],
+      [0, 0],
+      [0, -1000],
+    ],
+    1200,
+    3600,
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const readRide = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return JSON.parse(localStorage.getItem(key!)!);
+    });
+  // The old junction at (0, 0), then identical fixes one second apart.
+  for (let count = 0; count < 3; count++) {
+    await page.clock.fastForward(1000);
+    await acceptedFix(page, 40.5, -88.95);
+    const ride = await readRide();
+    expect(ride.routeProgressMeters).toBeGreaterThan(1150);
+    expect(ride.routeProgressMeters).toBeLessThan(1250);
+    expect(ride.creditedDistanceMeters).toBe(2000);
+  }
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  // Forward movement 30 m up the supported pass continues from there.
+  await page.clock.fastForward(1000);
+  await acceptedFix(
+    page,
+    40.5 + 30 / 111_195,
+    -88.95 + 4 / (111_195 * Math.cos((40.5 * Math.PI) / 180)),
+  );
+  const ahead = await readRide();
+  expect(ahead.routeProgressMeters).toBeGreaterThan(1210);
+  expect(ahead.routeProgressMeters).toBeLessThan(1250);
+  expect(ahead.creditedDistanceMeters).toBeLessThan(2060);
+});
