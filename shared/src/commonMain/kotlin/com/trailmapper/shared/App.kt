@@ -135,6 +135,7 @@ import com.trailmapper.shared.sijko.MapPoint
 import com.trailmapper.shared.sijko.RouteEndpointTarget
 import com.trailmapper.shared.sijko.RouteSearchAvailabilitySijko
 import com.trailmapper.shared.sijko.SavedItemAccessibilityMessageSijko
+import com.trailmapper.shared.sijko.SavedItemStatusQueue
 import com.trailmapper.shared.sijko.SavedTrailRouteFilterSijko
 import com.trailmapper.shared.sijko.SavedDestinationEditorSaveAvailabilitySijko
 import com.trailmapper.shared.sijko.TrailResourceLinksSijko
@@ -411,7 +412,7 @@ private fun TrailMapperHome(
     var routePendingRename by remember { mutableStateOf<SavedTrailRoute?>(null) }
     var routePendingDelete by remember { mutableStateOf<SavedTrailRoute?>(null) }
     val savedItemSnackbarHostState = remember { SnackbarHostState() }
-    var savedItemStatusMessage by remember { mutableStateOf<String?>(null) }
+    var statusQueue by remember { mutableStateOf(SavedItemStatusQueue()) }
     val homeScope = rememberCoroutineScope()
     var confirmClearRecents by remember { mutableStateOf(false) }
 
@@ -429,27 +430,21 @@ private fun TrailMapperHome(
     val savedNavigationRoutes = SavedTrailRouteFilterSijko.navigationRoutes(appState.savedRoutes)
     val savedExerciseRoutes = SavedTrailRouteFilterSijko.exerciseRoutes(appState.savedRoutes)
 
-    LaunchedEffect(savedItemStatusMessage) {
-        val message = savedItemStatusMessage ?: return@LaunchedEffect
-        savedItemSnackbarHostState.currentSnackbarData?.dismiss()
-        savedItemSnackbarHostState.showSnackbar(message)
-        if (savedItemStatusMessage == message) {
-            savedItemStatusMessage = null
-        }
+    // Status messages show one at a time, each once, so a second never replaces the first.
+    LaunchedEffect(statusQueue.current?.id) {
+        val message = statusQueue.current ?: return@LaunchedEffect
+        savedItemSnackbarHostState.showSnackbar(message.text)
+        statusQueue = statusQueue.complete(message.id)
     }
 
     // Routine save and place feedback is a brief message on Home, never an OK dialog.
-    LaunchedEffect(appState.saveMessage) {
-        appState.saveMessage?.let { message ->
-            onSaveMessageShown()
-            savedItemStatusMessage = message
-        }
-    }
-    LaunchedEffect(appState.destinationMessage) {
-        appState.destinationMessage?.let { message ->
-            onDestinationMessageShown()
-            savedItemStatusMessage = message
-        }
+    LaunchedEffect(appState.saveMessage, appState.destinationMessage) {
+        val saveMessage = appState.saveMessage
+        val destinationMessage = appState.destinationMessage
+        if (saveMessage == null && destinationMessage == null) return@LaunchedEffect
+        statusQueue = statusQueue.enqueueAll(saveMessage, destinationMessage)
+        if (saveMessage != null) onSaveMessageShown()
+        if (destinationMessage != null) onDestinationMessageShown()
     }
 
     fun openAddDestinationDialog() {
@@ -842,9 +837,11 @@ private fun TrailMapperHome(
             onRename = { title ->
                 onRenameSavedDestination(destination.id, title)
                 destinationPendingRename = null
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.renamed(
-                    itemLabel = "Destination",
-                    title = title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.renamed(
+                        itemLabel = "Destination",
+                        title = title,
+                    )
                 )
             },
         )
@@ -860,9 +857,11 @@ private fun TrailMapperHome(
             onDelete = {
                 onDeleteSavedDestination(destination.id)
                 destinationPendingDelete = null
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.deleted(
-                    itemLabel = "Destination",
-                    title = destination.title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.deleted(
+                        itemLabel = "Destination",
+                        title = destination.title,
+                    )
                 )
             },
         )
@@ -878,9 +877,11 @@ private fun TrailMapperHome(
             onRename = { title ->
                 onRenameSavedRoute(route.id, title)
                 routePendingRename = null
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.renamed(
-                    itemLabel = "Saved route",
-                    title = title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.renamed(
+                        itemLabel = "Saved route",
+                        title = title,
+                    )
                 )
             },
         )
@@ -896,9 +897,11 @@ private fun TrailMapperHome(
             onDelete = {
                 onDeleteSavedRoute(route.id)
                 routePendingDelete = null
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.deleted(
-                    itemLabel = "Saved route",
-                    title = route.title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.deleted(
+                        itemLabel = "Saved route",
+                        title = route.title,
+                    )
                 )
             },
         )
