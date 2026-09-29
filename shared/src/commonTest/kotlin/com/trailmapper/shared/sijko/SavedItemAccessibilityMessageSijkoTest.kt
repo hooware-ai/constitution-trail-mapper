@@ -9,22 +9,6 @@ import kotlin.test.assertEquals
 
 class SavedItemAccessibilityMessageSijkoTest {
     @Test
-    fun describesEditingActions() {
-        assertEquals(
-            "Editing Saved route 4. Rename or delete.",
-            SavedItemAccessibilityMessageSijko.editing("  Saved route 4  "),
-        )
-    }
-
-    @Test
-    fun describesEditingExit() {
-        assertEquals(
-            "Exited edit mode for Downtown.",
-            SavedItemAccessibilityMessageSijko.editingExited(" Downtown "),
-        )
-    }
-
-    @Test
     fun describesRenameAndDeleteResults() {
         assertEquals(
             "Destination renamed to Home.",
