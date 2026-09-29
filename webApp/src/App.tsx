@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RoutingClient } from "./core";
+import { RoutingClient, ROUTING_UNAVAILABLE_MESSAGE } from "./core";
 import { MapView } from "./MapView";
 import { AccessConnections } from "./AccessConnections";
 import {
@@ -109,6 +109,7 @@ export function App() {
     [popup, setPopup] = useState<Popup>(null);
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
+    [routingDown, setRoutingDown] = useState(false),
     [busy, setBusy] = useState(false),
     [checking, setChecking] = useState(false),
     [online, setOnline] = useState(navigator.onLine),
@@ -161,6 +162,43 @@ export function App() {
       );
     return result.ok;
   }
+  async function restartRouting() {
+    const client = clientRef.current;
+    if (!client) return;
+    // Own the operation from the click, so leaving or opening another route while the worker boots
+    // abandons this continuation instead of letting it apply results to newer work.
+    const token = ++operation.current;
+    const retained =
+      screen === "preview" && selected && !preview && !nav.record;
+    const route = retained ? selected.route : null;
+    setError("");
+    try {
+      await client.recover();
+      if (clientRef.current !== client || token !== operation.current) return;
+      success("Route planning restarted");
+      // A Saved/Recent or restored route whose inspection was interrupted keeps its geometry: inspect it again.
+      if (route) {
+        setChecking(true);
+        try {
+          const inspected = routeOkay(
+            await client.call<RouteResult>({
+              op: "inspect",
+              route,
+              now: Date.now(),
+            }),
+          );
+          if (token === operation.current) setPreview(inspected);
+        } catch (e) {
+          if (token === operation.current) setError(errorText(e));
+        } finally {
+          if (token === operation.current) setChecking(false);
+        }
+      }
+    } catch (e) {
+      if (clientRef.current === client && token === operation.current)
+        setError(errorText(e));
+    }
+  }
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -177,6 +215,13 @@ export function App() {
       unsubscribe: undefined | (() => void);
     const client = new RoutingClient();
     clientRef.current = client;
+    setRoutingDown(false);
+    client.onUnavailableChange = (down) => {
+      if (disposed) return;
+      setRoutingDown(down);
+      // Existing turn guidance must not outlive the worker that produced it.
+      if (down) controllerRef.current?.routingUnavailable();
+    };
     setBootError("");
     setNetwork(null);
     setSessionReady(false);
@@ -904,7 +949,15 @@ export function App() {
               )}
             </div>
           )}
-          {error && (
+          {routingDown && network && (
+            <div className="error" role="alert">
+              <p>{ROUTING_UNAVAILABLE_MESSAGE}</p>
+              <button onClick={() => void restartRouting()}>
+                Restart route planning
+              </button>
+            </div>
+          )}
+          {error && !(routingDown && error === ROUTING_UNAVAILABLE_MESSAGE) && (
             <div className="error" role="alert">
               <p>{error}</p>
               <button onClick={() => setError("")}>Dismiss</button>
