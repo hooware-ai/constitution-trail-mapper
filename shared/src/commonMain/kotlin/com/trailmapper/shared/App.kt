@@ -43,7 +43,14 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -134,6 +141,7 @@ import com.trailmapper.shared.routing.TrailRouteKind
 import com.trailmapper.shared.routing.TrailRouteAdvisorySijko
 import com.trailmapper.shared.sijko.AddressPlaceholderVisibilitySijko
 import com.trailmapper.shared.sijko.AddressPredictionRankingSijko
+import com.trailmapper.shared.sijko.ExerciseRouteFormSijko
 import com.trailmapper.shared.sijko.CurrentLocationEndpointAvailabilitySijko
 import com.trailmapper.shared.sijko.LocationPermissionRevokeStatus
 import com.trailmapper.shared.sijko.MapPoint
@@ -1853,14 +1861,19 @@ private fun ExerciseRoutePlanner(
             }
 
             item {
-                OutlinedTextField(
-                    value = uiState.targetMilesText,
-                    onValueChange = viewModel::setTargetMilesText,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Target distance") },
-                    suffix = { Text("mi") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                ExerciseStartHint(
+                    startAddress = uiState.startAddress,
+                    startPoint = uiState.startPoint,
+                    isResolving = uiState.isResolvingAutocomplete || uiState.isResolvingLocation || uiState.isResolvingMapPoint,
+                    isSuggestionsOpen = uiState.autocompleteSuggestions.isNotEmpty(),
+                )
+            }
+
+            item {
+                ExerciseDistanceInput(
+                    text = uiState.targetMilesText,
+                    onTextChange = viewModel::setTargetMilesText,
+                    onDone = ::hideInput,
                 )
             }
 
@@ -1875,39 +1888,66 @@ private fun ExerciseRoutePlanner(
             }
 
             item {
-                Button(
-                    onClick = {
-                        hideInput()
-                        viewModel.findExerciseRoute(
-                            trailNetworkProvider = trailNetworkProvider,
-                            accessNetworkProvider = accessNetworkProvider,
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest,
-                ) {
-                    if (uiState.isFindingRoute) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.DirectionsBike,
-                            contentDescription = null,
-                        )
-                        Text("Create exercise route")
-                    }
-                }
-            }
-
-            uiState.searchError?.let { message ->
-                item {
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
+                val canCreate = ExerciseRouteFormSijko.canCreate(
+                    startAddress = uiState.startAddress,
+                    startPoint = uiState.startPoint,
+                    milesText = uiState.targetMilesText,
+                    isBusy = uiState.isFindingRoute || uiState.hasPendingEndpointRequest,
+                )
+                val createLoop = {
+                    hideInput()
+                    viewModel.findExerciseRoute(
+                        trailNetworkProvider = trailNetworkProvider,
+                        accessNetworkProvider = accessNetworkProvider,
                     )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = createLoop,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = canCreate,
+                    ) {
+                        if (uiState.isFindingRoute) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text("Finding your loop…")
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.DirectionsBike,
+                                contentDescription = null,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Create exercise route")
+                        }
+                    }
+                    ExerciseRouteFormSijko.guidance(
+                        startAddress = uiState.startAddress,
+                        startPoint = uiState.startPoint,
+                        isResolvingStart = uiState.hasPendingEndpointRequest,
+                        milesText = uiState.targetMilesText,
+                    )?.takeIf { !uiState.isFindingRoute }?.let { hint ->
+                        Text(
+                            text = hint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    uiState.searchError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                        if (canCreate) {
+                            OutlinedButton(onClick = createLoop, modifier = Modifier.fillMaxWidth()) {
+                                Text("Try again")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1932,6 +1972,13 @@ private fun ExerciseRoutePlanner(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
+                            ExerciseRouteFormSijko.parsedMiles(uiState.targetMilesText)?.let { requestedMiles ->
+                                Text(
+                                    text = ExerciseRouteFormSijko.comparisonText(requestedMiles, result.route.totalDistanceMeters),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                             Text(
                                 text = result.summary,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -2683,6 +2730,66 @@ private fun AddressAutocompletePanel(
                 )
             }
         }
+    }
+}
+
+/** Says what is wrong with a Start that was typed but never resolved, before the rider hits a disabled button. */
+@Composable
+private fun ExerciseStartHint(
+    startAddress: String,
+    startPoint: MapPoint?,
+    isResolving: Boolean,
+    isSuggestionsOpen: Boolean,
+) {
+    if (startAddress.isBlank() || startPoint != null || isResolving || isSuggestionsOpen) return
+    Text(
+        text = "Choose a suggestion, your current location, or a point on the map so the loop starts where you mean.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+/** Common loop lengths in one tap, plus a custom field that states its unit and range. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExerciseDistanceInput(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onDone: () -> Unit,
+) {
+    val error = ExerciseRouteFormSijko.distanceError(text)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Distance",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.semantics { heading() },
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ExerciseRouteFormSijko.PRESET_MILES.forEach { miles ->
+                FilterChip(
+                    selected = ExerciseRouteFormSijko.isPresetSelected(text, miles),
+                    onClick = { onTextChange(miles.toString()) },
+                    label = { Text("$miles mi") },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
+        }
+        OutlinedTextField(
+            value = text,
+            onValueChange = onTextChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Or enter a distance") },
+            suffix = { Text("mi") },
+            supportingText = { Text(error ?: "From ${ExerciseRouteFormSijko.DISTANCE_RANGE_TEXT} mi") },
+            isError = error != null,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onDone() }),
+        )
     }
 }
 
