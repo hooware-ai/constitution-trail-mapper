@@ -64,3 +64,9 @@ The separate licensed extractor verified all 254 approved existing county featur
 - `docs/web/`: architecture, run instructions, source provenance, rights and acceptance.
 
 Local screenshots and browser traces are intentionally ignored under `webApp/output/` and `webApp/test-results/`.
+
+## September 29: closure presentation
+
+Closure geometry now uses a thin dashed line beneath the selected route and a permanent, keyboard-accessible "Trail closed" marker. The marker opens the reported notice and official source; the legend uses matching wording and dashes. This changes presentation only, not closure data, route selection or safety gates.
+
+The production build (including TypeScript and asset audit) passed. A focused local-data visual check on desktop Chromium and Pixel 7 emulation verified the Culver's Hershey Road to Tipton Park route, closure-label bounds, keyboard popup opening/closing and source link. The street-basemap presentation was also inspected in the local app. Screenshots remain ignored under webApp/output/closure-context-*.png.

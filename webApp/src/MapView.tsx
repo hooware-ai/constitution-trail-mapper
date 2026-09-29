@@ -103,6 +103,19 @@ export function MapView({
             .addTo(g);
         }),
       );
+    // Closure geometry is map context; the selected route retains its heavier casing.
+    const closureMarkers: { closure: Closure; anchor: L.LatLng }[] = [];
+    closures.forEach((closure) => {
+      if (!closure.points || closure.points.length < 2) return;
+      const path = L.polyline(closure.points.map(xy), {
+        color: "#b45309",
+        weight: 3,
+        opacity: 0.85,
+        dashArray: "3 7",
+        interactive: false,
+      }).addTo(g);
+      closureMarkers.push({ closure, anchor: path.getCenter() });
+    });
     route?.segments.forEach((s) => {
       // Kotlin bridge omits estimated access from drawable segments.
       const roles = s.roles ?? s.routeRoles ?? [];
@@ -130,15 +143,50 @@ export function MapView({
         dashArray: access ? "8 7" : prop ? "6 7" : shared ? "3 5" : undefined,
       }).addTo(g);
     });
-    closures.forEach((c) => {
-      if (c.points && c.points.length > 1)
-        L.polyline(c.points.map(xy), {
-          color: "#e3690b",
-          weight: 8,
-          dashArray: "5 6",
+    closureMarkers.forEach(({ closure, anchor }) => {
+      const details = document.createElement("div");
+      const heading = document.createElement("strong");
+      heading.textContent = "Reported trail closure";
+      const message = document.createElement("p");
+      message.textContent = closure.message;
+      details.append(heading, message);
+      if (/^https?:\/\//i.test(closure.sourceUrl)) {
+        const source = document.createElement("a");
+        source.href = closure.sourceUrl;
+        source.textContent = "Review official notice";
+        source.target = "_blank";
+        source.rel = "noopener noreferrer";
+        details.append(source);
+      }
+      const marker = L.marker(anchor, {
+        icon: L.divIcon({
+          className: "closure-marker",
+          html: '<span class="closure-symbol" aria-hidden="true"></span>',
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
+          popupAnchor: [0, -16],
+        }),
+        title: "Trail closed — show closure details",
+        keyboard: true,
+        bubblingMouseEvents: false,
+      })
+        .bindTooltip(plain("Trail closed"), {
+          permanent: true,
+          interactive: true,
+          direction: "auto",
+          offset: [14, 0],
+          className: "closure-label",
         })
-          .bindTooltip(plain(c.title))
-          .addTo(g);
+        .bindPopup(details, { maxWidth: 280 })
+        .addTo(g);
+      marker
+        .getElement()
+        ?.setAttribute("aria-label", "Trail closed — show closure details");
+      const label = marker.getTooltip()?.getElement();
+      if (label) {
+        L.DomEvent.disableClickPropagation(label);
+        label.addEventListener("click", () => marker.openPopup());
+      }
     });
     if (route?.segments.length) {
       const all = route.segments.flatMap((s) => s.points);

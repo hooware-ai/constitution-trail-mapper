@@ -233,7 +233,7 @@ export function Legend() {
       </span>
       <span>
         <i className="closed" />
-        Closure
+        Trail closed
       </span>
     </div>
   );

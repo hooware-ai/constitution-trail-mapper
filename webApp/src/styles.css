@@ -382,7 +382,9 @@ header .quiet {
   border-top-style: dashed;
 }
 .legend .closed {
-  border-color: #e3690b;
+  border-color: #b45309;
+  border-top-width: 3px;
+  border-top-style: dashed;
 }
 .legend .proposed {
   border-color: #7851a9;
@@ -1056,4 +1058,49 @@ dialog::backdrop {
   .route-choice {
     gap: 2px 12px;
   }
+}
+
+.closure-marker {
+  display: grid;
+  place-items: center;
+  background: transparent;
+}
+.closure-symbol {
+  display: block;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #b45309;
+  box-shadow: 0 1px 4px #3c210c50;
+}
+.closure-symbol::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 3px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+}
+.leaflet-tooltip.closure-label {
+  padding: 5px 8px;
+  border: 1px solid #b45309;
+  border-radius: 4px;
+  background: #fff7ed;
+  color: #78350f;
+  font:
+    600 12px/1.4 "Segoe UI",
+    system-ui,
+    sans-serif;
+  box-shadow: 0 1px 4px #3c210c20;
+  cursor: pointer;
+}
+.closure-label.leaflet-tooltip-right::before {
+  border-right-color: #b45309;
+}
+.closure-label.leaflet-tooltip-left::before {
+  border-left-color: #b45309;
 }
