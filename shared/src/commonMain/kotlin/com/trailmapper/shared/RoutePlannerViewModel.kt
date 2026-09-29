@@ -70,6 +70,9 @@ internal class RoutePlannerViewModel : ViewModel() {
     private var routeRequestVersion = 0L
     private var autocompleteJob: Job? = null
     private var autocompleteProvider: AddressAutocompleteProvider? = null
+
+    /** Set while the rider's tapped suggestion is being resolved; a Start change must not disturb it. */
+    private var selectionJob: Job? = null
     private var currentLocationRequestTarget: RouteEndpointTarget? = null
     private var mapPointRequestTarget: RouteEndpointTarget? = null
     private var cachedAccessGraph: TrailGraph? = null
@@ -303,6 +306,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 }
             }
         }
+        selectionJob = autocompleteJob
     }
 
     fun findTrailRoute(
@@ -555,6 +559,7 @@ internal class RoutePlannerViewModel : ViewModel() {
     private fun refreshDestinationSuggestionsForNewStart() {
         val state = _uiState.value
         if (state.autocompleteTarget != RouteEndpointTarget.Destination) return
+        if (selectionJob?.isActive == true) return
         if (!state.isResolvingAutocomplete && state.autocompleteSuggestions.isEmpty()) return
         val anchor = AutocompleteProximitySijko.anchorFor(RouteEndpointTarget.Destination, state.endpoints)
         if (state.autocompleteAnchor == anchor) return
@@ -592,6 +597,7 @@ internal class RoutePlannerViewModel : ViewModel() {
             mapPointRequestTarget = null
         }
         autocompleteJob?.cancel()
+        selectionJob = null
         _uiState.update {
             it.copy(
                 resolvingLocationTarget = if (cancelLocation) null else it.resolvingLocationTarget,

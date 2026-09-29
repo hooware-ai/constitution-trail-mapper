@@ -96,6 +96,53 @@ class RoutePlannerViewModelAutocompleteAnchorRaceTest {
     }
 
     @Test
+    fun aTappedSuggestionStillResolvingIsNotCancelledWhenStartChanges() = runTest(dispatcher) {
+        val fixture = fixtureWithDestinationSearchAnchoredAtA()
+        val chosen = MapPoint(40.4, -88.8)
+        fixture.aPredictions.complete(listOf(fromA))
+        runCurrent()
+        val selection = CompletableDeferred<AddressAutocompleteSelectionResult>()
+        fixture.destinationSelectionGate = selection
+        fixture.viewModel.selectAutocompletePrediction(RouteEndpointTarget.Destination, fromA, fixture.provider)
+        runCurrent()
+
+        fixture.location.complete(CurrentLocationAddressResult.Success("Start B", pointB))
+        advanceTimeBy(400)
+        runCurrent()
+        selection.complete(AddressAutocompleteSelectionResult.Success("Chosen Coffee A", chosen))
+        runCurrent()
+
+        val state = fixture.viewModel.uiState.value
+        assertEquals(pointB, state.endpoints.startPoint)
+        assertEquals("Chosen Coffee A", state.endpoints.destination)
+        assertEquals(chosen, state.endpoints.destinationPoint)
+        assertEquals(emptyList(), state.autocompleteSuggestions)
+        assertEquals(listOf<MapPoint?>(pointA), fixture.origins)
+    }
+
+    @Test
+    fun aFailedSelectionAfterStartChangedNeverBringsBackSuggestionsFromTheOldStart() = runTest(dispatcher) {
+        val fixture = fixtureWithDestinationSearchAnchoredAtA()
+        fixture.aPredictions.complete(listOf(fromA))
+        runCurrent()
+        val selection = CompletableDeferred<AddressAutocompleteSelectionResult>()
+        fixture.destinationSelectionGate = selection
+        fixture.viewModel.selectAutocompletePrediction(RouteEndpointTarget.Destination, fromA, fixture.provider)
+        runCurrent()
+        fixture.location.complete(CurrentLocationAddressResult.Success("Start B", pointB))
+        runCurrent()
+
+        selection.complete(AddressAutocompleteSelectionResult.Error("Could not load that place."))
+        advanceTimeBy(400)
+        runCurrent()
+
+        val state = fixture.viewModel.uiState.value
+        assertEquals("Could not load that place.", state.autocompleteError)
+        assertEquals(emptyList(), state.autocompleteSuggestions)
+        assertEquals(listOf<MapPoint?>(pointA), fixture.origins)
+    }
+
+    @Test
     fun startChangesWithNoDestinationSearchDoNothing() = runTest(dispatcher) {
         val fixture = Fixture()
         fixture.provider.let { provider ->
@@ -135,6 +182,7 @@ class RoutePlannerViewModelAutocompleteAnchorRaceTest {
         val aPredictions = CompletableDeferred<List<AddressAutocompletePrediction>>()
         val origins = mutableListOf<MapPoint?>()
         var destinationSelection: AddressAutocompleteSelectionResult = AddressAutocompleteSelectionResult.Success("Start A", pointA)
+        var destinationSelectionGate: CompletableDeferred<AddressAutocompleteSelectionResult>? = null
 
         val provider = object : AddressAutocompleteProvider {
             override val isAvailable = true
@@ -155,7 +203,7 @@ class RoutePlannerViewModelAutocompleteAnchorRaceTest {
                 if (target == RouteEndpointTarget.Start) {
                     AddressAutocompleteSelectionResult.Success("Start A", pointA)
                 } else {
-                    destinationSelection
+                    destinationSelectionGate?.await() ?: destinationSelection
                 }
         }
     }
