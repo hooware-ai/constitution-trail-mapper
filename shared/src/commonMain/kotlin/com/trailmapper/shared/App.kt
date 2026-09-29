@@ -25,10 +25,14 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -137,6 +141,8 @@ import com.trailmapper.shared.sijko.RouteSearchAvailabilitySijko
 import com.trailmapper.shared.sijko.SavedItemAccessibilityMessageSijko
 import com.trailmapper.shared.sijko.SavedItemSnackbarSijko
 import com.trailmapper.shared.sijko.SavedItemStatusQueue
+import com.trailmapper.shared.sijko.TrailAccountSheetContent
+import com.trailmapper.shared.sijko.TrailAccountSheetSijko
 import com.trailmapper.shared.sijko.SavedTrailRouteFilterSijko
 import com.trailmapper.shared.sijko.SavedDestinationEditorSaveAvailabilitySijko
 import com.trailmapper.shared.sijko.TrailResourceLinksSijko
@@ -201,6 +207,7 @@ fun App(
                         trailRouteShareProvider = trailRouteShareProvider,
                         onSignInWithGoogle = trailMapperViewModel::signInWithGoogle,
                         onSignOut = trailMapperViewModel::signOut,
+                        onAccountMessageShown = trailMapperViewModel::dismissAccountMessage,
                         onOpenAbout = {
                             navController.navigate(TrailMapperScreen.About.route) {
                                 launchSingleTop = true
@@ -320,19 +327,6 @@ fun App(
                 }
             }
 
-            appState.accountMessage?.let { message ->
-                AlertDialog(
-                    onDismissRequest = trailMapperViewModel::dismissAccountMessage,
-                    title = { Text("Google account") },
-                    text = { Text(message) },
-                    confirmButton = {
-                        TextButton(onClick = trailMapperViewModel::dismissAccountMessage) {
-                            Text("OK")
-                        }
-                    },
-                )
-            }
-
             appState.pendingNavigationDestination?.let { destination ->
                 AlertDialog(
                     onDismissRequest = trailMapperViewModel::dismissNavigateToDestinationPrompt,
@@ -380,6 +374,7 @@ private fun TrailMapperHome(
     trailRouteShareProvider: TrailRouteShareProvider,
     onSignInWithGoogle: () -> Unit,
     onSignOut: () -> Unit,
+    onAccountMessageShown: () -> Unit,
     onOpenAbout: () -> Unit,
     onCreateRoute: () -> Unit,
     onCreateExerciseRoute: () -> Unit,
@@ -437,6 +432,14 @@ private fun TrailMapperHome(
         val message = statusQueue.current ?: return@LaunchedEffect
         savedItemSnackbarHostState.showSnackbar(message.text, duration = SavedItemSnackbarSijko.statusDuration)
         statusQueue = statusQueue.complete(message.id)
+    }
+
+    // Sign-in results appear inside the Account sheet; with it closed they become a brief message on Home.
+    LaunchedEffect(appState.accountMessage, showAccountSheet) {
+        TrailAccountSheetSijko.homeMessageFor(appState.accountMessage, showAccountSheet)?.let { message ->
+            onAccountMessageShown()
+            statusQueue = statusQueue.enqueue(message)
+        }
     }
 
     // Routine save and place feedback is a brief message on Home, never an OK dialog.
@@ -786,14 +789,17 @@ private fun TrailMapperHome(
         TrailAccountSheet(
             account = appState.account,
             isResolvingAccount = appState.isResolvingAccount,
-            onDismiss = { showAccountSheet = false },
-            onSignInWithGoogle = {
+            message = appState.accountMessage,
+            onDismiss = {
                 showAccountSheet = false
-                onSignInWithGoogle()
+                onAccountMessageShown()
             },
-            onSignOut = {
+            onSignInWithGoogle = onSignInWithGoogle,
+            onSignOut = onSignOut,
+            onOpenPrivacy = {
                 showAccountSheet = false
-                onSignOut()
+                onAccountMessageShown()
+                onOpenAbout()
             },
         )
     }
@@ -1079,37 +1085,65 @@ private fun TrailMapperTopAppBar(
 private fun TrailAccountSheet(
     account: TrailUserAccount?,
     isResolvingAccount: Boolean,
+    message: String?,
     onDismiss: () -> Unit,
     onSignInWithGoogle: () -> Unit,
     onSignOut: () -> Unit,
+    onOpenPrivacy: () -> Unit,
 ) {
+    val content = TrailAccountSheetSijko.contentFor(account, isResolvingAccount, message)
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Account",
+                text = TrailAccountSheetSijko.TITLE,
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
             )
 
-            when {
-                isResolvingAccount -> {
+            when (content) {
+                TrailAccountSheetContent.SigningIn -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Text(
+                            text = "Signing in with Google…",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
 
-                account == null -> {
+                is TrailAccountSheetContent.SignedOut -> {
+                    content.problem?.let { problem ->
+                        Text(
+                            text = problem,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
+                    content.notice?.let { notice ->
+                        Text(
+                            text = notice,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
                     Text(
-                        text = "Not signed in",
+                        text = TrailAccountSheetSijko.LOCAL_DATA_NOTE,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1124,50 +1158,59 @@ private fun TrailAccountSheet(
                     }
                 }
 
-                else -> {
+                is TrailAccountSheetContent.SignedIn -> {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TrailAccountProfileImage(
-                            account = account,
+                            account = content.account,
                             contentDescription = null,
                             modifier = Modifier.size(56.dp),
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = account.displayName,
+                                text = content.account.displayName,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = account.email,
+                                text = content.account.email,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
-                    HorizontalDivider()
-                    TextButton(
+                    Text(
+                        text = TrailAccountSheetSijko.LOCAL_DATA_NOTE,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(
                         onClick = onSignOut,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = null,
-                            )
-                            Text("Sign out")
-                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        Text("Sign out")
                     }
+                }
+            }
+
+            if (content != TrailAccountSheetContent.SigningIn) {
+                TextButton(
+                    onClick = onOpenPrivacy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(TrailAccountSheetSijko.PRIVACY_LINK_LABEL)
                 }
             }
         }
