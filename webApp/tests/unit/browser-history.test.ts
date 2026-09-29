@@ -96,6 +96,22 @@ test("a preview entry without a preview (after reload) falls back instead of sho
   );
 });
 
+test("a fallback that lands on the screen already shown changes nothing", () => {
+  // Back onto a preview entry with no preview while Home is already displayed.
+  assert.deepEqual(
+    resolvePop(context({ screen: "plan" }), entry("preview"), "back"),
+    {
+      type: "stay",
+    },
+  );
+  assert.deepEqual(
+    resolvePop(context({ screen: "planner" }), entry("map-picker"), "back"),
+    {
+      type: "stay",
+    },
+  );
+});
+
 class FakeHistory implements HistoryLike {
   entries: unknown[] = [null];
   at = 0;

@@ -691,3 +691,147 @@ test("history entries and the URL never contain places, labels or route geometry
   ).toBeVisible();
   expect(page.url()).toBe(before);
 });
+
+/** Lets a test hold the worker's inspect requests so the app is usable before restore finishes. */
+async function trackWorkers(page: Page) {
+  await page.addInitScript(() => {
+    const Original = window.Worker;
+    // Survives a reload so a test can hold the restore inspection of the page it reloads into.
+    (window as any).__holdInspect =
+      sessionStorage.getItem("hold-inspect") === "1";
+    (window as any).__heldInspects = [];
+    window.Worker = class extends Original {
+      postMessage(message: any, ...rest: any[]) {
+        if (
+          message?.request?.op === "inspect" &&
+          (window as any).__holdInspect
+        ) {
+          (window as any).__heldInspects.push(() =>
+            (super.postMessage as any)(message, ...rest),
+          );
+          return;
+        }
+        (super.postMessage as any)(message, ...rest);
+      }
+    } as typeof Worker;
+  });
+}
+test("history stays sound when a chooser is open before history starts, after a no-op fallback and around the skip link", async ({
+  page,
+}) => {
+  await trackWorkers(page);
+  await plan(page);
+  await page.waitForTimeout(600);
+  // Reload with the restored preview's inspection held, so the app is usable before history starts.
+  await page.evaluate(() => sessionStorage.setItem("hold-inspect", "1"));
+  await page.reload();
+  await expect(
+    page.getByText("Checking the known closure catalog"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await page.getByRole("button", { name: /^Start:/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.evaluate(() => {
+    sessionStorage.removeItem("hold-inspect");
+    (window as any).__holdInspect = false;
+    ((window as any).__heldInspects as Array<() => void>)
+      .splice(0)
+      .forEach((f) => f());
+  });
+  await page.waitForTimeout(300);
+  await page
+    .getByRole("button", { name: /^Close/ })
+    .first()
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Closing the chooser must not have popped an entry that was never pushed (that left the app).
+  await expect(
+    page.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => history.state !== null)).toBe(true);
+  // Preview -> Home -> planner -> Home, then Back three times and a new destination.
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Plan a ride", exact: true }),
+  ).toBeVisible();
+  // Step back through the entries (the restored one was relabelled with what was really on screen) to Home.
+  const home = page.getByRole("heading", { name: "Plan a ride", exact: true });
+  await page.goBack();
+  for (let steps = 0; steps < 4 && !(await home.isVisible()); steps++) {
+    await page.goBack();
+    await page.waitForTimeout(150);
+  }
+  await expect(home).toBeVisible();
+  expect(page.url()).toMatch(/127\.0\.0\.1/);
+  await savedNav(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Saved", exact: true, level: 1 }),
+  ).toBeVisible();
+  // A new navigation replaces any obsolete forward history: Forward has nowhere to go.
+  await page.goForward();
+  await expect(
+    page.getByRole("heading", { name: "Saved", exact: true, level: 1 }),
+  ).toBeVisible();
+});
+test("the skip link moves focus without adding an unmanaged history entry", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await page.waitForTimeout(1500);
+  await page.getByRole("link", { name: "Skip to route controls" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#route-controls")).toBeFocused();
+  expect(page.url()).not.toContain("#");
+  await savedNav(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Saved", exact: true, level: 1 }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+});
+
+test("closing a chooser that was already open when history started never leaves the app", async ({
+  page,
+  context,
+}) => {
+  // Persist a preview in this browser context, then open the app in a fresh tab with no earlier history.
+  await plan(page);
+  await page.waitForTimeout(600);
+  const fresh = await context.newPage();
+  await fresh.addInitScript(() => sessionStorage.setItem("hold-inspect", "1"));
+  await trackWorkers(fresh);
+  await fresh.goto("/");
+  await expect(
+    fresh.getByText("Checking the known closure catalog"),
+  ).toBeVisible();
+  await fresh.getByRole("button", { name: "Trail Mapper home" }).click();
+  await fresh.getByRole("button", { name: /Go somewhere/ }).click();
+  await fresh.getByRole("button", { name: /^Start:/ }).click();
+  await expect(fresh.getByRole("dialog")).toBeVisible();
+  // Restore finishes now, so history starts with the chooser already open.
+  await fresh.evaluate(() => {
+    sessionStorage.removeItem("hold-inspect");
+    (window as any).__holdInspect = false;
+    ((window as any).__heldInspects as Array<() => void>)
+      .splice(0)
+      .forEach((f) => f());
+  });
+  await fresh.waitForTimeout(400);
+  await fresh
+    .getByRole("button", { name: /^Close/ })
+    .first()
+    .click();
+  await expect(fresh.getByRole("dialog")).toHaveCount(0);
+  await fresh.waitForTimeout(400);
+  // Still in the app, not the document before it.
+  expect(fresh.url()).toMatch(/127\.0\.0\.1/);
+  await expect(
+    fresh.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeVisible();
+});

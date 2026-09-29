@@ -371,7 +371,7 @@ export function App() {
           });
         } else if (action.type === "stay") {
           sync.replace(popContext.current.screen);
-        } else {
+        } else if (action.screen !== popContext.current.screen) {
           fromPop.current = true;
           goRef.current(action.screen as Screen);
         }
@@ -379,6 +379,10 @@ export function App() {
     );
     sync.start(popContext.current.screen);
     historyRef.current = sync;
+    // An overlay that was already open when history started has no entry yet: give it one, so closing it
+    // pops an entry that exists instead of leaving the app.
+    if (popContext.current.overlayOpen)
+      sync.push(popContext.current.screen, true);
     lastSynced.current = {
       screen: popContext.current.screen,
       overlay: popContext.current.overlayOpen,
@@ -905,7 +909,15 @@ export function App() {
     share = privateRouteShare(location.href, preview?.distance);
   return (
     <div className={"app " + screen}>
-      <a className="skip-link" href="#route-controls">
+      <a
+        className="skip-link"
+        href="#route-controls"
+        onClick={(event) => {
+          // A fragment jump would add an entry the history model does not manage: move focus instead.
+          event.preventDefault();
+          panelRef.current?.focus();
+        }}
+      >
         Skip to route controls
       </a>
       <header className="app-header">

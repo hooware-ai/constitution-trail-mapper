@@ -48,17 +48,17 @@ export function resolvePop(
   // Entries for dialogs, choosers and a ride are never re-entered by stepping forward or after reload.
   if (target.overlay) return { type: "stay" };
   if (target.screen === "navigation") return { type: "stay" };
+  // Work out the screen this entry means here, then only move if that is somewhere else.
+  let desired = target.screen;
   // Transient screens return to the planner they came from.
-  if (target.screen === "searching" || target.screen === "map-picker")
-    return context.screen === "planner"
-      ? { type: "stay" }
-      : { type: "go", screen: "planner" };
-  if (target.screen === "preview" && !context.hasPreview)
-    return direction === "back"
-      ? { type: "go", screen: "plan" }
-      : { type: "stay" };
-  if (target.screen === context.screen) return { type: "stay" };
-  return { type: "go", screen: target.screen };
+  if (desired === "searching" || desired === "map-picker") desired = "planner";
+  if (desired === "preview" && !context.hasPreview) {
+    if (direction === "forward") return { type: "stay" };
+    desired = "plan";
+  }
+  return desired === context.screen
+    ? { type: "stay" }
+    : { type: "go", screen: desired };
 }
 
 /** Serialises history operations so a pop that undoes an overlay never races the next push. */
