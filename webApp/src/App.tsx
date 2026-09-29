@@ -3,6 +3,7 @@ import { RoutingClient } from "./core";
 import { MapView } from "./MapView";
 import { AccessConnections } from "./AccessConnections";
 import {
+  type DialogNotice,
   EndpointField,
   Legend,
   Modal,
@@ -78,6 +79,12 @@ const storageFor = (mode: string): StoragePort => ({
   removeItem: (key) =>
     localStorage.removeItem("trail-mapper." + mode + ":" + key),
 });
+const storageIssueMessage = (error: StoreResult<unknown>["error"]) =>
+  error === "quota"
+    ? "Browser storage is full. This change was not saved."
+    : error === "corrupt" || error === "unsupported-version"
+      ? "Saved browser data could not be read. It has been preserved."
+      : "Browser storage is unavailable. This change was not saved.";
 const errorText = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -106,7 +113,12 @@ export function App() {
     [library, setLibrary] = useState<RouteLibrary>(EMPTY_LIBRARY);
   const [field, setField] = useState<"start" | "destination" | null>(null),
     [pickField, setPickField] = useState<"start" | "destination">("start"),
-    [popup, setPopup] = useState<Popup>(null);
+    [popup, setPopup] = useState<Popup>(null),
+    [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
+  const popupOpen = useRef(false);
+  popupOpen.current = popup !== null;
+  // Feedback belongs to one dialog session: never carried into the next one.
+  useEffect(() => setDialogNotice(null), [popup]);
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -151,14 +163,14 @@ export function App() {
     if (result.ok) {
       setStorageError("");
       if (message) success(message, undo);
-    } else
-      setStorageError(
-        result.error === "quota"
-          ? "Browser storage is full. This change was not saved."
-          : result.error === "corrupt" || result.error === "unsupported-version"
-            ? "Saved browser data could not be read. It has been preserved."
-            : "Browser storage is unavailable. This change was not saved.",
+    } else {
+      const message = storageIssueMessage(result.error);
+      setStorageError(message);
+      // A dialog left open by the failed change shows the reason where it can be seen and heard.
+      setDialogNotice((current) =>
+        popupOpen.current ? { kind: "error", message } : current,
       );
+    }
     return result.ok;
   }
   useEffect(() => {
@@ -725,6 +737,7 @@ export function App() {
     );
   }
   async function shareSummary() {
+    setDialogNotice(null);
     const summary = privateRouteShare(location.href, preview?.distance);
     try {
       if (canShare) await navigator.share(summary);
@@ -734,14 +747,18 @@ export function App() {
       }
       setPopup(null);
     } catch (e) {
+      // Cancelling the system share sheet is the rider's choice, not a failure.
       if (!(e instanceof DOMException && e.name === "AbortError"))
-        setError(
-          "Sharing is unavailable. Select and copy the summary shown here.",
-        );
+        setDialogNotice({
+          kind: "error",
+          message:
+            "Sharing is unavailable. Select and copy the summary shown here, then try again if you like.",
+        });
     }
   }
   function downloadGeoJson() {
     if (!selected || !preview) return;
+    setDialogNotice(null);
     try {
       const coordinates = preview.segments.flatMap((s) =>
         s.points.map((p) => [p.longitude, p.latitude] as Coordinate),
@@ -774,13 +791,14 @@ export function App() {
       link.download = "trail-mapper-route.geojson";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      success(
-        exactExport
-          ? "Full route downloaded with your endpoint approval"
-          : "Route downloaded with endpoint areas removed",
-      );
+      setDialogNotice({
+        kind: "success",
+        message: exactExport
+          ? "Full route downloaded with your endpoint approval."
+          : "Route downloaded with endpoint areas removed.",
+      });
     } catch (e) {
-      setError(errorText(e));
+      setDialogNotice({ kind: "error", message: errorText(e) });
     }
   }
   useEffect(() => {
@@ -1653,7 +1671,11 @@ export function App() {
         </Modal>
       )}
       {popup === "share" && (
-        <Modal title="Share route" onClose={() => setPopup(null)}>
+        <Modal
+          title="Share route"
+          notice={dialogNotice}
+          onClose={() => setPopup(null)}
+        >
           <h3>Private summary</h3>
           <p>
             Exact start and destination, route coordinates and your recent
@@ -1697,6 +1719,7 @@ export function App() {
       {popup === "clear" && (
         <Modal
           title={`Clear ${library.recent.length} recent routes?`}
+          notice={dialogNotice}
           onClose={() => setPopup(null)}
         >
           <p>Saved routes and places are not affected.</p>
@@ -1720,7 +1743,11 @@ export function App() {
         </Modal>
       )}
       {popup === "rename" && (
-        <Modal title="Rename" onClose={() => setPopup(null)}>
+        <Modal
+          title="Rename"
+          notice={dialogNotice}
+          onClose={() => setPopup(null)}
+        >
           <form
             onSubmit={(event) => {
               event.preventDefault();

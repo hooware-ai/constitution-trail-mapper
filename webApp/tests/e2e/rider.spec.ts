@@ -551,3 +551,146 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+test("share failures, cancelled sharing and download results appear inside the open dialog", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    (window as any).__shareMode = "reject";
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async () => {
+        const mode = (window as any).__shareMode;
+        if (mode === "abort") throw new DOMException("cancelled", "AbortError");
+        if (mode === "reject") throw new Error("share refused");
+      },
+    });
+  });
+  await plan(page);
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  const shareButton = dialog.getByRole("button", { name: "Share summary" });
+  // A real failure is announced in the dialog, with the summary still there to copy.
+  await shareButton.click();
+  const error = dialog
+    .getByRole("alert")
+    .filter({ hasText: "Sharing is unavailable" });
+  await expect(error).toBeVisible();
+  await expect(dialog.locator(".share-preview")).toContainText("Trail");
+  // The page behind the dialog is inert and must not be where the message lives.
+  await expect(page.locator("#route-controls > .error")).toHaveCount(0);
+  // Cancelling the system sheet is not a failure: no error, dialog stays open.
+  await page.evaluate(() => ((window as any).__shareMode = "abort"));
+  await shareButton.click();
+  await expect(error).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  // Retry succeeds and closes the dialog.
+  await page.evaluate(() => ((window as any).__shareMode = "ok"));
+  await shareButton.click();
+  await expect(dialog).toHaveCount(0);
+});
+test("download success and failure are reported in the dialog and the endpoint choice is kept", async ({
+  page,
+}) => {
+  await plan(page);
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  await dialog
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  await page.evaluate(() => {
+    (window as any).__createObjectURL = URL.createObjectURL;
+    URL.createObjectURL = () => {
+      throw new Error("Downloads are unavailable in this browser.");
+    };
+  });
+  await dialog
+    .getByRole("button", { name: /Download full route GeoJSON/ })
+    .click();
+  await expect(
+    dialog.getByRole("alert").filter({ hasText: "Downloads are unavailable" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("checkbox", { name: /Include exact start/ }),
+  ).toBeChecked();
+  await page.evaluate(() => {
+    URL.createObjectURL = (window as any).__createObjectURL;
+  });
+  await dialog
+    .getByRole("button", { name: /Download full route GeoJSON/ })
+    .click();
+  await expect(
+    dialog.getByRole("status").filter({ hasText: "Full route downloaded" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("alert").filter({ hasText: "unavailable" }),
+  ).toHaveCount(0);
+  // Feedback is per dialog session: reopening starts clean.
+  await page.getByRole("button", { name: "Close Share route" }).click();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Share route" })
+      .getByRole("status")
+      .filter({ hasText: "downloaded" }),
+  ).toHaveCount(0);
+});
+test("rename and clear failures from full or unavailable storage stay in their dialog and keep the input", async ({
+  page,
+}) => {
+  await plan(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Saved · View" }).click();
+  await page
+    .getByRole("button", { name: /^Rename Review trailhead · East/ })
+    .click();
+  const rename = page.getByRole("dialog", { name: "Rename" });
+  await rename
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("My new name");
+  await page.evaluate(() => {
+    (window as any).__setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new DOMException("full", "QuotaExceededError");
+    };
+  });
+  await rename.getByRole("button", { name: "Save name" }).click();
+  await expect(
+    rename.getByRole("alert").filter({ hasText: "Browser storage is full" }),
+  ).toBeVisible();
+  await expect(
+    rename.getByRole("textbox", { name: "Name", exact: true }),
+  ).toHaveValue("My new name");
+  // Retry after space is available.
+  await page.evaluate(() => {
+    Storage.prototype.setItem = (window as any).__setItem;
+  });
+  await rename.getByRole("button", { name: "Save name" }).click();
+  await expect(rename).toHaveCount(0);
+});
+test("clearing recents with unavailable storage reports it in the dialog and can be cancelled", async ({
+  page,
+}) => {
+  await plan(page);
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Saved", exact: true })
+    .click();
+  await page.getByRole("tab", { name: /^Recent/ }).click();
+  await page.getByRole("button", { name: "Clear recents" }).click();
+  const dialog = page.getByRole("dialog");
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("blocked", "SecurityError");
+    };
+  });
+  await dialog.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(
+    dialog
+      .getByRole("alert")
+      .filter({ hasText: "Browser storage is unavailable" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+});
