@@ -597,12 +597,20 @@ async function trackWorkers(page: Page) {
     const created: Worker[] = [];
     (window as any).__workers = created;
     (window as any).__dropInspect = false;
+    (window as any).__holdBoot = false;
+    (window as any).__heldBoots = [];
     window.Worker = class extends Original {
       constructor(url: string | URL, options?: WorkerOptions) {
         super(url, options);
         created.push(this);
       }
       postMessage(message: any, ...rest: any[]) {
+        if (message?.request?.op === "boot" && (window as any).__holdBoot) {
+          (window as any).__heldBoots.push(() =>
+            (super.postMessage as any)(message, ...rest),
+          );
+          return;
+        }
         if (message?.request?.op === "inspect" && (window as any).__dropInspect)
           return;
         (super.postMessage as any)(message, ...rest);
@@ -676,4 +684,54 @@ test("a worker crash while opening a saved route can be restarted and the same r
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeEnabled();
   await expect(page.getByText("No route is available")).toHaveCount(0);
+});
+
+test("opening another saved route while a restart boots is not overwritten by the abandoned restart", async ({
+  page,
+}) => {
+  await trackWorkers(page);
+  await plan(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  // A second, different saved route: an exercise loop.
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Saved · View" }).click();
+  await page.evaluate(() => ((window as any).__dropInspect = true));
+  await page
+    .getByRole("button", {
+      name: /Review trailhead · East to Review trailhead · South/,
+    })
+    .first()
+    .click();
+  await crashWorker(page);
+  await page.evaluate(() => {
+    (window as any).__dropInspect = false;
+    (window as any).__holdBoot = true;
+  });
+  await page.getByRole("button", { name: "Restart route planning" }).click();
+  // Back to Saved and open the loop while the replacement worker is still booting.
+  await page.getByRole("button", { name: "← Back" }).click();
+  await page
+    .getByRole("button", { name: /mi loop from/ })
+    .first()
+    .click();
+  await page.evaluate(() => {
+    (window as any).__holdBoot = false;
+    ((window as any).__heldBoots as Array<() => void>)
+      .splice(0)
+      .forEach((f) => f());
+  });
+  await page.waitForTimeout(500);
+  // The abandoned restart must not attach the first route's 1.4 mi preview to the loop.
+  await expect(page.getByText("1.4", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: /mi loop from Review trailhead/ }),
+  ).toBeVisible();
 });

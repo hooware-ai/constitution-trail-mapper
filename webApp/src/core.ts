@@ -128,10 +128,11 @@ export class RoutingClient {
     ++this.generation;
     this.worker.terminate();
     const attempt = this.startWorker().then(
-      () => {
+      (booted) => {
         this.recovering = null;
         this.unavailable = null;
         this.onUnavailableChange?.(false);
+        return booted;
       },
       (error) => {
         this.recovering = null;

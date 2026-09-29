@@ -165,20 +165,25 @@ export function App() {
   async function restartRouting() {
     const client = clientRef.current;
     if (!client) return;
+    // Own the operation from the click, so leaving or opening another route while the worker boots
+    // abandons this continuation instead of letting it apply results to newer work.
+    const token = ++operation.current;
+    const retained =
+      screen === "preview" && selected && !preview && !nav.record;
+    const route = retained ? selected.route : null;
     setError("");
     try {
       await client.recover();
-      if (clientRef.current !== client) return;
+      if (clientRef.current !== client || token !== operation.current) return;
       success("Route planning restarted");
       // A Saved/Recent or restored route whose inspection was interrupted keeps its geometry: inspect it again.
-      if (screen === "preview" && selected && !preview && !nav.record) {
-        const token = ++operation.current;
+      if (route) {
         setChecking(true);
         try {
           const inspected = routeOkay(
             await client.call<RouteResult>({
               op: "inspect",
-              route: selected.route,
+              route,
               now: Date.now(),
             }),
           );
@@ -190,7 +195,8 @@ export function App() {
         }
       }
     } catch (e) {
-      if (clientRef.current === client) setError(errorText(e));
+      if (clientRef.current === client && token === operation.current)
+        setError(errorText(e));
     }
   }
   useEffect(() => {
