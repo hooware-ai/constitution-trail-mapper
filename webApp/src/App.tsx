@@ -33,7 +33,6 @@ import {
   ForegroundNavigationController,
   bindNavigationLifecycle,
   browserLocationPort,
-  usableFix,
   type NavigationState,
 } from "./platform/navigation";
 import { acquirePlannerLocation } from "./platform/plannerLocation";
@@ -622,13 +621,10 @@ export function App() {
     }
   }
   async function reroute(mode: "rejoin" | "return" | "destination") {
-    if (
-      !selected ||
-      !nav.fix ||
-      !usableFix(nav.fix, Date.now()) ||
-      !clientRef.current
-    )
-      return;
+    const controller = controllerRef.current;
+    // One captured snapshot supplies both the worker payload and the later applicability check.
+    const request = controller?.rerouteRequest();
+    if (!controller || !request || !clientRef.current) return;
     const token = ++operation.current;
     setBusy(true);
     setError("");
@@ -636,14 +632,27 @@ export function App() {
       const result = routeOkay(
         await clientRef.current.call<RouteResult>({
           op: "reroute",
-          route: selected.route,
-          point: { latitude: nav.fix.latitude, longitude: nav.fix.longitude },
-          progress: nav.routeProgressMeters,
+          route: request.record.route,
+          point: {
+            latitude: request.fix.latitude,
+            longitude: request.fix.longitude,
+          },
+          progress: request.progress,
           mode,
           now: Date.now(),
         }),
       );
       if (token !== operation.current) return;
+      // A newer fix may have queued behind this reroute: wait for it so the current position is known.
+      const settled = await controller.whenEvaluationsSettled();
+      if (token !== operation.current) return;
+      // Guidance may have been discarded or the rider may have moved while the worker computed.
+      if (!settled || controller.rerouteStaleReason(request)) {
+        setError(
+          "Your position changed while the new route was being found, so your current route was kept. Choose a reroute again if you still need one.",
+        );
+        return;
+      }
       if (!result.canNavigate)
         throw new Error(
           result.warnings.join(" ") ||
@@ -651,13 +660,13 @@ export function App() {
         );
       const record = makeRecord(
         result,
-        draft,
-        mode === "return" ? "Returning to start" : selected.title,
+        request.record.draft as Draft,
+        mode === "return" ? "Returning to start" : request.record.title,
       );
       setPreview(result);
       setSelected(record);
       snapshotState.current = undefined;
-      controllerRef.current?.start(record);
+      controller.start(record);
       applyStore(storeRef.current!.recordSuccess(record));
     } catch (e) {
       if (token === operation.current) setError(errorText(e));
