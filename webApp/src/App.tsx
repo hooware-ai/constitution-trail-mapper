@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { RoutingClient } from "./core";
+import {
+  BrowserHistorySync,
+  resolvePop,
+  type PopContext,
+} from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { AccessConnections } from "./AccessConnections";
 import {
@@ -328,6 +333,80 @@ export function App() {
       if (clientRef.current === client) clientRef.current = null;
     };
   }, [local, bootAttempt]);
+  const overlayOpen = popup !== null || field !== null;
+  const historyRef = useRef<BrowserHistorySync | null>(null),
+    popContext = useRef<PopContext>({
+      screen,
+      overlayOpen,
+      navigating: false,
+      hasPreview: false,
+    }),
+    goRef = useRef<(next: Screen) => void>(() => {}),
+    fromPop = useRef(false),
+    closingByPop = useRef(false),
+    lastSynced = useRef<{ screen: string; overlay: boolean } | null>(null);
+  popContext.current = {
+    screen,
+    overlayOpen,
+    navigating: screen === "navigation",
+    hasPreview: !!(selected && preview),
+  };
+  goRef.current = go;
+  // Browser Back/Forward: history entries hold only a screen name, never route or place data.
+  useEffect(() => {
+    if (!sessionReady) return;
+    const sync: BrowserHistorySync = new BrowserHistorySync(
+      window.history,
+      (target, direction) => {
+        const action = resolvePop(popContext.current, target, direction);
+        if (action.type === "close-overlay") {
+          closingByPop.current = true;
+          setPopup(null);
+          setField(null);
+        } else if (action.type === "keep-navigating") {
+          sync.push("navigation");
+          setToast({
+            message:
+              "Your ride is still active. Use Stop navigation to end it.",
+          });
+        } else if (action.type === "stay") {
+          sync.replace(popContext.current.screen);
+        } else {
+          fromPop.current = true;
+          goRef.current(action.screen as Screen);
+        }
+      },
+    );
+    sync.start(popContext.current.screen);
+    historyRef.current = sync;
+    lastSynced.current = {
+      screen: popContext.current.screen,
+      overlay: popContext.current.overlayOpen,
+    };
+    const onPop = (event: PopStateEvent) => sync.handlePop(event.state);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      historyRef.current = null;
+    };
+  }, [sessionReady]);
+  useEffect(() => {
+    const sync = historyRef.current,
+      last = lastSynced.current;
+    if (!sync || !last) return;
+    if (last.overlay && !overlayOpen) {
+      if (closingByPop.current) closingByPop.current = false;
+      else sync.popOverlay();
+    }
+    if (last.screen !== screen) {
+      if (fromPop.current) {
+        fromPop.current = false;
+        sync.replace(screen);
+      } else sync.push(screen);
+    }
+    if (!last.overlay && overlayOpen) sync.push(screen, true);
+    lastSynced.current = { screen, overlay: overlayOpen };
+  }, [screen, overlayOpen]);
   useEffect(() => {
     if (!sessionReady || !sessionRef.current) return;
     const savedScreen: BrowserSession["screen"] =

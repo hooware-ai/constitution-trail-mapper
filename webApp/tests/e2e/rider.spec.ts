@@ -551,3 +551,143 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+const savedNav = (page: Page) =>
+  page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Saved", exact: true });
+test("browser Back and Forward move between main screens instead of leaving the app", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await savedNav(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Saved", exact: true, level: 1 }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await page.goForward();
+  await expect(
+    page.getByRole("heading", { name: "Saved", exact: true, level: 1 }),
+  ).toBeVisible();
+  expect(page.url()).toMatch(/\/$/);
+});
+test("browser Back from the map picker and from a preview returns to the intact planner draft", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await choose(page, "Destination", "Review trailhead · South");
+  await page.getByRole("button", { name: /^Start:/ }).click();
+  await page.getByRole("button", { name: "Pick on map", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Use map center" }),
+  ).toBeVisible();
+  await page.goBack();
+  // The chooser dialog was open under the picker: Back returns to the planner, not Home.
+  await expect(
+    page.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+    "Review trailhead · East",
+  );
+  await expect(
+    page.getByRole("button", { name: /^Destination:/ }),
+  ).toContainText("Review trailhead · South");
+  await page.goForward();
+  // Stepping forward never re-opens the picker or a dialog.
+  await expect(
+    page.getByRole("button", { name: "Use map center" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+    "Review trailhead · East",
+  );
+  await page.goForward();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+});
+test("browser Back closes an open dialog before it leaves the screen", async ({
+  page,
+}) => {
+  await plan(page);
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Directions" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "Directions" })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  // Closing with the app's own button also leaves history tidy: one Back reaches the planner.
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  await page.getByRole("button", { name: "Close Directions" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.goBack();
+  await expect(
+    page.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeVisible();
+});
+test("browser Back during an active ride keeps navigating and Forward never restarts it", async ({
+  page,
+}) => {
+  await plan(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await acceptedFix(page, 40.51, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await page.goBack();
+  await expect(page.getByText("Your ride is still active")).toBeVisible();
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Stop navigation" }).first(),
+  ).toBeVisible();
+  await page.goForward();
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  // Only the explicit Stop button ends the ride; then Back/Forward never brings it back.
+  await page.getByRole("button", { name: "Stop navigation" }).last().click();
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
+  await page.goBack();
+  await page.goForward();
+  await expect(page.locator(".guidance")).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__gps.watches())).toBe(0);
+});
+test("history entries and the URL never contain places, labels or route geometry, and Back still works after a reload", async ({
+  page,
+}) => {
+  await plan(page);
+  const before = page.url();
+  const states = await page.evaluate(() => JSON.stringify(history.state));
+  expect(states).not.toMatch(/Review trailhead|latitude|longitude|-88\.|40\./);
+  expect(Object.keys(JSON.parse(states)).sort().join()).toMatch(
+    /^(overlay,screen,tm|screen,tm)$/,
+  );
+  expect(page.url()).toBe(before);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await page.goBack();
+  // After a reload the earlier entries fall back to a safe screen rather than leaving the app or showing nothing.
+  await expect(
+    page.getByRole("button", { name: /Go somewhere|Find route/ }).first(),
+  ).toBeVisible();
+  expect(page.url()).toBe(before);
+});
