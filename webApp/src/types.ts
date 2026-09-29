@@ -36,12 +36,20 @@ export type Segment = {
   roles?: string[];
   routeRoles?: string[];
 };
+export type AccessGap = {
+  id: string;
+  distanceMeters: number;
+  from: Point;
+  to: Point;
+  label: string;
+};
 export type RouteResult = {
   ok: true;
   route: unknown;
   segments: Segment[];
   distance: number;
   accessDistance: number;
+  accessGaps?: AccessGap[];
   sharedDistance: number;
   kind: string;
   instructions: Instruction[];

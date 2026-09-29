@@ -63,6 +63,7 @@ class WebRoutingBridgeTest {
             start, finish, null, nowEpochMillis = now,
         ))
         assertEquals(expected, route)
+        assertEquals(JsonArray(emptyList()), result["accessGaps"])
         assertTrue(result["instructions"]!!.jsonArray.size >= 2)
         val reopened = call(bridge, buildJsonObject { put("op", "inspect"); put("route", result.getValue("route")); put("now", now) })
         assertEquals(result, reopened)
@@ -88,6 +89,8 @@ class WebRoutingBridgeTest {
         assertTrue(result["segments"]!!.jsonArray.all { it.jsonObject["isRouted"]!!.jsonPrimitive.boolean })
         val raw = Json.decodeFromJsonElement<TrailRoute>(result.getValue("route"))
         assertTrue(raw.segments.any { !it.isRouted })
+        assertTrue(result["accessGaps"]!!.jsonArray.isNotEmpty())
+        assertTrue(result["warnings"]!!.jsonArray.none { "unmapped ground" in it.jsonPrimitive.content })
         assertTrue(result["segments"]!!.jsonArray.none { segment ->
             segment.jsonObject["points"]!!.jsonArray.any { it.jsonObject["longitude"]!!.jsonPrimitive.double == -89.001 }
         })
@@ -120,6 +123,79 @@ class WebRoutingBridgeTest {
         assertEquals(Json.encodeToJsonElement(firstTrail.points), drawable[0].jsonObject["points"])
         assertEquals(Json.encodeToJsonElement(lastTrail.points), drawable[1].jsonObject["points"])
         assertTrue(drawable.all { it.jsonObject["isRouted"]!!.jsonPrimitive.boolean })
+    }
+
+    @Test fun accessGapsDescribeOnlyEstimatedConnectionsWithExactDistancesAndLabels() {
+        fun point(meters: Double) = MapPoint(0.0, meters / 6_371_008.8 * 180.0 / kotlin.math.PI)
+        val points = listOf(0.0, 24.0, 124.0, 129.0, 229.0, 229.275, 329.275, 343.275).map(::point)
+        val segments = points.zipWithNext().mapIndexed { index, (from, to) ->
+            TrailRouteSegment(
+                type = if (index == 5) TrailRouteSegmentType.Trail else TrailRouteSegmentType.Access,
+                points = listOf(from, to), isRouted = index % 2 == 1,
+                name = when (index) { 1 -> "Matlock Dr"; 3 -> " "; 5 -> "Test Trail"; else -> null },
+            )
+        }
+        val route = TrailRoute(segments = segments, totalDistanceMeters = 343.275, ordinaryAccessDistanceMeters = 243.275, totalCost = 1.0)
+        val result = inspect(route)
+        val gaps = result["accessGaps"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("gap-0", "gap-2", "gap-4", "gap-6"), gaps.map { it["id"]!!.jsonPrimitive.content })
+        assertEquals(listOf("Start connection", "Near Matlock Dr", "Near Test Trail", "Destination connection"), gaps.map { it["label"]!!.jsonPrimitive.content })
+        listOf(24.0, 5.0, 0.275, 14.0).forEachIndexed { index, expected ->
+            assertEquals(expected, gaps[index]["distanceMeters"]!!.jsonPrimitive.double, 1e-8)
+            assertEquals(Json.encodeToJsonElement(segments[index * 2].points.first()), gaps[index]["from"])
+            assertEquals(Json.encodeToJsonElement(segments[index * 2].points.last()), gaps[index]["to"])
+        }
+        assertEquals(243.275, result["accessDistance"]!!.jsonPrimitive.double)
+        assertEquals(43.275, gaps.sumOf { it["distanceMeters"]!!.jsonPrimitive.double }, 1e-8)
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(result["warnings"]!!.jsonArray.isEmpty())
+        assertEquals(3, result["segments"]!!.jsonArray.size)
+        assertEquals(result, inspect(route))
+        val loopGaps = inspect(route.copy(kind = TrailRouteKind.ExerciseLoop))["accessGaps"]!!.jsonArray
+        assertEquals("Return connection", loopGaps.last().jsonObject["label"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun unnamedInternalAccessGapHasNeutralLocationLabel() {
+        val points = listOf(start, MapPoint(40.401, -89.0), MapPoint(40.4011, -89.0), finish)
+        val segments = points.zipWithNext().mapIndexed { index, (from, to) ->
+            TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(from, to), isRouted = index != 1, name = " ")
+        }
+        val result = inspect(TrailRoute(segments = segments, totalDistanceMeters = 4000.0, ordinaryAccessDistanceMeters = 12.0, totalCost = 1.0))
+        val gap = result["accessGaps"]!!.jsonArray.single().jsonObject
+        assertEquals("Along the route", gap["label"]!!.jsonPrimitive.content)
+        assertEquals("gap-1", gap["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun accessGapMetadataUsesTheExistingNavigationLengthThreshold() {
+        val trail = TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(start, finish))
+        for (gapMeters in listOf(0.0, 0.005, 0.015)) {
+            val from = MapPoint(start.latitude - gapMeters / 6_371_008.8 * 180.0 / kotlin.math.PI, start.longitude)
+            val route = TrailRoute(
+                segments = listOf(TrailRouteSegment(TrailRouteSegmentType.Access, listOf(from, start), isRouted = false), trail),
+                totalDistanceMeters = 3000.0, ordinaryAccessDistanceMeters = gapMeters, totalCost = 1.0,
+            )
+            val result = inspect(route)
+            assertEquals(gapMeters > 0.01, result["accessGaps"]!!.jsonArray.isNotEmpty())
+            assertEquals(gapMeters <= 0.01, result["canNavigate"]!!.jsonPrimitive.boolean)
+            assertEquals(listOf(Json.encodeToJsonElement(trail.points)), result["segments"]!!.jsonArray.map { it.jsonObject["points"] })
+        }
+    }
+
+    @Test fun accessGapDistanceFollowsEveryVertexWhileMetadataKeepsOnlyEndpoints() {
+        val bend = MapPoint(40.401, -89.001)
+        val connection = MapPoint(40.4, -88.999)
+        val gap = TrailRouteSegment(TrailRouteSegmentType.Access, listOf(start, bend, connection), isRouted = false)
+        val route = TrailRoute(
+            segments = listOf(gap, TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(connection, finish))),
+            totalDistanceMeters = 4000.0, ordinaryAccessDistanceMeters = 400.0, totalCost = 1.0,
+        )
+        val described = inspect(route)["accessGaps"]!!.jsonArray.single().jsonObject
+        val expected = TrailDistanceSijko.metersBetween(start, bend) + TrailDistanceSijko.metersBetween(bend, connection)
+        assertEquals(expected, described["distanceMeters"]!!.jsonPrimitive.double)
+        assertTrue(expected > TrailDistanceSijko.metersBetween(start, connection))
+        assertEquals(Json.encodeToJsonElement(start), described["from"])
+        assertEquals(Json.encodeToJsonElement(connection), described["to"])
+        assertEquals(setOf("id", "distanceMeters", "from", "to", "label"), described.keys)
     }
 
     @Test fun savedRouteIsBlockedWhenOfficialClosureBecomesActive() {
@@ -220,6 +296,10 @@ class WebRoutingBridgeTest {
         val expected = TrailRouteRerouteSijko.pointToPoint(NormalizedTrailNetworkJsonSijko.features(fixture), oldRoute, point, null, nowEpochMillis = now)
         assertEquals(assertIs<TrailRouteRerouteOutcome.Replacement>(expected).route, actual)
     }
+
+    private fun inspect(route: TrailRoute): JsonObject = call(loaded(), buildJsonObject {
+        put("op", "inspect"); put("route", Json.encodeToJsonElement(route)); put("now", now)
+    })
 
     private fun mapPoint(bridge: WebRoutingBridge, point: MapPoint, proposed: Boolean = false, at: Long = now): JsonObject =
         call(bridge, buildJsonObject {

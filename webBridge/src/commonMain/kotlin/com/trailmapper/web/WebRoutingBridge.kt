@@ -120,7 +120,8 @@ class WebRoutingBridge {
         validateRoute(route)
         val advisories = TrailRouteAdvisorySijko.forRoute(route, now)
         val blocking = TrailRouteClosureGateSijko.blockingAdvisories(route, now)
-        val estimated = hasEstimatedAccess(route)
+        val accessGaps = accessGapJson(route)
+        val estimated = accessGaps.isNotEmpty()
         val proposed = route.edges.any { it.status == TrailFeatureStatus.Proposed } ||
             route.segments.any { TrailNetworkRole.ProposedTrails in it.routeRoles }
         val warnings = advisories.map { "${it.title}: ${it.message}" }.toMutableList()
@@ -131,7 +132,6 @@ class WebRoutingBridge {
             val actualMiles = kotlin.math.round(route.totalDistanceMeters / 1609.344 * 10.0) / 10.0
             warnings += "The closest available loop is $actualMiles miles for your $requestedMiles-mile target. Review its length before riding."
         }
-        if (estimated) warnings += "Access to this route is estimated across unmapped ground. Choose an endpoint on a mapped trail or provide road access data before navigating."
         if (proposed) warnings += "This route includes proposed trails and is preview-only. They are not confirmed usable infrastructure."
         return buildJsonObject {
             put("route", json.encodeToJsonElement(route))
@@ -144,6 +144,7 @@ class WebRoutingBridge {
             } }))
             put("distance", route.totalDistanceMeters)
             put("accessDistance", route.ordinaryAccessDistanceMeters)
+            put("accessGaps", accessGaps)
             put("sharedDistance", route.sharedRoadwayDistanceMeters)
             put("kind", route.kind.name)
             put("summary", TrailRouteSummarySijko.summaryFor(route))
@@ -307,9 +308,25 @@ class WebRoutingBridge {
         addAll(TrailRouteDrawableSegmentMergeSijko.merge(run))
     }
 
-    private fun hasEstimatedAccess(route: TrailRoute): Boolean = route.segments.any { segment ->
-        !segment.isRouted && segment.points.zipWithNext().sumOf { (a, b) -> TrailDistanceSijko.metersBetween(a, b) } > 0.01
-    }
+    private fun accessGapJson(route: TrailRoute): JsonArray = JsonArray(route.segments.mapIndexedNotNull { index, segment ->
+        if (segment.isRouted) return@mapIndexedNotNull null
+        val meters = segment.points.zipWithNext().sumOf { (a, b) -> TrailDistanceSijko.metersBetween(a, b) }
+        if (!(meters > 0.01)) return@mapIndexedNotNull null
+        val label = when (index) {
+            0 -> "Start connection"
+            route.segments.lastIndex -> if (route.kind == TrailRouteKind.ExerciseLoop) "Return connection" else "Destination connection"
+            else -> listOfNotNull(route.segments.getOrNull(index - 1), route.segments.getOrNull(index + 1))
+                .firstNotNullOfOrNull { it.name?.takeIf(String::isNotBlank) }
+                ?.let { "Near $it" } ?: "Along the route"
+        }
+        buildJsonObject {
+            put("id", "gap-$index")
+            put("distanceMeters", meters)
+            put("from", json.encodeToJsonElement(segment.points.first()))
+            put("to", json.encodeToJsonElement(segment.points.last()))
+            put("label", label)
+        }
+    })
     private fun strings(values: List<String>): JsonArray = JsonArray(values.map(::JsonPrimitive))
     private fun instructionJson(instruction: TrailRouteInstruction): JsonObject = buildJsonObject {
         put("text", instruction.text); put("distance", instruction.distanceMeters)

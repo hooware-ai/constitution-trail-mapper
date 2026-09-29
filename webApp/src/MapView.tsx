@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Feature, Point, RouteResult, Closure } from "./types";
+import { gapDistance } from "./gapDistance";
+const routePoints = (route: RouteResult) => [
+  ...route.segments.flatMap((segment) => segment.points),
+  ...(route.accessGaps ?? []).flatMap((gap) => [gap.from, gap.to]),
+];
 const xy = (p: Point): L.LatLngTuple => [p.latitude, p.longitude];
 const plain = (text: string) => {
   const node = document.createElement("span");
@@ -11,6 +16,7 @@ const plain = (text: string) => {
 export function MapView({
   features,
   route,
+  gapFocus,
   proposed,
   picking,
   onPick,
@@ -20,6 +26,7 @@ export function MapView({
 }: {
   features: Feature[];
   route: RouteResult | null;
+  gapFocus?: { id: string } | null;
   proposed: boolean;
   picking?: boolean;
   onPick?: (p: Point) => void;
@@ -30,6 +37,7 @@ export function MapView({
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
     layers = useRef<L.LayerGroup | null>(null);
+  const gapMarkers = useRef(new Map<string, L.Marker>());
   const pick = useRef(onPick),
     [tiles, setTiles] = useState(false),
     [tileError, setTileError] = useState(false);
@@ -80,6 +88,7 @@ export function MapView({
       g = layers.current;
     if (!m || !g) return;
     g.clearLayers();
+    gapMarkers.current.clear();
     features
       .filter((f) => proposed || f.status !== "Proposed")
       .forEach((f) =>
@@ -210,13 +219,47 @@ export function MapView({
             .addTo(g);
       }
     }
+    (route?.accessGaps ?? []).forEach((gap, index) => {
+      const bounds = L.latLngBounds([xy(gap.from), xy(gap.to)]);
+      const label = `Connection ${index + 1}: ${gap.label}, ${gapDistance(gap.distanceMeters)}`;
+      const details = document.createElement("div");
+      const heading = document.createElement("strong");
+      heading.textContent = label;
+      const note = document.createElement("p");
+      note.textContent =
+        "Map data does not confirm a traversable connection here. This distance is included in the route estimate.";
+      details.append(heading, note);
+      const marker = L.marker(bounds.getCenter(), {
+        icon: L.divIcon({
+          className: "connection-marker",
+          html: `<span class="connection-number" aria-hidden="true">${index + 1}</span>`,
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
+          popupAnchor: [0, -12],
+        }),
+        title: label + " — unverified",
+        keyboard: true,
+        bubblingMouseEvents: false,
+      })
+        .bindTooltip(plain(label), { direction: "auto" })
+        .bindPopup(details, {
+          maxWidth: 260,
+          className: "connection-popup",
+          autoPanPaddingTopLeft: [48, 116],
+          autoPanPaddingBottomRight: [16, 32],
+        })
+        .addTo(g);
+      marker.getElement()?.setAttribute("aria-label", label + " — unverified");
+      marker.on("popupopen", () => marker.closeTooltip());
+      gapMarkers.current.set(gap.id, marker);
+    });
   }, [features, route, proposed, closures]);
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    const pts =
-      route?.segments.flatMap((s) => s.points) ??
-      features.flatMap((f) => f.paths.flat());
+    const pts = route
+      ? routePoints(route)
+      : features.flatMap((f) => f.paths.flat());
     if (pts.length) {
       const bounds =
         route || fixture
@@ -227,7 +270,21 @@ export function MapView({
             ]);
       m.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
-  }, [route?.key, features, fixture]);
+  }, [route, features, fixture]);
+  useEffect(() => {
+    const gap = route?.accessGaps?.find((item) => item.id === gapFocus?.id);
+    const m = map.current;
+    if (!m || !gap) return;
+    root.current?.parentElement?.scrollIntoView({ block: "nearest" });
+    m.fitBounds(L.latLngBounds([xy(gap.from), xy(gap.to)]), {
+      padding: [56, 56],
+      maxZoom: 19,
+      animate: false,
+    });
+    const marker = gapMarkers.current.get(gap.id);
+    marker?.getElement()?.focus({ preventScroll: true });
+    marker?.openPopup();
+  }, [gapFocus, route]);
   useEffect(() => {
     if (!map.current || !position) return;
     const marker = L.circleMarker(xy(position), {
@@ -255,9 +312,9 @@ export function MapView({
     };
   }, [tiles, fixture]);
   function fit() {
-    const pts =
-      route?.segments.flatMap((s) => s.points) ??
-      features.flatMap((f) => f.paths.flat());
+    const pts = route
+      ? routePoints(route)
+      : features.flatMap((f) => f.paths.flat());
     if (pts.length)
       map.current?.fitBounds(L.latLngBounds(pts.map(xy)), {
         padding: [32, 32],
@@ -267,7 +324,13 @@ export function MapView({
   return (
     <section
       className={"map-wrap" + (picking ? " picking" : "")}
-      aria-label={route ? "Complete route map" : "Trail network map"}
+      aria-label={
+        route?.accessGaps?.length
+          ? "Route map with unverified connections"
+          : route
+            ? "Complete route map"
+            : "Trail network map"
+      }
     >
       <div
         className="map"

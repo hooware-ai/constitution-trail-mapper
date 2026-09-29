@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RoutingClient } from "./core";
 import { MapView } from "./MapView";
+import { AccessConnections } from "./AccessConnections";
 import {
   EndpointField,
   Legend,
@@ -123,6 +124,7 @@ export function App() {
     >(null),
     [renameValue, setRenameValue] = useState(""),
     [exactExport, setExactExport] = useState(false);
+  const [gapFocus, setGapFocus] = useState<{ id: string } | null>(null);
   const [locationRequest, setLocationRequest] = useState<{
     target: "start" | "destination";
     phase: "waiting" | "failure";
@@ -378,6 +380,7 @@ export function App() {
   }
   function go(next: Screen) {
     cancelLocation();
+    setGapFocus(null);
     if (controllerRef.current?.state.record && next !== "navigation")
       controllerRef.current.stop();
     const token = ++operation.current;
@@ -522,6 +525,7 @@ export function App() {
   }
   async function openRoute(record: RouteRecord, from: "plan" | "saved") {
     if (!clientRef.current) return;
+    setGapFocus(null);
     const token = ++operation.current;
     setSelected(record);
     setPreview(null);
@@ -583,6 +587,7 @@ export function App() {
   }
   async function recalculate() {
     if (!selected || !clientRef.current) return;
+    setGapFocus(null);
     const token = ++operation.current;
     setChecking(true);
     setError("");
@@ -854,6 +859,7 @@ export function App() {
         <MapView
           features={network?.features ?? []}
           route={showRoute}
+          gapFocus={gapFocus}
           proposed={draft.proposed}
           picking={screen === "map-picker"}
           onPick={chooseMap}
@@ -1159,6 +1165,10 @@ export function App() {
                       : null}
                   </p>
                   {preview.summary && <p>{preview.summary}</p>}
+                  <AccessConnections
+                    gaps={preview.accessGaps ?? []}
+                    onShow={(id) => setGapFocus({ id })}
+                  />
                   {preview.warnings.map((warning, index) => (
                     <p className="warning" key={index}>
                       {warning}
@@ -1194,9 +1204,9 @@ export function App() {
                   </button>
                   {!preview.canNavigate && (
                     <p className="caption">
-                      Navigation is blocked while this route has unsafe or
-                      unverified access. Choose mapped endpoints and review the
-                      warnings above.
+                      {preview.accessGaps?.length
+                        ? "Navigation needs a continuously mapped route. The connections listed above are still unverified."
+                        : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
                     </p>
                   )}
                   <div className="actions preview-actions">

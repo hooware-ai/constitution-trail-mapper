@@ -1104,3 +1104,75 @@ dialog::backdrop {
 .closure-label.leaflet-tooltip-left::before {
   border-left-color: #b45309;
 }
+
+.access-connections {
+  margin: 20px 0;
+  padding: 16px;
+  background: #f1f5f7;
+  border: 1px solid #c3d1da;
+  border-radius: 6px;
+  color: #294858;
+  font-size: 0.87rem;
+}
+.access-connections h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.access-connections p {
+  margin: 8px 0;
+}
+.access-connections .connection-total {
+  color: #405763;
+  font-size: 0.8rem;
+}
+.access-connections ol {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.access-connections li + li {
+  border-top: 1px solid #c3d1da;
+}
+.access-connections button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.access-connections button:hover {
+  background: #e4edf2;
+}
+.connection-number {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 25px;
+  height: 25px;
+  border: 2px solid #41647a;
+  border-radius: 5px;
+  background: white;
+  color: #294858;
+  font:
+    700 13px/1 "Segoe UI",
+    system-ui,
+    sans-serif;
+}
+.connection-distance {
+  margin-left: auto;
+  white-space: nowrap;
+  font-weight: 400;
+}
+.connection-marker {
+  display: grid;
+  place-items: center;
+  background: transparent;
+}
+.connection-marker .connection-number {
+  box-shadow: 0 1px 4px #18334040;
+}
