@@ -199,8 +199,12 @@ class WebRoutingBridge {
                 2.0 * (fix.accuracyMeters ?: TRAVERSAL_DEFAULT_ACCURACY_METERS).coerceIn(0.0, TRAVERSAL_MAX_ACCURACY_METERS) +
                 TRAVERSAL_SLACK_METERS
             val onRoute = onRouteOccurrences(route, point)
-            val chosen = onRoute
-                .filter { kotlin.math.abs(it.along - progress) <= reach }
+            val reachable = onRoute.filter { kotlin.math.abs(it.along - progress) <= reach }
+            // Physical closeness first: an old vertex a few metres away must not beat the exact position on
+            // the route. Only among places equally close to the rider does saved progress pick the pass.
+            val closest = reachable.minOfOrNull { it.distance }
+            val chosen = reachable
+                .filter { closest != null && it.distance <= closest + TRAVERSAL_PHYSICAL_TOLERANCE_METERS }
                 // Where the route retraces itself two passes can be equally near; riders move forward, so prefer that one.
                 .minWithOrNull(compareBy<Occurrence>({ kotlin.math.abs(it.along - progress) - if (it.along >= progress) TRAVERSAL_FORWARD_BIAS_METERS else 0.0 }, { it.distance }))
             when {
@@ -469,5 +473,6 @@ private const val TRAVERSAL_CONTINUITY_METERS = 300.0
 private const val PINNED_OCCURRENCE_TOLERANCE_METERS = 5.0
 private const val TRAVERSAL_SLACK_METERS = 25.0
 private const val TRAVERSAL_FORWARD_BIAS_METERS = 5.0
+private const val TRAVERSAL_PHYSICAL_TOLERANCE_METERS = 5.0
 private const val TRAVERSAL_DEFAULT_ACCURACY_METERS = 25.0
 private const val TRAVERSAL_MAX_ACCURACY_METERS = 50.0

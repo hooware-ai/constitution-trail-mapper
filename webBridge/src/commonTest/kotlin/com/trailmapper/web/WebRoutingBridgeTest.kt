@@ -497,6 +497,30 @@ class WebRoutingBridgeTest {
         assertTrue(teleport["ambiguous"]!!.jsonPrimitive.boolean || kotlin.math.abs(teleport["progress"]!!.jsonPrimitive.double - 939.0) < 900.0)
     }
 
+    /** A 1 km square ridden north first: (0,0) -> (0,1000) -> (1000,1000) -> (1000,0) -> (0,0). */
+    private fun northFirstSquare(): TrailRoute {
+        val corners = listOf(at(0.0, 0.0), at(0.0, 1000.0), at(1000.0, 1000.0), at(1000.0, 0.0), at(0.0, 0.0))
+        return TrailRoute(
+            segments = corners.zipWithNext().map { (from, to) -> TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(from, to)) },
+            totalDistanceMeters = 4000.0, ordinaryAccessDistanceMeters = 0.0, totalCost = 1.0, kind = TrailRouteKind.ExerciseLoop,
+        )
+    }
+
+    @Test fun ordinaryRidingAroundACornerAdvancesWithTheExactPositionNotTheOldVertex() {
+        val square = northFirstSquare()
+        val first = snapshot(square, at(0.0, 1000.0), progress = 1000.0, resume = true)
+        var state = first["state"]!!.jsonObject
+        var progress = first["progress"]!!.jsonPrimitive.double
+        for (east in listOf(20.0, 40.0, 60.0)) {
+            val result = snapshot(square, at(east, 1000.0), progress = progress, resume = false, state = state)
+            assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+            assertEquals(1000.0 + east, result["progress"]!!.jsonPrimitive.double, 5.0)
+            assertTrue(result["distanceFromRoute"]!!.jsonPrimitive.double < 5.0)
+            state = result["state"]!!.jsonObject
+            progress = result["progress"]!!.jsonPrimitive.double
+        }
+    }
+
     @Test fun anOrdinaryLoopFixAfterReacquisitionDoesNotBecomeAmbiguous() {
         val result = snapshot(squareLoop(), at(1000.0, 500.0), progress = 1400.0, resume = true)
         assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)

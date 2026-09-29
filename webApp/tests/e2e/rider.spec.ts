@@ -896,3 +896,52 @@ test("a stationary rider on a short repeated junction never switches to the comp
   expect(ahead.routeProgressMeters).toBeLessThan(1250);
   expect(ahead.creditedDistanceMeters).toBeLessThan(2060);
 });
+
+test("riding east around an ordinary corner advances progress, guidance and observed credit with each fix", async ({
+  page,
+}) => {
+  await seedLoopRide(
+    page,
+    [
+      [0, 0],
+      [0, 1000],
+      [1000, 1000],
+      [1000, 0],
+      [0, 0],
+    ],
+    1000,
+    4000,
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const readRide = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return JSON.parse(localStorage.getItem(key!)!);
+    });
+  const east = (meters: number) =>
+    -88.95 + meters / (111_195 * Math.cos((40.5 * Math.PI) / 180));
+  // The first corner (resume), then fixes 20, 40 and 60 m along the east leg, five seconds apart.
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.5 + 1000 / 111_195, east(0));
+  let previous = await readRide();
+  for (const meters of [20, 40, 60]) {
+    await page.clock.fastForward(5000);
+    await acceptedFix(page, 40.5 + 1000 / 111_195, east(meters));
+    const ride = await readRide();
+    expect(ride.routeProgressMeters).toBeGreaterThan(1000 + meters - 8);
+    expect(ride.routeProgressMeters).toBeLessThan(1000 + meters + 8);
+    // Observed movement of about 20 m is credited each time.
+    const gained =
+      ride.creditedDistanceMeters - previous.creditedDistanceMeters;
+    expect(gained).toBeGreaterThan(12);
+    expect(gained).toBeLessThan(28);
+    await expect(page.locator(".guidance.navigating")).toBeVisible();
+    previous = ride;
+  }
+  await expect(page.getByText("We can't tell where you are")).toHaveCount(0);
+});
