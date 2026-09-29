@@ -615,11 +615,9 @@ test("an exercise loop keeps its progress when the page is hidden and shown, and
   expect(afterReload).toBeGreaterThanOrEqual(before - 60);
 });
 
-test("reloading on the return leg of an out-and-back loop keeps the return pass", async ({
-  page,
-}) => {
+async function seedOutAndBackRide(page: Page, progress: number) {
   await page.clock.install();
-  await page.addInitScript(() => {
+  await page.addInitScript((progress) => {
     const key = "trail-mapper.fixture:trail-mapper.web.active-ride.v1";
     if (localStorage.getItem(key)) return;
     const north = (meters: number) => ({
@@ -658,12 +656,17 @@ test("reloading on the return leg of an out-and-back loop keeps the return pass"
             proposed: false,
           },
         },
-        routeProgressMeters: 3000,
+        routeProgressMeters: progress,
         creditedDistanceMeters: 2000,
         updatedAt: Date.now(),
       }),
     );
-  });
+  }, progress);
+}
+test("reloading on the return leg of an out-and-back loop keeps the return pass", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 3000);
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
@@ -681,5 +684,53 @@ test("reloading on the return leg of an out-and-back loop keeps the return pass"
   expect(stored.routeProgressMeters).toBeGreaterThan(2900);
   expect(stored.routeProgressMeters).toBeLessThan(3100);
   // Unobserved movement is never credited.
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
+
+test("moving toward the start on the return pass during a gap continues on the return pass", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 3000);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  // 500 m north: the outbound pass (500 m along) and the return pass (3500 m along) both match.
+  await acceptedFix(page, 40.5 + 500 / 111_195, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(3400);
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
+test("a position that only matches an earlier pass is ambiguous, not guidance or off route", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 3200);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  await fix(page, 40.5 + 1000 / 111_195, -88.95);
+  await expect(
+    page.getByText("We can't tell where you are on the loop"),
+  ).toBeVisible();
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "You are off route" }),
+  ).toHaveCount(0);
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBe(3200);
   expect(stored.creditedDistanceMeters).toBe(2000);
 });

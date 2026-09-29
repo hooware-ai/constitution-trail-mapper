@@ -178,25 +178,40 @@ class WebRoutingBridge {
         // A loop keeps its last observed progress as an ordering floor even when reacquiring, so a rider
         // on the return leg of repeated geometry is not matched to the completed outbound pass. Nothing is
         // credited for this: reacquisition never adds distance, it only picks the occurrence.
-        val snapshot = requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(
+        var snapshot = requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(
             route, instructions, point,
             minimumProgressMeters = if (loop) progress else 0.0,
             previousProgressMeters = progress.takeUnless { resuming },
         )) { "No drawable navigation geometry is available." }
-        // When reacquiring, a rider who is on the route only at a point earlier than their last progress is
-        // ambiguous (turned back, or an earlier pass of the same path): do not steer them as if off route
-        // or as if on the earlier leg; ask them to keep moving until the position is clear.
-        val ambiguous = resuming && loop && progress > 0.0 &&
-            snapshot.distanceFromRouteMeters > TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS &&
-            requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(route, instructions, point)).distanceFromRouteMeters <=
-            TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS
+        // The shared floor is only a soft hint (it prefers an earlier, comparably close match to tolerate
+        // start/end jitter), so validate the chosen traversal against the saved progress. Use a supported
+        // later occurrence when one exists; when the rider is on the route only at points earlier than
+        // their progress, report ambiguity instead of steering them along an earlier leg or as off route.
+        var ambiguous = false
+        if (resuming && loop && progress > 0.0) {
+            val floor = (progress - TRAVERSAL_BACKTRACK_METERS).coerceAtLeast(0.0)
+            val crossedFloor = snapshot.distanceAlongRouteMeters < floor
+            if (crossedFloor || snapshot.distanceFromRouteMeters > TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS) {
+                val onRoute = onRouteOccurrences(route, point)
+                val later = onRoute.filter { it.along >= floor }
+                val best = later.minOfOrNull { it.distance }
+                val supported = if (best == null) null else later.filter { it.distance <= best + 5.0 }.minByOrNull { it.along }
+                when {
+                    supported != null && crossedFloor -> snapshot = requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(
+                        route, instructions, point, minimumProgressMeters = supported.along, previousProgressMeters = null,
+                    ))
+                    supported == null && onRoute.isNotEmpty() -> ambiguous = true
+                }
+            }
+        }
         val deviation = TrailRouteDeviationSijko.next(previousDeviation, fix, snapshot.distanceFromRouteMeters, now)
         val credible = TrailRouteDeviationSijko.isCredible(fix, now) && (fix.accuracyMeters ?: -1.0) >= 0.0
         val verified = if (credible && !resuming) ExerciseRouteCompletionSijko.verifiedProgressMeters(state.verifiedProgress, state.maximumProgress, snapshot) else state.verifiedProgress
         val departed = credible && !resuming && ExerciseRouteCompletionSijko.hasDeparted(route, snapshot, state.departed) || state.departed
         val nextState = BrowserNavigationState(
             maximumProgress = when {
-                !credible || ambiguous -> state.maximumProgress
+                !credible -> state.maximumProgress
+                ambiguous -> maxOf(state.maximumProgress, progress)
                 resuming && loop -> maxOf(state.maximumProgress, snapshot.distanceAlongRouteMeters)
                 resuming -> snapshot.distanceAlongRouteMeters
                 else -> maxOf(state.maximumProgress, snapshot.distanceAlongRouteMeters)
@@ -308,6 +323,26 @@ class WebRoutingBridge {
         require(route.totalDistanceMeters.isFinite() && route.totalDistanceMeters >= 0.0) { "Invalid route distance." }
         route.segments.flatMap { it.points }.forEach(::validatePoint)
     }
+    private class Occurrence(val along: Double, val distance: Double)
+
+    /** Every place along the route within on-route distance of [point], using the snapshot's leg arithmetic. */
+    private fun onRouteOccurrences(route: TrailRoute, point: MapPoint): List<Occurrence> {
+        var cumulative = 0.0
+        val found = mutableListOf<Occurrence>()
+        TrailRouteDrawableSegmentMergeSijko.merge(route.segments).forEach { segment ->
+            segment.points.windowed(size = 2, step = 1).forEach { (start, end) ->
+                val leg = TrailDistanceSijko.metersBetween(start, end)
+                if (leg >= 0.1) {
+                    val projection = TrailDistanceSijko.projectToSegment(point = point, segmentStart = start, segmentEnd = end)
+                    if (projection.distanceMeters <= TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS) {
+                        found += Occurrence(cumulative + projection.distanceFromStartMeters.coerceIn(0.0, leg), projection.distanceMeters)
+                    }
+                    cumulative += leg
+                }
+            }
+        }
+        return found
+    }
     private fun routedDrawableSegments(route: TrailRoute): List<TrailRouteSegment> = buildList {
         val run = mutableListOf<TrailRouteSegment>()
         route.segments.forEach { segment ->
@@ -378,3 +413,5 @@ private data class BrowserNavigationState(
     val returnFixCount: Int = 0,
     val lastCredibleFixMillis: Long? = null,
 )
+
+private const val TRAVERSAL_BACKTRACK_METERS = 60.0

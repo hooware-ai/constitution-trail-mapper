@@ -363,6 +363,33 @@ class WebRoutingBridgeTest {
         assertEquals(3000.0, next["verifiedProgress"]!!.jsonPrimitive.double)
     }
 
+    @Test fun movingTowardTheStartOnTheReturnPassContinuesToTheSupportedLaterOccurrence() {
+        // Return pass at 3000 m (1 km north), rider then moves 500 m toward the start: 3500 m, not the outbound 500 m.
+        for (state in listOf(null, buildJsonObject { put("maximumProgress", 3000.0) })) {
+            val result = snapshot(outAndBackLoop(), at(0.0, 500.0), progress = 3000.0, resume = true, state = state)
+            assertEquals(3500.0, result["progress"]!!.jsonPrimitive.double, 5.0)
+            assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+            assertEquals(3500.0, result["state"]!!.jsonObject["maximumProgress"]!!.jsonPrimitive.double, 5.0)
+        }
+    }
+
+    @Test fun aForwardGapBeyondTheContinuityWindowKeepsTheSupportedLaterOccurrence() {
+        val result = snapshot(outAndBackLoop(), at(0.0, 1800.0), progress = 1200.0, resume = true)
+        assertEquals(1800.0, result["progress"]!!.jsonPrimitive.double, 5.0)
+        assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun movingBackwardOnlyToAnEarlierPassIsAmbiguousWithAndWithoutSavedState() {
+        // Last progress 3200 (past 1 km on the way back); the rider is now at 1 km, which only matches earlier points.
+        for (state in listOf(null, buildJsonObject { put("maximumProgress", 3200.0) })) {
+            val result = snapshot(outAndBackLoop(), at(0.0, 1000.0), progress = 3200.0, resume = true, state = state)
+            assertTrue(result["ambiguous"]!!.jsonPrimitive.boolean)
+            assertEquals(3200.0, result["progress"]!!.jsonPrimitive.double)
+            assertEquals(3200.0, result["state"]!!.jsonObject["maximumProgress"]!!.jsonPrimitive.double)
+            assertFalse(result["arrived"]!!.jsonPrimitive.boolean)
+        }
+    }
+
     @Test fun anOrdinaryLoopFixAfterReacquisitionDoesNotBecomeAmbiguous() {
         val result = snapshot(squareLoop(), at(1000.0, 500.0), progress = 1400.0, resume = true)
         assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
