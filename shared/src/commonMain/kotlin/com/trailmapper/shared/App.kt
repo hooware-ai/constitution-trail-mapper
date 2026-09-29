@@ -1108,7 +1108,7 @@ private fun TrailAccountSheet(
             )
 
             when (content) {
-                TrailAccountSheetContent.SigningIn -> {
+                is TrailAccountSheetContent.InProgress -> {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1118,7 +1118,7 @@ private fun TrailAccountSheet(
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         Text(
-                            text = "Signing in with Google…",
+                            text = content.label,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -1205,7 +1205,7 @@ private fun TrailAccountSheet(
                 }
             }
 
-            if (content != TrailAccountSheetContent.SigningIn) {
+            if (content !is TrailAccountSheetContent.InProgress) {
                 TextButton(
                     onClick = onOpenPrivacy,
                     modifier = Modifier.fillMaxWidth(),
