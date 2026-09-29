@@ -269,6 +269,8 @@ const context = (
   kind: "Navigation",
   dataset: { label: "Test dataset", mode: "fixture" },
   exportedAt: "2026-09-30T00:00:00.000Z",
+  proposedRoute: false,
+  statusCheckedAt: "2026-09-29T23:00:00.000Z",
   warnings: [],
   closures: [],
   gaps: [],
@@ -444,4 +446,61 @@ test("context that cannot be matched to the geometry blocks the export with a re
       }),
     /Route details are unavailable/,
   );
+});
+
+test("a route whose proposed status is not on any segment marks every segment unknown, never verified", () => {
+  for (const includeExactEndpoints of [true, false]) {
+    const result = routeGeoJson(record(), three, {
+      action: "download",
+      ...(includeExactEndpoints
+        ? { includeExactEndpoints: true, fullRouteApproved: true }
+        : {}),
+      segmentBreaks: [2, 4],
+      segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+      context: context({ proposedRoute: true }),
+    });
+    for (const feature of result.features.filter(
+      (f) => f.geometry.type === "LineString",
+    )) {
+      assert.equal(
+        feature.properties.status,
+        "unknown-route-includes-proposed",
+      );
+      assert.equal(feature.properties.verified, false);
+    }
+    assert.equal(result.routeContext?.proposedTrailsIncluded, true);
+    assert.match(
+      String(result.routeContext?.proposedNote),
+      /none is marked verified/,
+    );
+  }
+});
+test("status is identified as cached from the evaluation time, not stamped with the export time", () => {
+  const result = routeGeoJson(record(), three, {
+    action: "download",
+    includeExactEndpoints: true,
+    fullRouteApproved: true,
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+    context: context({
+      exportedAt: "2026-09-22T12:00:00.000Z",
+      statusCheckedAt: "2026-09-20T12:00:00.000Z",
+    }),
+  });
+  assert.equal(
+    result.routeContext?.statusCheckedAt,
+    "2026-09-20T12:00:00.000Z",
+  );
+  assert.equal(result.routeContext?.statusIsCached, true);
+  assert.equal(result.routeContext?.statusAgeSeconds, 2 * 24 * 3600);
+  const unknown = routeGeoJson(record(), three, {
+    action: "download",
+    includeExactEndpoints: true,
+    fullRouteApproved: true,
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+    context: context({ statusCheckedAt: null }),
+  });
+  assert.equal(unknown.routeContext?.statusCheckedAt, null);
+  assert.equal(unknown.routeContext?.statusAgeSeconds, null);
 });

@@ -770,6 +770,11 @@ export function App() {
             mode: network?.mode ?? "unknown",
           },
           exportedAt: new Date().toISOString(),
+          proposedRoute: !!preview.proposed,
+          statusCheckedAt:
+            typeof preview.evaluatedAt === "number"
+              ? new Date(preview.evaluatedAt).toISOString()
+              : null,
           warnings: preview.warnings,
           closures: preview.closures.map((closure) => ({
             title: closure.title,
@@ -1715,6 +1720,13 @@ export function App() {
             </span>
           </label>
           <p className="caption">{EXPORT_METADATA_NOTE}</p>
+          {typeof preview?.evaluatedAt === "number" && (
+            <p className="caption">
+              Route warnings and closures were last checked{" "}
+              {new Date(preview.evaluatedAt).toLocaleString()}. Reopen the route
+              to refresh them before exporting.
+            </p>
+          )}
           <button className="wide" onClick={downloadGeoJson}>
             {exactExport
               ? "Download full route GeoJSON"

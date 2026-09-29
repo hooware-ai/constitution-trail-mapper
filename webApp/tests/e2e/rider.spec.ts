@@ -714,3 +714,50 @@ test("an ordinary verified route exports existing trail with dataset context", a
   expect(file.routeContext.unverifiedConnections).toBe(0);
   expect(file.routeContext.note).toMatch(/ignore properties/);
 });
+
+test("an export made days after the route was opened identifies its status as cached from the evaluation time", async ({
+  page,
+}) => {
+  const opened = new Date("2026-09-20T12:00:00Z");
+  await page.clock.install({ time: opened });
+  await seedSavedRoute(page, "Cached test", [
+    { type: "Trail", from: 0, to: 600 },
+    { type: "Trail", from: 600, to: 1200 },
+  ]);
+  await page.goto("/");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Saved", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: /Cached test/ })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  await expect(dialog).toContainText("last checked");
+  // Two days pass with the route still open.
+  await page.clock.fastForward(2 * 24 * 3600 * 1000);
+  await dialog
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: /Download full route GeoJSON/ }).click(),
+  ]);
+  const { readFile } = await import("node:fs/promises");
+  const file = JSON.parse(await readFile((await download.path())!, "utf8"));
+  const context = file.routeContext;
+  expect(context.statusIsCached).toBe(true);
+  expect(new Date(context.statusCheckedAt).getTime()).toBeLessThan(
+    opened.getTime() + 60_000,
+  );
+  expect(new Date(context.exportedAt).getTime()).toBeGreaterThan(
+    opened.getTime() + 2 * 24 * 3600 * 1000 - 60_000,
+  );
+  expect(context.statusAgeSeconds).toBeGreaterThan(2 * 24 * 3600 - 120);
+  expect(context.statusCheckedAt).not.toBe(context.exportedAt);
+});

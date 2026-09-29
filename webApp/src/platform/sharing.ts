@@ -45,6 +45,10 @@ export interface ExportContext {
   /** Dataset the route was planned on, e.g. its label and whether it is the synthetic review network. */
   dataset: { label: string; mode: string };
   exportedAt: string;
+  /** The route uses proposed infrastructure even if no segment says which part. */
+  proposedRoute: boolean;
+  /** When warnings and closures were last evaluated; null when the result does not say. */
+  statusCheckedAt: string | null;
   warnings: readonly string[];
   /** Active closures the route runs through (public notice text only). */
   closures: ReadonlyArray<{
@@ -142,6 +146,11 @@ export function routeGeoJson(
   const sortedBreaks = [...breaks].sort((x, y) => x - y);
   const segmentAt = (index: number) =>
     sortedBreaks.filter((boundary) => boundary <= index).length;
+  // A route can use proposed infrastructure without any segment saying which part. Then no segment can be
+  // called existing, so every one is marked unknown rather than mislabelled verified.
+  const flagged =
+    segments?.some((info) => info.roles.includes("ProposedTrails")) ?? false;
+  const proposedUnattributed = !!context?.proposedRoute && !flagged;
   const segmentProperties = (segment: number): Properties => {
     const info = segments?.[segment];
     if (!info) return {};
@@ -149,9 +158,13 @@ export function routeGeoJson(
     return {
       segmentType: info.type.toLowerCase(),
       roles: [...info.roles],
-      status: proposed ? "proposed" : "existing",
+      status: proposed
+        ? "proposed"
+        : proposedUnattributed
+          ? "unknown-route-includes-proposed"
+          : "existing",
       // Proposed infrastructure is not built: geometry is shown for planning only.
-      verified: !proposed,
+      verified: !proposed && !proposedUnattributed,
     };
   };
   type Line = { points: Coordinate[]; segment: number };
@@ -279,9 +292,26 @@ export function routeGeoJson(
       kind: context.kind,
       dataset: context.dataset,
       exportedAt: context.exportedAt,
-      proposedTrailsIncluded: segments!.some((info) =>
-        info.roles.includes("ProposedTrails"),
-      ),
+      proposedTrailsIncluded: context.proposedRoute || flagged,
+      ...(proposedUnattributed
+        ? {
+            proposedNote:
+              "The route uses proposed trails but the data does not say which segments; none is marked verified.",
+          }
+        : {}),
+      // Warnings and closures are those evaluated when the route was opened, not at export time.
+      statusCheckedAt: context.statusCheckedAt,
+      statusIsCached: true,
+      statusAgeSeconds: context.statusCheckedAt
+        ? Math.max(
+            0,
+            Math.round(
+              (Date.parse(context.exportedAt) -
+                Date.parse(context.statusCheckedAt)) /
+                1000,
+            ),
+          )
+        : null,
       warnings: [...context.warnings],
       closures: context.closures.map((closure) => ({ ...closure })),
       unverifiedConnections: context.gaps.length,
