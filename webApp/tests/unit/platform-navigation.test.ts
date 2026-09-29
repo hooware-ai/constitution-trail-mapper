@@ -512,7 +512,7 @@ test("a reroute is rejected once the rider rejoined the route or moved materiall
   await rejoined.f.fix(110, {}, 0);
   assert.equal(
     rejoined.f.controller.rerouteStaleReason(rejoined.request),
-    "back-on-route",
+    "interrupted",
   );
   const moved = await offRoute();
   moved.f.advance(1000);
@@ -523,4 +523,108 @@ test("an aged-out fix loses location and invalidates a delayed reroute", async (
   const { f, request } = await offRoute();
   f.advance(20_000);
   assert.equal(f.controller.rerouteStaleReason(request), "interrupted");
+});
+
+test("a request cannot revive after off route, back on route and off route again nearby", async () => {
+  const { f, request } = await offRoute();
+  f.advance(1000);
+  await f.fix(110, { latitude: 40.0001 }, 0);
+  assert.equal(f.controller.state.phase, "navigating");
+  assert.notEqual(f.controller.rerouteStaleReason(request), null);
+  // Depart again close to where the request was made and confirm a new episode.
+  f.advance(1000);
+  await f.fix(110, { latitude: 40.0001 }, 120);
+  f.advance(5000);
+  await f.fix(110, { latitude: 40.0001 }, 120);
+  assert.equal(f.controller.state.phase, "off-route");
+  assert.equal(f.controller.rerouteStaleReason(request), "interrupted");
+  // A request made for the new episode is valid, and ordinary nearby fixes keep it valid.
+  const fresh = f.controller.rerouteRequest()!;
+  f.advance(1000);
+  await f.fix(110, { latitude: 40.0002 }, 120);
+  assert.equal(f.controller.rerouteStaleReason(fresh), null);
+});
+test("a newer fix waiting for evaluation is settled before a reroute is judged", async () => {
+  const f = fixture();
+  let hold: ((distance: number) => void) | null = null;
+  let offset = 120;
+  const controller = new ForegroundNavigationController({
+    location: f.location,
+    clock: f.clock,
+    evaluate: () =>
+      hold
+        ? new Promise((resolve) => {
+            const release = hold as unknown as null;
+            void release;
+            hold = (distance: number) =>
+              resolve({
+                routeProgressMeters: 100,
+                distanceFromRouteMeters: distance,
+                instruction: "Continue",
+                remainingMeters: 900,
+              });
+          })
+        : Promise.resolve({
+            routeProgressMeters: 100,
+            distanceFromRouteMeters: offset,
+            instruction: "Continue",
+            remainingMeters: 900,
+          }),
+  });
+  const deliver = async (latitude: number) => {
+    f.callbacks.at(-1)!.success({
+      latitude,
+      longitude: -89,
+      accuracy: 10,
+      timestamp: f.now(),
+    });
+    await flush();
+  };
+  controller.start(record);
+  await deliver(40);
+  f.advance(5000);
+  await deliver(40);
+  assert.equal(controller.state.phase, "off-route");
+  const request = controller.rerouteRequest()!;
+  // A newer fix ~222 m away is queued behind the reroute, not yet evaluated.
+  hold = () => {};
+  f.advance(1000);
+  await deliver(40.002);
+  assert.equal(controller.rerouteStaleReason(request), null);
+  let settled: boolean | undefined;
+  const waiting = controller.whenEvaluationsSettled().then((value) => {
+    settled = value;
+  });
+  await flush();
+  assert.equal(settled, undefined);
+  hold(120);
+  await waiting;
+  assert.equal(settled, true);
+  assert.equal(controller.rerouteStaleReason(request), "moved");
+  // Variant: the queued fix shows the rider back on the route.
+  const second = controller.rerouteRequest()!;
+  hold = () => {};
+  f.advance(1000);
+  await deliver(40.002);
+  const again = controller.whenEvaluationsSettled();
+  hold(0);
+  await again;
+  assert.notEqual(controller.rerouteStaleReason(second), null);
+});
+test("waiting for evaluations gives up after the timeout instead of hanging", async () => {
+  const f = fixture();
+  const controller = new ForegroundNavigationController({
+    location: f.location,
+    clock: f.clock,
+    evaluate: () => new Promise(() => {}),
+  });
+  controller.start(record);
+  f.callbacks.at(-1)!.success({
+    latitude: 40,
+    longitude: -89,
+    accuracy: 10,
+    timestamp: f.now(),
+  });
+  await flush();
+  assert.equal(await controller.whenEvaluationsSettled(10), false);
 });

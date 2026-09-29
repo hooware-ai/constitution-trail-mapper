@@ -114,8 +114,10 @@ function distanceMeters(a: LocationFix, b: LocationFix): number {
 /** What a reroute was computed against; compare with `rerouteStaleReason` before adopting it. */
 export interface RerouteRequest {
   recordKey: string;
+  record: RouteRecord;
   epoch: number;
   fix: LocationFix;
+  progress: number;
 }
 export type RerouteStaleReason =
   | "ride-changed"
@@ -141,6 +143,8 @@ export class ForegroundNavigationController {
   private offRouteSince: number | null = null;
   private confirmedOffRoute = false;
   private listeners = new Set<(state: NavigationState) => void>();
+  private pendingEvaluations = 0;
+  private settleWaiters: Array<() => void> = [];
   private unwatchWake?: () => void;
   constructor(private deps: NavigationDependencies) {
     this.clock = deps.clock ?? defaultClock;
@@ -226,7 +230,13 @@ export class ForegroundNavigationController {
     const { record, fix, phase } = this.state;
     if (!record || !fix || phase !== "off-route") return null;
     if (!usableFix(fix, this.clock.now())) return null;
-    return { recordKey: record.key, epoch: this.epoch, fix };
+    return {
+      recordKey: record.key,
+      record,
+      epoch: this.epoch,
+      fix,
+      progress: this.state.routeProgressMeters,
+    };
   }
   /** Why a delayed reroute must not replace the active route, or null when it still applies. */
   rerouteStaleReason(request: RerouteRequest): RerouteStaleReason | null {
@@ -308,7 +318,37 @@ export class ForegroundNavigationController {
     this.confirmedOffRoute = false;
     this.patch({ phase, message, fix: null, guidance: null });
   }
+  /**
+   * Resolves true once no location fix is waiting for its evaluation, so a newer position that queued
+   * behind other worker work is reflected in the state; false if that takes longer than `timeoutMs`.
+   */
+  whenEvaluationsSettled(timeoutMs = 2_000): Promise<boolean> {
+    if (this.pendingEvaluations === 0) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.settleWaiters = this.settleWaiters.filter((w) => w !== done);
+        resolve(false);
+      }, timeoutMs);
+      const done = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      this.settleWaiters.push(done);
+    });
+  }
   private async receive(fix: LocationFix, generation: number): Promise<void> {
+    ++this.pendingEvaluations;
+    try {
+      await this.evaluateFix(fix, generation);
+    } finally {
+      if (--this.pendingEvaluations === 0)
+        this.settleWaiters.splice(0).forEach((done) => done());
+    }
+  }
+  private async evaluateFix(
+    fix: LocationFix,
+    generation: number,
+  ): Promise<void> {
     if (generation !== this.generation || !this.visible || !this.state.record)
       return;
     if (
@@ -347,6 +387,7 @@ export class ForegroundNavigationController {
         ].every((value) => Number.isFinite(value) && value >= 0)
       )
         throw new Error("Invalid navigation snapshot");
+      const wasConfirmedOffRoute = this.confirmedOffRoute;
       const deviated =
         guidance.distanceFromRouteMeters > Math.max(45, fix.accuracy * 2);
       if (deviated) {
@@ -360,6 +401,8 @@ export class ForegroundNavigationController {
       // Native shared deviation logic is authoritative when the worker supplies it.
       if (typeof guidance.offRoute === "boolean")
         this.confirmedOffRoute = guidance.offRoute;
+      // Rejoining ends the off-route episode: a reroute chosen for it must not revive on a later departure.
+      if (wasConfirmedOffRoute && !this.confirmedOffRoute) ++this.epoch;
       this.deps.onAccepted?.(guidance);
       this.needsReacquisition = false;
       // Never credit a jump across hidden/invalid periods, or movement outside the matched route.
