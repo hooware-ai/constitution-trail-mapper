@@ -515,3 +515,52 @@ test("a change that cannot set unreadable data aside is rolled back instead of s
   assert.equal(result.pendingUnreadable, 1);
   assert.equal(storage.values.get(LIBRARY_KEY), original);
 });
+
+test("a quota-failed change keeps reporting unreadable data still in the library", () => {
+  const storage = new MemoryStorage();
+  storage.values.set(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 1,
+      saved: [null],
+      recent: [],
+      places: [
+        {
+          key: "p",
+          label: "Park",
+          latitude: 40,
+          longitude: -89,
+          createdAt: NOW,
+        },
+      ],
+    }),
+  );
+  const store = new LocalRouteStore(storage, () => NOW);
+  // No room for the quarantine copy or a larger library.
+  storage.limit = storage.values.get(LIBRARY_KEY)!.length + LIBRARY_KEY.length;
+  const read = store.read();
+  assert.equal(read.pendingUnreadable, 1);
+  const failed = store.savePlace({
+    key: "q",
+    label: "A much longer place label that cannot fit",
+    latitude: 40,
+    longitude: -89,
+    createdAt: NOW,
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.error, "quota");
+  assert.equal(failed.pendingUnreadable, 1);
+  // The rider can still discard it, which frees room.
+  assert.equal(store.discardUnreadable().ok, true);
+  assert.equal(store.read().pendingUnreadable, undefined);
+});
+test("a change that already set the unreadable data aside does not claim it is pending", () => {
+  const storage = new MemoryStorage();
+  seed(storage, { recent: [{ ...record("bad"), draft: null }] });
+  const store = new LocalRouteStore(storage, () => NOW);
+  assert.equal(store.read().quarantined, 1);
+  storage.fail = true;
+  const failed = store.save(record("new"));
+  assert.equal(failed.ok, false);
+  assert.equal(failed.pendingUnreadable, undefined);
+});

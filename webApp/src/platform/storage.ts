@@ -247,29 +247,41 @@ export class LocalRouteStore {
     }
     return quarantined ? { ...result, quarantined } : result;
   }
+  private stored(): unknown[] {
+    const stored = this.storage.getItem(QUARANTINE_KEY);
+    if (stored === null) return [];
+    try {
+      const parsed: unknown = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [{ legacy: parsed }];
+    } catch {
+      return [{ legacy: stored }];
+    }
+  }
+  /** Rejected records not yet safely set aside. */
+  private unsetAside(rejected: Rejected[]): Rejected[] {
+    let entries: unknown[];
+    try {
+      entries = this.stored();
+    } catch {
+      return rejected;
+    }
+    return rejected.filter(
+      (item) =>
+        !entries.some(
+          (existing) =>
+            object(existing) &&
+            existing.kind === item.kind &&
+            canonical(existing.record) === canonical(item.record),
+        ),
+    );
+  }
   /** Append rejected records; nothing already set aside is ever evicted or overwritten. */
   private quarantine(rejected: Rejected[]) {
-    let entries: unknown[] = [];
-    const stored = this.storage.getItem(QUARANTINE_KEY);
-    if (stored !== null) {
-      try {
-        const parsed: unknown = JSON.parse(stored);
-        entries = Array.isArray(parsed) ? parsed : [{ legacy: parsed }];
-      } catch {
-        entries = [{ legacy: stored }];
-      }
-    }
-    const added = rejected
-      .filter(
-        (item) =>
-          !entries.some(
-            (existing) =>
-              object(existing) &&
-              existing.kind === item.kind &&
-              canonical(existing.record) === canonical(item.record),
-          ),
-      )
-      .map((item) => ({ at: this.now(), ...item }));
+    const entries = this.stored();
+    const added = this.unsetAside(rejected).map((item) => ({
+      at: this.now(),
+      ...item,
+    }));
     if (added.length > 0)
       this.storage.setItem(
         QUARANTINE_KEY,
@@ -323,7 +335,14 @@ export class LocalRouteStore {
     try {
       this.storage.setItem(LIBRARY_KEY, JSON.stringify(next));
     } catch (error) {
-      return { ...current, ok: false, error: writeIssue(error) };
+      // The malformed bytes are still in the library: keep offering the rider the way out.
+      const pending = this.unsetAside(rejected).length;
+      return {
+        ...current,
+        ok: false,
+        error: writeIssue(error),
+        ...(pending > 0 ? { pendingUnreadable: pending } : {}),
+      };
     }
     if (rejected.length > 0 && raw !== null) {
       try {
