@@ -835,3 +835,44 @@ test("closing a chooser that was already open when history started never leaves 
     fresh.getByRole("button", { name: "Find route", exact: true }),
   ).toBeVisible();
 });
+
+test("screen visits made before restoration finishes are recorded, so Back returns through them", async ({
+  page,
+  context,
+}) => {
+  await plan(page);
+  await page.waitForTimeout(600);
+  const fresh = await context.newPage();
+  await fresh.addInitScript(() => sessionStorage.setItem("hold-inspect", "1"));
+  await trackWorkers(fresh);
+  await fresh.goto("/");
+  await expect(
+    fresh.getByText("Checking the known closure catalog"),
+  ).toBeVisible();
+  await fresh.getByRole("button", { name: "Trail Mapper home" }).click();
+  await fresh.getByRole("button", { name: /Go somewhere/ }).click();
+  await fresh.getByRole("button", { name: /^Start:/ }).click();
+  await fresh.getByRole("button", { name: "Pick on map", exact: true }).click();
+  await expect(
+    fresh.getByRole("button", { name: "Use map center" }),
+  ).toBeVisible();
+  await fresh.evaluate(() => {
+    sessionStorage.removeItem("hold-inspect");
+    (window as any).__holdInspect = false;
+    ((window as any).__heldInspects as Array<() => void>)
+      .splice(0)
+      .forEach((f) => f());
+  });
+  await fresh.waitForTimeout(400);
+  await fresh.goBack();
+  // Back from the picker returns to the planner rather than the document before the app.
+  expect(fresh.url()).toMatch(/127\.0\.0\.1/);
+  await expect(
+    fresh.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeVisible();
+  await fresh.goBack();
+  expect(fresh.url()).toMatch(/127\.0\.0\.1/);
+  await expect(
+    fresh.getByRole("heading", { name: "Plan a ride", exact: true }),
+  ).toBeVisible();
+});

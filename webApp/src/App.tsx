@@ -254,7 +254,7 @@ export function App() {
           const ride = restored.state;
           setSelected(ride.record);
           setDraft(ride.record.draft as Draft);
-          setScreen("preview");
+          restoreScreen("preview");
           setChecking(true);
           try {
             const inspected = routeOkay(
@@ -273,7 +273,7 @@ export function App() {
                 ride.routeProgressMeters,
                 ride.creditedDistanceMeters,
               );
-              setScreen("navigation");
+              restoreScreen("navigation");
             } else
               setError(
                 "Your previous ride needs review before navigation can resume.",
@@ -290,7 +290,7 @@ export function App() {
           setSelected(restoredSession.selected);
           setOrigin(restoredSession.origin);
           setSavedTab(restoredSession.savedTab);
-          setScreen(restoredSession.screen);
+          restoreScreen(restoredSession.screen);
           if (
             restoredSession.screen === "preview" &&
             restoredSession.selected
@@ -343,6 +343,7 @@ export function App() {
     }),
     goRef = useRef<(next: Screen) => void>(() => {}),
     fromPop = useRef(false),
+    restoring = useRef(false),
     closingByPop = useRef(false),
     lastSynced = useRef<{ screen: string; overlay: boolean } | null>(null);
   popContext.current = {
@@ -352,9 +353,14 @@ export function App() {
     hasPreview: !!(selected && preview),
   };
   goRef.current = go;
+  /** Screens brought back from the previous visit relabel the current history entry instead of adding one. */
+  function restoreScreen(next: Screen) {
+    if (next !== popContext.current.screen) restoring.current = true;
+    setScreen(next);
+  }
   // Browser Back/Forward: history entries hold only a screen name, never route or place data.
   useEffect(() => {
-    if (!sessionReady) return;
+    // Record navigation from the first moment the UI is usable, not after restoration finishes.
     const sync: BrowserHistorySync = new BrowserHistorySync(
       window.history,
       (target, direction) => {
@@ -393,7 +399,7 @@ export function App() {
       window.removeEventListener("popstate", onPop);
       historyRef.current = null;
     };
-  }, [sessionReady]);
+  }, []);
   useEffect(() => {
     const sync = historyRef.current,
       last = lastSynced.current;
@@ -405,6 +411,9 @@ export function App() {
     if (last.screen !== screen) {
       if (fromPop.current) {
         fromPop.current = false;
+        sync.replace(screen);
+      } else if (restoring.current) {
+        restoring.current = false;
         sync.replace(screen);
       } else sync.push(screen);
     }
