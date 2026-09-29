@@ -551,3 +551,166 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+type SeedSegment = {
+  type: "Trail" | "Access";
+  from: number;
+  to: number;
+  routed?: boolean;
+  roles?: string[];
+};
+async function seedSavedRoute(
+  page: Page,
+  title: string,
+  segments: SeedSegment[],
+) {
+  await page.addInitScript(
+    ({ title, segments }) => {
+      const key = "trail-mapper.fixture:trail-mapper.web.library.v1";
+      if (localStorage.getItem(key)) return;
+      const at = (north: number) => ({
+        latitude: 40.5 + north / 111_195,
+        longitude: -88.95,
+      });
+      const total = segments.reduce(
+        (sum, s) => sum + Math.abs(s.to - s.from),
+        0,
+      );
+      const access = segments
+        .filter((s) => s.type === "Access")
+        .reduce((sum, s) => sum + Math.abs(s.to - s.from), 0);
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 1,
+          saved: [
+            {
+              key: "seeded-" + title,
+              title,
+              createdAt: Date.now(),
+              usedAt: Date.now(),
+              route: {
+                segments: segments.map((s) => ({
+                  type: s.type,
+                  points: [at(s.from), at(s.to)],
+                  isRouted: s.routed ?? true,
+                  routeRoles: s.roles ?? [],
+                })),
+                totalDistanceMeters: total,
+                ordinaryAccessDistanceMeters: access,
+                totalCost: 1,
+                kind: "Navigation",
+              },
+              draft: {
+                mode: "point",
+                start: { label: "Private start", ...at(segments[0].from) },
+                destination: {
+                  label: "Private end",
+                  ...at(segments.at(-1)!.to),
+                },
+                miles: 5,
+                proposed: false,
+              },
+            },
+          ],
+          recent: [],
+          places: [],
+        }),
+      );
+    },
+    { title, segments },
+  );
+}
+async function exportSaved(page: Page, title: string) {
+  await page.goto("/");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Saved", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: new RegExp(title) })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  await expect(dialog).toContainText("Many map apps ignore properties");
+  await dialog
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: /Download full route GeoJSON/ }).click(),
+  ]);
+  const path = await download.path();
+  const { readFile } = await import("node:fs/promises");
+  return JSON.parse(await readFile(path!, "utf8"));
+}
+test("an exported proposed route marks the proposed segment as not built", async ({
+  page,
+}) => {
+  await seedSavedRoute(page, "Proposed test", [
+    { type: "Trail", from: 0, to: 500 },
+    { type: "Trail", from: 500, to: 1000, roles: ["ProposedTrails"] },
+  ]);
+  const file = await exportSaved(page, "Proposed test");
+  const statuses = file.features.map((f: any) => f.properties.status);
+  expect(statuses).toContain("proposed");
+  const proposed = file.features.find(
+    (f: any) => f.properties.status === "proposed",
+  );
+  expect(proposed.properties.verified).toBe(false);
+  expect(file.routeContext.proposedTrailsIncluded).toBe(true);
+  expect(file.routeContext.warnings.join(" ")).toMatch(/proposed/i);
+  expect(JSON.stringify(file)).not.toMatch(
+    /Private start|Private end|Proposed test/,
+  );
+});
+test("an exported route with a gap exports the connection as ends only, without inventing a line", async ({
+  page,
+}) => {
+  await seedSavedRoute(page, "Gap test", [
+    { type: "Trail", from: 0, to: 500 },
+    { type: "Access", from: 500, to: 530, routed: false },
+    { type: "Trail", from: 530, to: 1000 },
+  ]);
+  const file = await exportSaved(page, "Gap test");
+  const gap = file.features.find(
+    (f: any) => f.properties.status === "unverified-connection",
+  );
+  expect(gap.geometry.type).toBe("MultiPoint");
+  expect(gap.geometry.coordinates).toHaveLength(2);
+  expect(file.routeContext.unverifiedConnections).toBeGreaterThanOrEqual(1);
+  // No line runs across the 30 m gap.
+  const lines = file.features.filter(
+    (f: any) => f.geometry.type === "LineString",
+  );
+  for (const line of lines) {
+    const norths = line.geometry.coordinates.map(
+      (c: number[]) => (c[1] - 40.5) * 111_195,
+    );
+    expect(!(Math.min(...norths) < 505 && Math.max(...norths) > 525)).toBe(
+      true,
+    );
+  }
+});
+test("an ordinary verified route exports existing trail with dataset context", async ({
+  page,
+}) => {
+  await seedSavedRoute(page, "Ordinary test", [
+    { type: "Trail", from: 0, to: 600 },
+    { type: "Trail", from: 600, to: 1200 },
+  ]);
+  const file = await exportSaved(page, "Ordinary test");
+  expect(
+    file.features.every(
+      (f: any) =>
+        f.properties.status === "existing" && f.properties.verified === true,
+    ),
+  ).toBe(true);
+  expect(file.routeContext.dataset.mode).toBe("fixture");
+  expect(file.routeContext.unverifiedConnections).toBe(0);
+  expect(file.routeContext.note).toMatch(/ignore properties/);
+});

@@ -28,6 +28,32 @@ export function privateRouteShare(
     url: source.origin + "/",
   };
 }
+/** What one drawable route segment is, from the route result (never a place name or user label). */
+export interface ExportSegmentInfo {
+  type: string;
+  roles: readonly string[];
+}
+/** A connection the route needed but the dataset does not verify. Exported as its two ends, never as a line. */
+export interface ExportGap {
+  id: string;
+  distanceMeters: number;
+  from: Coordinate;
+  to: Coordinate;
+}
+export interface ExportContext {
+  kind: string;
+  /** Dataset the route was planned on, e.g. its label and whether it is the synthetic review network. */
+  dataset: { label: string; mode: string };
+  exportedAt: string;
+  warnings: readonly string[];
+  /** Active closures the route runs through (public notice text only). */
+  closures: ReadonlyArray<{
+    title: string;
+    message: string;
+    sourceUrl?: string;
+  }>;
+  gaps: readonly ExportGap[];
+}
 export interface ExportOptions {
   action: "download";
   includeExactEndpoints?: boolean;
@@ -35,16 +61,30 @@ export interface ExportOptions {
   privacyRadiusMeters?: number;
   attribution?: string;
   segmentBreaks?: readonly number[];
+  /** One entry per drawable segment (the segments `segmentBreaks` separates); required with `context`. */
+  segments?: readonly ExportSegmentInfo[];
+  context?: ExportContext;
 }
+export const EXPORT_METADATA_NOTE =
+  "Route status, warnings and unverified connections are included as properties for context. Many map apps ignore properties; check the route status in Trail Mapper before riding.";
+type Properties = Record<string, unknown>;
 export interface RouteGeoJson {
   type: "FeatureCollection";
   attribution: string;
   privacy: "exact-endpoints-approved" | "endpoints-removed";
-  features: Array<{
-    type: "Feature";
-    properties: { name: string; attribution: string };
-    geometry: { type: "LineString"; coordinates: number[][] };
-  }>;
+  routeContext?: Properties;
+  features: Array<
+    | {
+        type: "Feature";
+        properties: Properties;
+        geometry: { type: "LineString"; coordinates: number[][] };
+      }
+    | {
+        type: "Feature";
+        properties: Properties;
+        geometry: { type: "MultiPoint"; coordinates: number[][] };
+      }
+  >;
 }
 function distance(a: Coordinate, b: Coordinate): number {
   const radians = Math.PI / 180;
@@ -88,32 +128,67 @@ export function routeGeoJson(
     )
   )
     throw new Error("Invalid route segment boundaries.");
-  let lines: Coordinate[][];
+  const context = options.context,
+    segments = options.segments;
+  // Context describes segments one by one: refuse to publish it when it cannot be matched to the geometry.
+  if (!!context !== !!segments)
+    throw new Error(
+      "Route details are unavailable for this export. Reopen the route and try again.",
+    );
+  if (segments && segments.length !== breaks.size + 1)
+    throw new Error(
+      "Route details do not match the route geometry, so it cannot be exported honestly. Reopen the route and try again.",
+    );
+  const sortedBreaks = [...breaks].sort((x, y) => x - y);
+  const segmentAt = (index: number) =>
+    sortedBreaks.filter((boundary) => boundary <= index).length;
+  const segmentProperties = (segment: number): Properties => {
+    const info = segments?.[segment];
+    if (!info) return {};
+    const proposed = info.roles.includes("ProposedTrails");
+    return {
+      segmentType: info.type.toLowerCase(),
+      roles: [...info.roles],
+      status: proposed ? "proposed" : "existing",
+      // Proposed infrastructure is not built: geometry is shown for planning only.
+      verified: !proposed,
+    };
+  };
+  type Line = { points: Coordinate[]; segment: number };
+  let lines: Line[];
+  const first = coordinates[0],
+    last = coordinates[coordinates.length - 1];
+  let radius = 0;
   if (options.includeExactEndpoints) {
     lines = [];
     let current: Coordinate[] = [];
+    let segment = 0;
     coordinates.forEach((point, index) => {
       if (breaks.has(index)) {
-        if (current.length >= 2) lines.push(current);
+        if (current.length >= 2) lines.push({ points: current, segment });
         current = [];
+        segment = segmentAt(index);
       }
       current.push(point);
     });
-    if (current.length >= 2) lines.push(current);
+    if (current.length >= 2) lines.push({ points: current, segment });
   } else {
-    const radius = Math.max(
+    radius = Math.max(
       300,
       Number.isFinite(options.privacyRadiusMeters)
         ? options.privacyRadiusMeters!
         : 300,
     );
-    const first = coordinates[0];
-    const last = coordinates[coordinates.length - 1];
-    const sampled: Array<Coordinate | null> = [first];
+    const sampled: Array<{ point: Coordinate; segment: number } | null> = [
+      { point: first, segment: 0 },
+    ];
     // Densifying stops a long segment from crossing a hidden endpoint area unnoticed.
     for (let index = 1; index < coordinates.length; index++) {
       if (breaks.has(index)) {
-        sampled.push(null, coordinates[index]);
+        sampled.push(null, {
+          point: coordinates[index],
+          segment: segmentAt(index),
+        });
         continue;
       }
       const a = coordinates[index - 1];
@@ -123,36 +198,96 @@ export function routeGeoJson(
         throw new Error("Route segment is too long for a local trail export.");
       for (let step = 1; step <= Math.max(1, steps); step++) {
         const amount = step / Math.max(1, steps);
-        sampled.push([
-          a[0] + (b[0] - a[0]) * amount,
-          a[1] + (b[1] - a[1]) * amount,
-        ]);
+        sampled.push({
+          point: [a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount],
+          segment: segmentAt(index),
+        });
       }
     }
     lines = [];
     let current: Coordinate[] = [];
-    for (const point of sampled) {
-      if (!point) {
-        if (current.length >= 2) lines.push(current);
-        current = [];
+    let segment = 0;
+    const flush = () => {
+      if (current.length >= 2) lines.push({ points: current, segment });
+      current = [];
+    };
+    for (const entry of sampled) {
+      if (!entry) {
+        flush();
         continue;
       }
       // Extra half-sample margin keeps connecting segments outside the privacy radius.
       if (
-        distance(first, point) > radius + 50 &&
-        distance(last, point) > radius + 50
-      )
-        current.push(point);
-      else {
-        if (current.length >= 2) lines.push(current);
-        current = [];
-      }
+        distance(first, entry.point) > radius + 50 &&
+        distance(last, entry.point) > radius + 50
+      ) {
+        if (current.length && segment !== entry.segment) flush();
+        segment = entry.segment;
+        current.push(entry.point);
+      } else flush();
     }
-    if (current.length >= 2) lines.push(current);
+    flush();
     if (!lines.length)
       throw new Error(
         "This route is too short to export while hiding exact endpoints.",
       );
+  }
+  const features: RouteGeoJson["features"] = lines.map((line) => ({
+    type: "Feature",
+    properties: {
+      name: "Trail Mapper route",
+      attribution,
+      ...segmentProperties(line.segment),
+    },
+    geometry: {
+      type: "LineString",
+      coordinates: line.points.map((point) => [point[0], point[1]]),
+    },
+  }));
+  let routeContext: Properties | undefined;
+  if (context) {
+    const hidden = (point: Coordinate) =>
+      !options.includeExactEndpoints &&
+      (distance(first, point) <= radius + 50 ||
+        distance(last, point) <= radius + 50);
+    let omitted = 0;
+    for (const gap of context.gaps) {
+      // Only the two ends are exported: the connection between them is unverified, so no line is invented.
+      if (hidden(gap.from) || hidden(gap.to)) {
+        omitted++;
+        continue;
+      }
+      features.push({
+        type: "Feature",
+        properties: {
+          name: "Unverified connection",
+          status: "unverified-connection",
+          verified: false,
+          distanceMeters: Math.round(gap.distanceMeters * 10) / 10,
+          note: "The route needs a connection here that the trail data does not verify. Ends only; no path is drawn.",
+        },
+        geometry: {
+          type: "MultiPoint",
+          coordinates: [
+            [gap.from[0], gap.from[1]],
+            [gap.to[0], gap.to[1]],
+          ],
+        },
+      });
+    }
+    routeContext = {
+      kind: context.kind,
+      dataset: context.dataset,
+      exportedAt: context.exportedAt,
+      proposedTrailsIncluded: segments!.some((info) =>
+        info.roles.includes("ProposedTrails"),
+      ),
+      warnings: [...context.warnings],
+      closures: context.closures.map((closure) => ({ ...closure })),
+      unverifiedConnections: context.gaps.length,
+      unverifiedConnectionsOmittedNearHiddenEndpoints: omitted,
+      note: EXPORT_METADATA_NOTE,
+    };
   }
   return {
     type: "FeatureCollection",
@@ -160,13 +295,7 @@ export function routeGeoJson(
     privacy: options.includeExactEndpoints
       ? "exact-endpoints-approved"
       : "endpoints-removed",
-    features: lines.map((line) => ({
-      type: "Feature",
-      properties: { name: "Trail Mapper route", attribution },
-      geometry: {
-        type: "LineString",
-        coordinates: line.map((point) => [point[0], point[1]]),
-      },
-    })),
+    ...(routeContext ? { routeContext } : {}),
+    features,
   };
 }

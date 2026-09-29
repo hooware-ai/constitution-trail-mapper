@@ -254,3 +254,194 @@ test("exact GeoJSON preserves disconnected source paths without inventing connec
   );
   assert.deepEqual(result.features[1].geometry.coordinates[0], [-88, 41]);
 });
+
+const three: Array<[number, number]> = [
+  [-89, 40.0],
+  [-89, 40.01],
+  [-89, 40.02],
+  [-89, 40.03],
+  [-89, 40.04],
+  [-89, 40.05],
+];
+const context = (
+  extra: Partial<import("../../src/platform/sharing").ExportContext> = {},
+) => ({
+  kind: "Navigation",
+  dataset: { label: "Test dataset", mode: "fixture" },
+  exportedAt: "2026-09-30T00:00:00.000Z",
+  warnings: [],
+  closures: [],
+  gaps: [],
+  ...extra,
+});
+const info = (...roles: string[][]) =>
+  roles.map((r) => ({ type: "Trail", roles: r }));
+test("an ordinary verified route exports every segment as verified existing trail, with context", () => {
+  const result = routeGeoJson(record(), three, {
+    action: "download",
+    includeExactEndpoints: true,
+    fullRouteApproved: true,
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+    context: context(),
+  });
+  assert.equal(result.features.length, 3);
+  for (const feature of result.features) {
+    assert.equal(feature.geometry.type, "LineString");
+    assert.equal(feature.properties.status, "existing");
+    assert.equal(feature.properties.verified, true);
+  }
+  assert.equal(result.routeContext?.proposedTrailsIncluded, false);
+  assert.match(String(result.routeContext?.note), /ignore properties/);
+  assert.equal((result.routeContext?.dataset as any).label, "Test dataset");
+});
+test("a proposed segment is flagged as not built and unverified, and the collection says so", () => {
+  const result = routeGeoJson(record(), three, {
+    action: "download",
+    includeExactEndpoints: true,
+    fullRouteApproved: true,
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["ProposedTrails"], ["TrailBranches"]),
+    context: context({ warnings: ["This route includes proposed trails."] }),
+  });
+  const proposed = result.features[1].properties;
+  assert.equal(proposed.status, "proposed");
+  assert.equal(proposed.verified, false);
+  assert.deepEqual(proposed.roles, ["ProposedTrails"]);
+  assert.equal(result.features[0].properties.status, "existing");
+  assert.equal(result.routeContext?.proposedTrailsIncluded, true);
+  assert.deepEqual(result.routeContext?.warnings, [
+    "This route includes proposed trails.",
+  ]);
+});
+test("an unverified connection is exported as its two ends only, never as a connecting line", () => {
+  const result = routeGeoJson(record(), three, {
+    action: "download",
+    includeExactEndpoints: true,
+    fullRouteApproved: true,
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+    context: context({
+      gaps: [
+        {
+          id: "gap-0",
+          distanceMeters: 42.04,
+          from: [-89, 40.015],
+          to: [-89, 40.0151],
+        },
+      ],
+    }),
+  });
+  const gap = result.features.find(
+    (f) => f.properties.status === "unverified-connection",
+  )!;
+  assert.equal(gap.geometry.type, "MultiPoint");
+  assert.equal(gap.properties.verified, false);
+  assert.equal(gap.properties.distanceMeters, 42);
+  // No line feature spans the gap: every line is one segment.
+  for (const feature of result.features.filter(
+    (f) => f.geometry.type === "LineString",
+  ))
+    assert.ok(feature.geometry.coordinates.length === 2);
+  assert.equal(result.routeContext?.unverifiedConnections, 1);
+});
+test("private mode keeps trimming, and omits a connection whose end lies in a hidden endpoint area", () => {
+  const result = routeGeoJson(record(), three, {
+    action: "download",
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+    context: context({
+      gaps: [
+        {
+          id: "near-start",
+          distanceMeters: 5,
+          from: [-89, 40.0005],
+          to: [-89, 40.0006],
+        },
+        {
+          id: "middle",
+          distanceMeters: 5,
+          from: [-89, 40.025],
+          to: [-89, 40.0251],
+        },
+      ],
+    }),
+  });
+  const gaps = result.features.filter(
+    (f) => f.properties.status === "unverified-connection",
+  );
+  assert.equal(gaps.length, 1);
+  assert.equal(result.routeContext?.unverifiedConnections, 2);
+  assert.equal(
+    result.routeContext?.unverifiedConnectionsOmittedNearHiddenEndpoints,
+    1,
+  );
+  const coordinates = result.features
+    .filter((f) => f.geometry.type === "LineString")
+    .flatMap((f) => f.geometry.coordinates);
+  assert.ok(coordinates.every((c) => c[1] > 40.003 && c[1] < 40.047));
+  // Line features keep the segment they came from.
+  assert.ok(result.features.some((f) => f.properties.segmentType === "trail"));
+});
+test("changed closure status and warnings travel with the file; private labels never do", () => {
+  const open = routeGeoJson(record(), three, {
+    action: "download",
+    includeExactEndpoints: true,
+    fullRouteApproved: true,
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+    context: context(),
+  });
+  const closed = routeGeoJson(record(), three, {
+    action: "download",
+    includeExactEndpoints: true,
+    fullRouteApproved: true,
+    segmentBreaks: [2, 4],
+    segments: info(["TrailBranches"], ["TrailBranches"], ["TrailBranches"]),
+    context: context({
+      closures: [
+        {
+          title: "Trail closed",
+          message: "Closed for flooding",
+          sourceUrl: "https://example.test/closure",
+        },
+      ],
+      warnings: ["Trail closed: Closed for flooding"],
+    }),
+  });
+  assert.deepEqual(open.routeContext?.closures, []);
+  assert.equal((closed.routeContext?.closures as any[]).length, 1);
+  assert.equal(
+    (closed.routeContext?.closures as any[])[0].title,
+    "Trail closed",
+  );
+  assert.doesNotMatch(
+    JSON.stringify(closed),
+    /Private home|Private work|draft/,
+  );
+});
+test("context that cannot be matched to the geometry blocks the export with a recoverable explanation", () => {
+  assert.throws(
+    () =>
+      routeGeoJson(record(), three, {
+        action: "download",
+        includeExactEndpoints: true,
+        fullRouteApproved: true,
+        segmentBreaks: [2, 4],
+        segments: info(["TrailBranches"]),
+        context: context(),
+      }),
+    /do not match the route geometry.*Reopen the route/,
+  );
+  assert.throws(
+    () =>
+      routeGeoJson(record(), three, {
+        action: "download",
+        includeExactEndpoints: true,
+        fullRouteApproved: true,
+        segmentBreaks: [2, 4],
+        context: context(),
+      }),
+    /Route details are unavailable/,
+  );
+});
