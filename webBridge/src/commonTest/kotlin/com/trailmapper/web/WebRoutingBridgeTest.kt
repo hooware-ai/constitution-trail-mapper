@@ -414,6 +414,24 @@ class WebRoutingBridgeTest {
         }
     }
 
+    @Test fun theNextFixAtTheSamePlaceKeepsTheRecoveredTraversalAndForwardMovementContinues() {
+        val loop = repeatedJunctionLoop()
+        for (initial in listOf<JsonObject?>(null, buildJsonObject { put("maximumProgress", 1700.0) })) {
+            val resumed = snapshot(loop, at(0.0, 0.0), progress = 1700.0, resume = true, state = initial)
+            assertEquals(1696.0, resumed["progress"]!!.jsonPrimitive.double, 10.0)
+            // One second later, same place, an ordinary (non-resume) fix fed with the returned state and progress.
+            val same = snapshot(loop, at(0.0, 0.0), progress = resumed["progress"]!!.jsonPrimitive.double, resume = false, state = resumed["state"]!!.jsonObject)
+            assertFalse(same["ambiguous"]!!.jsonPrimitive.boolean)
+            assertEquals(1696.0, same["progress"]!!.jsonPrimitive.double, 10.0)
+            assertEquals(1700.0, same["state"]!!.jsonObject["maximumProgress"]!!.jsonPrimitive.double, 10.0)
+            assertFalse(same["arrived"]!!.jsonPrimitive.boolean)
+            // Then real forward movement 100 m up the supported pass.
+            val ahead = snapshot(loop, at(4.0, 100.0), progress = same["progress"]!!.jsonPrimitive.double, resume = false, state = same["state"]!!.jsonObject)
+            assertEquals(1796.0, ahead["progress"]!!.jsonPrimitive.double, 10.0)
+            assertFalse(ahead["ambiguous"]!!.jsonPrimitive.boolean)
+        }
+    }
+
     @Test fun anOrdinaryLoopFixAfterReacquisitionDoesNotBecomeAmbiguous() {
         val result = snapshot(squareLoop(), at(1000.0, 500.0), progress = 1400.0, resume = true)
         assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)

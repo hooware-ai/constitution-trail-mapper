@@ -789,4 +789,31 @@ test("a repeated junction never rewinds the saved progress into the completed se
   expect(stored.routeProgressMeters).toBeGreaterThan(1600);
   expect(stored.routeProgressMeters).toBeLessThan(1800);
   expect(stored.creditedDistanceMeters).toBe(2000);
+  const readRide = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return JSON.parse(localStorage.getItem(key!)!);
+    });
+  // A second identical fix a second later must not undo the recovery.
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.5, -88.95);
+  const same = await readRide();
+  expect(same.routeProgressMeters).toBeGreaterThan(1600);
+  expect(same.routeProgressMeters).toBeLessThan(1800);
+  expect(same.creditedDistanceMeters).toBe(2000);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  // Then forward movement 100 m up the supported pass continues from there.
+  await page.clock.fastForward(1000);
+  await acceptedFix(
+    page,
+    40.5 + 100 / 111_195,
+    -88.95 + 4 / (111_195 * Math.cos((40.5 * Math.PI) / 180)),
+  );
+  const ahead = await readRide();
+  expect(ahead.routeProgressMeters).toBeGreaterThan(1750);
+  expect(ahead.routeProgressMeters).toBeLessThan(1850);
+  expect(ahead.creditedDistanceMeters).toBeGreaterThan(2000);
+  expect(ahead.creditedDistanceMeters).toBeLessThan(2150);
 });

@@ -184,11 +184,12 @@ class WebRoutingBridge {
             previousProgressMeters = progress.takeUnless { resuming },
         )) { "No drawable navigation geometry is available." }
         // The shared floor is only a soft hint (it prefers an earlier, comparably close match to tolerate
-        // start/end jitter), so validate the chosen traversal against the saved progress. Use a supported
+        // start/end jitter), so validate the chosen traversal against the saved progress on every loop fix,
+        // not just the first one after reacquiring. Use a supported
         // later occurrence when one exists; when the rider is on the route only at points earlier than
         // their progress, report ambiguity instead of steering them along an earlier leg or as off route.
         var ambiguous = false
-        if (resuming && loop && progress > 0.0) {
+        if (loop && progress > 0.0) {
             val floor = (progress - TRAVERSAL_BACKTRACK_METERS).coerceAtLeast(0.0)
             val crossedFloor = snapshot.distanceAlongRouteMeters < floor
             if (crossedFloor || snapshot.distanceFromRouteMeters > TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS) {

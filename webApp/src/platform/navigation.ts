@@ -294,6 +294,8 @@ export class ForegroundNavigationController {
         return;
       // Reacquired where the loop could equally be an earlier pass: do not steer, credit or claim off route.
       if (guidance.ambiguous === true) {
+        this.lastProgress = null;
+        this.needsReacquisition = true;
         this.patch({
           phase: "reacquiring",
           message:
