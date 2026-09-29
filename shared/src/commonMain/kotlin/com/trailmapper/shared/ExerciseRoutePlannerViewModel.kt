@@ -57,7 +57,7 @@ internal class ExerciseRoutePlannerViewModel(
         autocompleteProvider: AddressAutocompleteProvider,
     ) {
         cancelStaleWork(cancelLocation = true, cancelMapPoint = true, cancelRoute = true)
-        _uiState.update {
+        changeState {
             it.copy(
                 startAddress = text,
                 startPoint = null,
@@ -70,6 +70,15 @@ internal class ExerciseRoutePlannerViewModel(
             )
         }
         requestAutocompletePredictions(text, autocompleteProvider)
+    }
+
+    /** Set by any change to the form, so a draft is never restored over something the rider has done. */
+    private var touched = false
+    private var draftRestoreOpen = true
+
+    private inline fun changeState(transform: (ExerciseRoutePlannerUiState) -> ExerciseRoutePlannerUiState) {
+        touched = true
+        _uiState.update(transform)
     }
 
     private var discardHook: (() -> Unit)? = null
@@ -103,21 +112,27 @@ internal class ExerciseRoutePlannerViewModel(
         )
     }
 
-    /** Puts a draft back only while the form is still empty; a live form is never overwritten. */
+    /**
+     * Puts a draft back only while this ViewModel is brand new and the rider has changed nothing (clearing
+     * a field counts), including while the draft was being loaded; a live form is never overwritten.
+     */
     fun restoreDraft(draft: ExercisePlannerDraft) {
-        if (!isUntouched(_uiState.value)) {
+        if (touched || !draftRestoreOpen) {
             return
         }
-        _uiState.update {
-            it.copy(
-                startAddress = draft.startAddress,
-                startPoint = draft.startPoint,
-                targetMilesText = draft.targetMilesText,
-                proposedTrailsEnabled = draft.proposedTrailsEnabled,
-                result = draft.result,
-                resultAwaitingMap = false,
-            )
-        }
+        _uiState.value = _uiState.value.copy(
+            startAddress = draft.startAddress,
+            startPoint = draft.startPoint,
+            targetMilesText = draft.targetMilesText,
+            proposedTrailsEnabled = draft.proposedTrailsEnabled,
+            result = draft.result,
+            resultAwaitingMap = false,
+        )
+    }
+
+    /** Ends the chance to restore a draft, whether or not one was found. */
+    fun closeDraftRestore() {
+        draftRestoreOpen = false
     }
 
     private fun isUntouched(state: ExerciseRoutePlannerUiState): Boolean =
@@ -134,7 +149,7 @@ internal class ExerciseRoutePlannerViewModel(
 
     fun setTargetMilesText(text: String) {
         cancelStaleWork(cancelRoute = true)
-        _uiState.update {
+        changeState {
             it.copy(
                 targetMilesText = text,
                 result = null,
@@ -148,7 +163,7 @@ internal class ExerciseRoutePlannerViewModel(
 
     fun setProposedTrailsEnabled(enabled: Boolean) {
         cancelStaleWork(cancelRoute = true)
-        _uiState.update {
+        changeState {
             it.copy(
                 proposedTrailsEnabled = enabled,
                 result = null,
@@ -164,7 +179,7 @@ internal class ExerciseRoutePlannerViewModel(
         cancelStaleWork(cancelAutocomplete = true, cancelMapPoint = true, cancelRoute = true)
         clearTransientErrors()
         if (provider.shouldExplainCurrentLocationAccess()) {
-            _uiState.update { it.copy(pendingLocationPrompt = true) }
+            changeState { it.copy(pendingLocationPrompt = true) }
         } else {
             resolveCurrentLocation(provider)
         }
@@ -183,19 +198,19 @@ internal class ExerciseRoutePlannerViewModel(
         if (!_uiState.value.pendingLocationPrompt) {
             return
         }
-        _uiState.update { it.copy(pendingLocationPrompt = false) }
+        changeState { it.copy(pendingLocationPrompt = false) }
         resolveCurrentLocation(provider)
     }
 
     fun dismissCurrentLocationPrompt() {
-        _uiState.update { it.copy(pendingLocationPrompt = false) }
+        changeState { it.copy(pendingLocationPrompt = false) }
     }
 
     fun requestMapPoint(provider: MapPointSelectionProvider) {
         cancelStaleWork(cancelLocation = true, cancelAutocomplete = true, cancelRoute = true)
         mapPointJob?.cancel()
         mapPointJob = viewModelScope.launch {
-            _uiState.update {
+            changeState {
                 it.copy(
                     isResolvingMapPoint = true,
                     mapPointError = null,
@@ -206,7 +221,7 @@ internal class ExerciseRoutePlannerViewModel(
             try {
                 val selection = provider.pickMapPoint(RouteEndpointTarget.Start)
                 currentCoroutineContext().ensureActive()
-                _uiState.update { state ->
+                changeState { state ->
                     when (selection) {
                         is MapPointSelectionResult.Success -> {
                             val endpoints = MapPointApplySijko.applyMapPoint(
@@ -240,7 +255,7 @@ internal class ExerciseRoutePlannerViewModel(
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                _uiState.update {
+                changeState {
                     it.copy(
                         isResolvingMapPoint = false,
                         mapPointError = exception.message ?: "Map point selection failed.",
@@ -266,7 +281,7 @@ internal class ExerciseRoutePlannerViewModel(
         cancelStaleWork(cancelLocation = true, cancelMapPoint = true, cancelRoute = true)
         autocompleteJob?.cancel()
         autocompleteJob = viewModelScope.launch {
-            _uiState.update {
+            changeState {
                 it.copy(
                     isResolvingAutocomplete = true,
                     autocompleteError = null,
@@ -275,7 +290,7 @@ internal class ExerciseRoutePlannerViewModel(
             try {
                 val selection = provider.resolvePrediction(prediction, RouteEndpointTarget.Start)
                 currentCoroutineContext().ensureActive()
-                _uiState.update { state ->
+                changeState { state ->
                     when (selection) {
                         is AddressAutocompleteSelectionResult.Success -> {
                             val endpoints = MapPointApplySijko.applyMapPoint(
@@ -311,7 +326,7 @@ internal class ExerciseRoutePlannerViewModel(
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                _uiState.update {
+                changeState {
                     it.copy(
                         isResolvingAutocomplete = false,
                         autocompleteError = exception.message ?: "Address autocomplete failed.",
@@ -361,14 +376,14 @@ internal class ExerciseRoutePlannerViewModel(
             else -> null
         }
         if (validationError != null) {
-            _uiState.update { it.copy(isFindingRoute = false, searchError = validationError) }
+            changeState { it.copy(isFindingRoute = false, searchError = validationError) }
             return
         }
 
         val distanceMeters = targetDistanceMeters ?: return
         val validStartPoint = startPoint ?: return
         routeJob = viewModelScope.launch {
-            _uiState.update { it.copy(isFindingRoute = true, searchError = null) }
+            changeState { it.copy(isFindingRoute = true, searchError = null) }
             try {
                 val loaded = coroutineScope {
                     val trailResult = async { trailNetworkProvider.loadTrailNetwork() }
@@ -444,29 +459,29 @@ internal class ExerciseRoutePlannerViewModel(
     ) = findExerciseRoute(trailNetworkProvider, accessNetworkProvider)
 
     fun dismissLocationError() {
-        _uiState.update { it.copy(locationError = null) }
+        changeState { it.copy(locationError = null) }
     }
 
     fun dismissMapPointError() {
-        _uiState.update { it.copy(mapPointError = null) }
+        changeState { it.copy(mapPointError = null) }
     }
 
     fun dismissAutocompleteError() {
-        _uiState.update { it.copy(autocompleteError = null) }
+        changeState { it.copy(autocompleteError = null) }
     }
 
     fun markResultShownOnMap() {
-        _uiState.update { it.copy(resultAwaitingMap = false) }
+        changeState { it.copy(resultAwaitingMap = false) }
     }
 
     fun dismissSearchError() {
-        _uiState.update { it.copy(searchError = null) }
+        changeState { it.copy(searchError = null) }
     }
 
     private fun resolveCurrentLocation(provider: CurrentLocationAddressProvider) {
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
-            _uiState.update {
+            changeState {
                 it.copy(
                     isResolvingLocation = true,
                     locationError = null,
@@ -475,7 +490,7 @@ internal class ExerciseRoutePlannerViewModel(
             try {
                 val location = provider.getCurrentAddress()
                 currentCoroutineContext().ensureActive()
-                _uiState.update { state ->
+                changeState { state ->
                     when (location) {
                         is CurrentLocationAddressResult.Success -> {
                             val endpoints = CurrentLocationAddressApplySijko.applyAddress(
@@ -510,7 +525,7 @@ internal class ExerciseRoutePlannerViewModel(
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                _uiState.update {
+                changeState {
                     it.copy(
                         isResolvingLocation = false,
                         locationError = exception.message ?: "Current location lookup failed.",
@@ -532,12 +547,12 @@ internal class ExerciseRoutePlannerViewModel(
         autocompleteJob = viewModelScope.launch {
             delay(AUTOCOMPLETE_DEBOUNCE_MILLIS)
             currentCoroutineContext().ensureActive()
-            _uiState.update { it.copy(isResolvingAutocomplete = true, autocompleteError = null) }
+            changeState { it.copy(isResolvingAutocomplete = true, autocompleteError = null) }
             try {
                 val predictions = provider.predictions(query, RouteEndpointTarget.Start)
                 currentCoroutineContext().ensureActive()
                 if (_uiState.value.startAddress == query) {
-                    _uiState.update {
+                    changeState {
                         it.copy(
                             autocompleteSuggestions = predictions,
                             isResolvingAutocomplete = false,
@@ -548,7 +563,7 @@ internal class ExerciseRoutePlannerViewModel(
                 throw exception
             } catch (exception: Exception) {
                 if (_uiState.value.startAddress == query) {
-                    _uiState.update {
+                    changeState {
                         it.copy(
                             autocompleteSuggestions = emptyList(),
                             isResolvingAutocomplete = false,
@@ -602,7 +617,7 @@ internal class ExerciseRoutePlannerViewModel(
         if (requestVersion != routeRequestVersion) {
             return
         }
-        _uiState.update {
+        changeState {
             it.copy(
                 isFindingRoute = false,
                 searchError = error,
@@ -620,25 +635,25 @@ internal class ExerciseRoutePlannerViewModel(
     ) {
         if (cancelLocation) {
             locationJob?.cancel()
-            _uiState.update { it.copy(isResolvingLocation = false) }
+            changeState { it.copy(isResolvingLocation = false) }
         }
         if (cancelMapPoint) {
             mapPointJob?.cancel()
-            _uiState.update { it.copy(isResolvingMapPoint = false) }
+            changeState { it.copy(isResolvingMapPoint = false) }
         }
         if (cancelAutocomplete) {
             autocompleteJob?.cancel()
-            _uiState.update { it.copy(isResolvingAutocomplete = false) }
+            changeState { it.copy(isResolvingAutocomplete = false) }
         }
         if (cancelRoute) {
             routeJob?.cancel()
             routeRequestVersion += 1
-            _uiState.update { it.copy(isFindingRoute = false) }
+            changeState { it.copy(isFindingRoute = false) }
         }
     }
 
     private fun clearTransientErrors() {
-        _uiState.update {
+        changeState {
             it.copy(
                 locationError = null,
                 mapPointError = null,

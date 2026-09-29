@@ -1440,32 +1440,6 @@ private const val PLAN_RECENT_ROUTE_COUNT = 3
 
 private fun currentEpochMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
-/**
- * Keeps a planner's unfinished form on the device so it comes back if the app process is killed (for
- * example while another app is open for sharing). It restores only when this screen is recreated by the
- * system, never on a fresh visit, and is cleared when the rider leaves the planner.
- */
-@Stable
-private class PlannerDraftSession(
-    private val slot: String,
-    private val store: PlannerDraftStore,
-    private val recreated: Boolean,
-    private val restore: (String) -> Unit,
-) {
-    var ready by mutableStateOf(false)
-        private set
-    private var restoreAttempted = false
-
-    suspend fun restoreIfRecreated() {
-        if (restoreAttempted) return
-        restoreAttempted = true
-        if (recreated) {
-            store.load(slot)?.let(restore)
-        }
-        ready = true
-    }
-}
-
 @Composable
 private fun rememberPlannerDraftSession(
     slot: String,
@@ -1474,15 +1448,24 @@ private fun rememberPlannerDraftSession(
     restore: (String) -> Unit,
     currentDraft: () -> String?,
     setDiscardHook: ((() -> Unit)?) -> Unit,
+    settle: () -> Unit,
 ): PlannerDraftSession {
     // Survives process death with the screen's saved state, so a restored screen knows it was recreated.
     var visited by rememberSaveable { mutableStateOf(false) }
-    val session = remember { PlannerDraftSession(slot, store, recreated = visited, restore = restore) }
+    val session = remember {
+        PlannerDraftSession(slot, store, recreated = visited, restore = restore, settle = settle)
+            .also { created -> PlannerDraftOwnership.claim(slot, created) }
+    }
     LaunchedEffect(Unit) { visited = true }
 
-    // Leaving for good (not rotating, not being killed) removes the draft.
+    // Leaving for good (not rotating, not being killed) removes the draft, unless a newer visit has
+    // already taken the slot over.
     val discardScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-    setDiscardHook { discardScope.launch { store.clear(slot) } }
+    setDiscardHook {
+        if (PlannerDraftOwnership.release(slot, session)) {
+            discardScope.launch { store.clear(slot) }
+        }
+    }
 
     LaunchedEffect(state, session.ready) {
         if (!session.ready) return@LaunchedEffect
@@ -1856,6 +1839,7 @@ private fun ExerciseRoutePlanner(
         },
         currentDraft = { viewModel.toDraft(currentEpochMillis())?.let(PlannerDraftJsonSijko::encodeExercise) },
         setDiscardHook = viewModel::setDiscardHook,
+        settle = viewModel::closeDraftRestore,
     )
     LaunchedEffect(draftSession) { draftSession.restoreIfRecreated() }
     val focusManager = LocalFocusManager.current
@@ -2220,6 +2204,7 @@ private fun RoutePlanner(
         },
         currentDraft = { routePlannerViewModel.toDraft(currentEpochMillis())?.let(PlannerDraftJsonSijko::encodeRoute) },
         setDiscardHook = routePlannerViewModel::setDiscardHook,
+        settle = routePlannerViewModel::closeDraftRestore,
     )
     var showDeveloperOptions by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current

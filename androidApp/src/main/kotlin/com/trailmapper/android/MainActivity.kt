@@ -29,6 +29,7 @@ import com.trailmapper.android.routing.AndroidSavedDestinationStore
 import com.trailmapper.android.routing.AndroidSavedTrailRouteStore
 import com.trailmapper.android.routing.AndroidTrailNetworkProvider
 import com.trailmapper.android.routing.AndroidTrailRouteShareProvider
+import com.trailmapper.shared.SerializedPlannerDraftStore
 import com.trailmapper.shared.App
 import com.trailmapper.shared.MapPointSelectionResult
 import com.trailmapper.shared.sijko.ForegroundLocationGrantSijko
@@ -122,7 +123,7 @@ class MainActivity : ComponentActivity() {
         val completedExerciseSessionStore = AndroidCompletedExerciseSessionStore(applicationContext)
         val trailRouteShareProvider = AndroidTrailRouteShareProvider(applicationContext)
         val recentTrailRouteStore = AndroidRecentTrailRouteStore(applicationContext)
-        val plannerDraftStore = AndroidPlannerDraftStore(applicationContext)
+        val plannerDraftStore = SerializedPlannerDraftStore(AndroidPlannerDraftStore(applicationContext))
         val developerOptionsActions = if (BuildConfig.DEBUG) {
             AndroidDeveloperOptionsActions(this)
         } else {
