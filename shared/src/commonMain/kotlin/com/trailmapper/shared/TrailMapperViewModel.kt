@@ -4,6 +4,7 @@
  */
 package com.trailmapper.shared
 
+import com.trailmapper.shared.sijko.TrailAccountSheetSijko
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.trailmapper.shared.routing.AccessGraphBuilderSijko
@@ -417,7 +418,7 @@ internal class TrailMapperViewModel(
                 it.copy(
                     account = null,
                     isResolvingAccount = false,
-                    accountMessage = "Signed out.",
+                    accountMessage = TrailAccountSheetSijko.SIGNED_OUT_NOTICE,
                 )
             }
         }
