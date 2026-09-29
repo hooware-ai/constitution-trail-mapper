@@ -579,5 +579,8 @@ test("a structurally invalid stored route is set aside without blanking the app"
   ).toBeVisible();
   await page.getByRole("button", { name: "Delete unreadable data" }).click();
   await expect(notice).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Route controls" }),
+  ).toBeFocused();
   expect(failures).toEqual([]);
 });

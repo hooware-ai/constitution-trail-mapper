@@ -88,7 +88,10 @@ export const emptyDraft = (): Draft => ({
 const isObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 const isEndpoint = (value: unknown): value is Endpoint =>
-  isPoint(value) && typeof (value as Endpoint).label === "string";
+  isPoint(value) &&
+  typeof (value as Endpoint).label === "string" &&
+  ((value as Endpoint).address === undefined ||
+    typeof (value as Endpoint).address === "string");
 /** `miles` persists as null when the planner held NaN (JSON has no NaN). */
 export const isDraft = (value: unknown): value is Draft =>
   isObject(value) &&
