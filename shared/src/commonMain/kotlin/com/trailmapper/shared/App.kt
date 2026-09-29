@@ -128,6 +128,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -135,6 +137,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteSummarySijko
@@ -1892,7 +1895,7 @@ private fun ExerciseRoutePlanner(
                 )
             }
 
-            item(key = FIND_ITEM_KEY) {
+            item {
                 val canCreate = ExerciseRouteFormSijko.canCreate(
                     startAddress = uiState.startAddress,
                     startPoint = uiState.startPoint,
@@ -2314,7 +2317,7 @@ private fun RoutePlanner(
                 )
             }
 
-            item(key = FIND_ITEM_KEY) {
+            item {
                 val canFind = RouteSearchAvailabilitySijko.canSearch(uiState.endpoints) &&
                     !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest
                 val findRoute = {
@@ -2762,11 +2765,11 @@ private fun AddressAutocompletePanel(
     }
 }
 
-private const val FIND_ITEM_KEY = "find"
-
 /**
- * Brings the button item to the top of the list when [arrival] appears, so a failed search's reason and
- * its recovery action are not left below the old scroll position (large text, landscape).
+ * Scrolls a planner's list to its last item when [arrival] appears. The button item that holds a failed
+ * search's reason and its Try again action is the last item (a found route's card, which follows it, is
+ * the last when there is no map), so this reveals it whether or not the button is on screen. It waits
+ * for the arrival to lay out and reads the item count rather than the visible items.
  */
 @Composable
 private fun ScrollToFindItemOnArrival(
@@ -2775,9 +2778,9 @@ private fun ScrollToFindItemOnArrival(
 ) {
     LaunchedEffect(arrival) {
         if (arrival == null) return@LaunchedEffect
-        val findItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { item -> item.key == FIND_ITEM_KEY }
-            ?: return@LaunchedEffect
-        listState.animateScrollToItem(findItem.index)
+        withFrameNanos { }
+        val itemCount = snapshotFlow { listState.layoutInfo.totalItemsCount }.first { count -> count > 0 }
+        listState.animateScrollToItem(itemCount - 1)
     }
 }
 
