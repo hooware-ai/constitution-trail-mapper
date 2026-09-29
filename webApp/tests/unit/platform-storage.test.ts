@@ -304,13 +304,21 @@ test("a proposed segment is flagged as not built and unverified, and the collect
     fullRouteApproved: true,
     segmentBreaks: [2, 4],
     segments: info(["TrailBranches"], ["ProposedTrails"], ["TrailBranches"]),
-    context: context({ warnings: ["This route includes proposed trails."] }),
+    context: context({
+      proposedRoute: true,
+      warnings: ["This route includes proposed trails."],
+    }),
   });
   const proposed = result.features[1].properties;
   assert.equal(proposed.status, "proposed");
   assert.equal(proposed.verified, false);
   assert.deepEqual(proposed.roles, ["ProposedTrails"]);
-  assert.equal(result.features[0].properties.status, "existing");
+  // A role on one segment says nothing about the others in a route that uses proposed trails.
+  assert.equal(
+    result.features[0].properties.status,
+    "unknown-route-includes-proposed",
+  );
+  assert.equal(result.features[0].properties.verified, false);
   assert.equal(result.routeContext?.proposedTrailsIncluded, true);
   assert.deepEqual(result.routeContext?.warnings, [
     "This route includes proposed trails.",
@@ -471,7 +479,7 @@ test("a route whose proposed status is not on any segment marks every segment un
     assert.equal(result.routeContext?.proposedTrailsIncluded, true);
     assert.match(
       String(result.routeContext?.proposedNote),
-      /none is marked verified/,
+      /none is treated as verified/,
     );
   }
 });
@@ -503,4 +511,63 @@ test("status is identified as cached from the evaluation time, not stamped with 
   });
   assert.equal(unknown.routeContext?.statusCheckedAt, null);
   assert.equal(unknown.routeContext?.statusAgeSeconds, null);
+});
+
+test("mixed signals: a role elsewhere never verifies an unlabelled segment, in both privacy modes", () => {
+  for (const exact of [true, false]) {
+    const result = routeGeoJson(record(), three, {
+      action: "download",
+      ...(exact
+        ? { includeExactEndpoints: true, fullRouteApproved: true }
+        : {}),
+      segmentBreaks: [2, 4],
+      // First section: proposed with the role. Second: proposed status only. Third: existing.
+      segments: info(["ProposedTrails"], ["TrailBranches"], ["TrailBranches"]),
+      context: context({ proposedRoute: true }),
+    });
+    const lines = result.features.filter(
+      (f) => f.geometry.type === "LineString",
+    );
+    assert.ok(lines.length >= 1);
+    assert.ok(lines.every((line) => line.properties.verified === false));
+    assert.ok(
+      lines.every((line) =>
+        ["proposed", "unknown-route-includes-proposed"].includes(
+          String(line.properties.status),
+        ),
+      ),
+    );
+    assert.equal(result.routeContext?.proposedTrailsIncluded, true);
+  }
+});
+test("when the only role-labelled section is trimmed away the rest is still not verified", () => {
+  // Short first section carrying the role lies inside the hidden start area.
+  const coordinates: Array<[number, number]> = [
+    [-89, 40.0],
+    [-89, 40.001],
+    [-89, 40.002],
+    [-89, 40.02],
+    [-89, 40.03],
+    [-89, 40.05],
+  ];
+  const result = routeGeoJson(record(), coordinates, {
+    action: "download",
+    segmentBreaks: [2, 4],
+    segments: info(["ProposedTrails"], ["TrailBranches"], ["TrailBranches"]),
+    context: context({ proposedRoute: true }),
+  });
+  const lines = result.features.filter((f) => f.geometry.type === "LineString");
+  assert.ok(lines.length >= 1);
+  assert.ok(lines.every((line) => line.properties.status !== "proposed"));
+  assert.ok(lines.every((line) => line.properties.verified === false));
+  assert.ok(
+    lines.every(
+      (line) => line.properties.status === "unknown-route-includes-proposed",
+    ),
+  );
+  assert.equal(result.routeContext?.proposedTrailsIncluded, true);
+  assert.match(
+    String(result.routeContext?.proposedNote),
+    /may hide the segments that are marked/,
+  );
 });

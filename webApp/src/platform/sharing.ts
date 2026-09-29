@@ -146,25 +146,25 @@ export function routeGeoJson(
   const sortedBreaks = [...breaks].sort((x, y) => x - y);
   const segmentAt = (index: number) =>
     sortedBreaks.filter((boundary) => boundary <= index).length;
-  // A route can use proposed infrastructure without any segment saying which part. Then no segment can be
-  // called existing, so every one is marked unknown rather than mislabelled verified.
-  const flagged =
-    segments?.some((info) => info.roles.includes("ProposedTrails")) ?? false;
-  const proposedUnattributed = !!context?.proposedRoute && !flagged;
+  // A route that uses proposed infrastructure does not say, segment by segment, which parts are existing:
+  // a role on one segment establishes nothing about another. Only a segment that itself carries the
+  // proposed role is known to be proposed; every other segment of such a route is "unknown", never verified.
+  const proposedRoute = !!context?.proposedRoute;
   const segmentProperties = (segment: number): Properties => {
     const info = segments?.[segment];
     if (!info) return {};
     const proposed = info.roles.includes("ProposedTrails");
+    const unknown = proposedRoute && !proposed;
     return {
       segmentType: info.type.toLowerCase(),
       roles: [...info.roles],
       status: proposed
         ? "proposed"
-        : proposedUnattributed
+        : unknown
           ? "unknown-route-includes-proposed"
           : "existing",
       // Proposed infrastructure is not built: geometry is shown for planning only.
-      verified: !proposed && !proposedUnattributed,
+      verified: !proposed && !unknown,
     };
   };
   type Line = { points: Coordinate[]; segment: number };
@@ -292,11 +292,13 @@ export function routeGeoJson(
       kind: context.kind,
       dataset: context.dataset,
       exportedAt: context.exportedAt,
-      proposedTrailsIncluded: context.proposedRoute || flagged,
-      ...(proposedUnattributed
+      proposedTrailsIncluded:
+        proposedRoute ||
+        segments!.some((info) => info.roles.includes("ProposedTrails")),
+      ...(proposedRoute
         ? {
             proposedNote:
-              "The route uses proposed trails but the data does not say which segments; none is marked verified.",
+              "The route uses proposed trails. Only segments marked proposed are known to be; every other segment is marked unknown and none is treated as verified. Trimmed endpoint areas may hide the segments that are marked.",
           }
         : {}),
       // Warnings and closures are those evaluated when the route was opened, not at export time.
