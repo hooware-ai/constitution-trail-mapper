@@ -551,3 +551,397 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+test("an exercise loop keeps its progress when the page is hidden and shown, and after a reload", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const ride = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return key ? JSON.parse(localStorage.getItem(key)!) : null;
+    });
+  // Ride the stored route geometry about 80% of the way round, on its return leg.
+  const path = await (async () => {
+    await acceptedFix(page, 40.51, -88.95);
+    const stored = await ride();
+    return (stored.record.route.segments as any[]).flatMap((s) =>
+      (s.points as { latitude: number; longitude: number }[]).map((p) => [
+        p.latitude,
+        p.longitude,
+      ]),
+    );
+  })();
+  const stepEvery = Math.max(1, Math.floor(path.length / 60));
+  const target = Math.floor(path.length * 0.8);
+  for (let index = stepEvery; index <= target; index += stepEvery) {
+    await page.clock.fastForward(1000);
+    await acceptedFix(page, path[index][0], path[index][1]);
+  }
+  const [lat, lon] = path[target];
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, lat, lon);
+  const before = (await ride()).routeProgressMeters as number;
+  expect(before).toBeGreaterThan(1500);
+  // Hide, then show, and reacquire at the identical place: progress must not fall back to an earlier pass.
+  await page.evaluate(() => (window as any).__gps.visible(false));
+  await page.clock.fastForward(30_000);
+  await page.evaluate(() => (window as any).__gps.visible(true));
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, lat, lon);
+  const afterShow = (await ride()).routeProgressMeters as number;
+  expect(afterShow).toBeGreaterThanOrEqual(before - 60);
+  // Same after a reload.
+  await page.reload();
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, lat, lon);
+  const afterReload = (await ride()).routeProgressMeters as number;
+  expect(afterReload).toBeGreaterThanOrEqual(before - 60);
+});
+
+type MeterPoint = [east: number, north: number];
+const OUT_AND_BACK: MeterPoint[] = [
+  [0, 0],
+  [0, 1000],
+  [0, 2000],
+  [0, 1000],
+  [0, 0],
+];
+/** Restore a saved ride on a synthetic loop given in metres east/north of a fixed origin. */
+async function seedLoopRide(
+  page: Page,
+  path: MeterPoint[],
+  progress: number,
+  total = 4000,
+) {
+  await page.clock.install();
+  await page.addInitScript(
+    ({ path, progress, total }) => {
+      const key = "trail-mapper.fixture:trail-mapper.web.active-ride.v1";
+      if (localStorage.getItem(key)) return;
+      const at = ([east, north]: [number, number]) => ({
+        latitude: 40.5 + north / 111_195,
+        longitude: -88.95 + east / (111_195 * Math.cos((40.5 * Math.PI) / 180)),
+      });
+      const points = path.map(at);
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 1,
+          record: {
+            key: "seeded-loop",
+            title: "Seeded loop",
+            createdAt: Date.now(),
+            usedAt: Date.now(),
+            route: {
+              segments: points.slice(1).map((end, index) => ({
+                type: "Trail",
+                points: [points[index], end],
+                isRouted: true,
+              })),
+              totalDistanceMeters: total,
+              ordinaryAccessDistanceMeters: 0,
+              totalCost: 1,
+              kind: "ExerciseLoop",
+            },
+            draft: {
+              mode: "loop",
+              start: { label: "Trailhead", ...points[0] },
+              destination: null,
+              miles: 3,
+              proposed: false,
+            },
+          },
+          routeProgressMeters: progress,
+          creditedDistanceMeters: 2000,
+          updatedAt: Date.now(),
+        }),
+      );
+    },
+    { path, progress, total },
+  );
+}
+const seedOutAndBackRide = (page: Page, progress: number) =>
+  seedLoopRide(page, OUT_AND_BACK, progress);
+test("reloading on the return leg of an out-and-back loop keeps the return pass", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 3000);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  // The rider is back at the 1 km mark, which the outbound pass also passes through.
+  await acceptedFix(page, 40.5 + 1000 / 111_195, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(2900);
+  expect(stored.routeProgressMeters).toBeLessThan(3100);
+  // Unobserved movement is never credited.
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
+
+test("moving toward the start on the return pass during a gap continues on the return pass", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 3000);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  // 500 m north: the outbound pass (500 m along) and the return pass (3500 m along) both match.
+  await acceptedFix(page, 40.5 + 500 / 111_195, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(3400);
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
+test("a position that only matches an earlier pass is ambiguous, not guidance or off route", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 3200);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  await fix(page, 40.5 + 1000 / 111_195, -88.95);
+  await expect(
+    page.getByText("We can't tell where you are on the loop"),
+  ).toBeVisible();
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "You are off route" }),
+  ).toHaveCount(0);
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBe(3200);
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
+
+test("a repeated junction never rewinds the saved progress into the completed section", async ({
+  page,
+}) => {
+  await seedLoopRide(
+    page,
+    [
+      [0, -1000],
+      [0, 0],
+      [100, 0],
+      [100, 250],
+      [4, 250],
+      [4, 0],
+      [4, 600],
+      [-100, 600],
+      [-100, 0],
+      [0, 0],
+      [0, -1000],
+    ],
+    1700,
+    4100,
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  // The old junction at (0, 0), where the supported later pass is 4 m away.
+  await acceptedFix(page, 40.5, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(1600);
+  expect(stored.routeProgressMeters).toBeLessThan(1800);
+  expect(stored.creditedDistanceMeters).toBe(2000);
+  const readRide = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return JSON.parse(localStorage.getItem(key!)!);
+    });
+  // A second identical fix a second later must not undo the recovery.
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.5, -88.95);
+  const same = await readRide();
+  expect(same.routeProgressMeters).toBeGreaterThan(1600);
+  expect(same.routeProgressMeters).toBeLessThan(1800);
+  expect(same.creditedDistanceMeters).toBe(2000);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  // Then forward movement 100 m up the supported pass continues from there.
+  await page.clock.fastForward(1000);
+  await acceptedFix(
+    page,
+    40.5 + 100 / 111_195,
+    -88.95 + 4 / (111_195 * Math.cos((40.5 * Math.PI) / 180)),
+  );
+  const ahead = await readRide();
+  expect(ahead.routeProgressMeters).toBeGreaterThan(1750);
+  expect(ahead.routeProgressMeters).toBeLessThan(1850);
+  expect(ahead.creditedDistanceMeters).toBeGreaterThan(2000);
+  expect(ahead.creditedDistanceMeters).toBeLessThan(2150);
+});
+
+test("61 m of ordinary backtracking on the outbound pass never jumps to the return pass or credits distance", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 1000);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.5 + 1000 / 111_195, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await page.clock.fastForward(10_000);
+  await acceptedFix(page, 40.5 + 939 / 111_195, -88.95);
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(900);
+  expect(stored.routeProgressMeters).toBeLessThan(1100);
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
+
+test("a stationary rider on a short repeated junction never switches to the completed pass", async ({
+  page,
+}) => {
+  await seedLoopRide(
+    page,
+    [
+      [0, -1000],
+      [0, 0],
+      [25, 0],
+      [25, 75],
+      [4, 75],
+      [4, 0],
+      [4, 600],
+      [-100, 600],
+      [-100, 0],
+      [0, 0],
+      [0, -1000],
+    ],
+    1200,
+    3600,
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const readRide = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return JSON.parse(localStorage.getItem(key!)!);
+    });
+  // The old junction at (0, 0), then identical fixes one second apart.
+  for (let count = 0; count < 3; count++) {
+    await page.clock.fastForward(1000);
+    await acceptedFix(page, 40.5, -88.95);
+    const ride = await readRide();
+    expect(ride.routeProgressMeters).toBeGreaterThan(1150);
+    expect(ride.routeProgressMeters).toBeLessThan(1250);
+    expect(ride.creditedDistanceMeters).toBe(2000);
+  }
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  // Forward movement 30 m up the supported pass continues from there.
+  await page.clock.fastForward(1000);
+  await acceptedFix(
+    page,
+    40.5 + 30 / 111_195,
+    -88.95 + 4 / (111_195 * Math.cos((40.5 * Math.PI) / 180)),
+  );
+  const ahead = await readRide();
+  expect(ahead.routeProgressMeters).toBeGreaterThan(1210);
+  expect(ahead.routeProgressMeters).toBeLessThan(1250);
+  expect(ahead.creditedDistanceMeters).toBeLessThan(2060);
+});
+
+test("riding east around an ordinary corner advances progress, guidance and observed credit with each fix", async ({
+  page,
+}) => {
+  await seedLoopRide(
+    page,
+    [
+      [0, 0],
+      [0, 1000],
+      [1000, 1000],
+      [1000, 0],
+      [0, 0],
+    ],
+    1000,
+    4000,
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const readRide = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return JSON.parse(localStorage.getItem(key!)!);
+    });
+  const east = (meters: number) =>
+    -88.95 + meters / (111_195 * Math.cos((40.5 * Math.PI) / 180));
+  // The first corner (resume), then fixes 20, 40 and 60 m along the east leg, five seconds apart.
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.5 + 1000 / 111_195, east(0));
+  let previous = await readRide();
+  for (const meters of [20, 40, 60]) {
+    await page.clock.fastForward(5000);
+    await acceptedFix(page, 40.5 + 1000 / 111_195, east(meters));
+    const ride = await readRide();
+    expect(ride.routeProgressMeters).toBeGreaterThan(1000 + meters - 8);
+    expect(ride.routeProgressMeters).toBeLessThan(1000 + meters + 8);
+    // Observed movement of about 20 m is credited each time.
+    const gained =
+      ride.creditedDistanceMeters - previous.creditedDistanceMeters;
+    expect(gained).toBeGreaterThan(12);
+    expect(gained).toBeLessThan(28);
+    await expect(page.locator(".guidance.navigating")).toBeVisible();
+    previous = ride;
+  }
+  await expect(page.getByText("We can't tell where you are")).toHaveCount(0);
+});

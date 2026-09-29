@@ -292,6 +292,19 @@ export class ForegroundNavigationController {
         !usableFix(fix, this.clock.now())
       )
         return;
+      // Reacquired where the loop could equally be an earlier pass: do not steer, credit or claim off route.
+      if (guidance.ambiguous === true) {
+        this.lastProgress = null;
+        this.needsReacquisition = true;
+        this.patch({
+          phase: "reacquiring",
+          message:
+            "We can't tell where you are on the loop yet. Keep going along the route and guidance will resume once your position is clear.",
+          fix,
+          guidance: null,
+        });
+        return;
+      }
       if (
         ![
           guidance.routeProgressMeters,
