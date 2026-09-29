@@ -161,7 +161,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 autocompleteTarget = null,
                 autocompleteSuggestions = emptyList(),
                 autocompleteError = null,
-                routeDialog = null,
+                routeNotice = null,
             )
         }
     }
@@ -324,9 +324,10 @@ internal class RoutePlannerViewModel : ViewModel() {
         if (startPoint == null || destinationPoint == null) {
             _uiState.update {
                 it.copy(
-                    routeDialog = RouteMessageDialog(
-                        title = "Choose points first",
-                        message = "Trail routing needs map or current-location points for both start and destination. Typed addresses will route after address geocoding is wired.",
+                    routeNotice = RouteNotice(
+                        title = "Choose both points",
+                        message = "Choose a start and a destination from a suggestion, your current location, or a point on the map.",
+                        retryable = false,
                     ),
                 )
             }
@@ -337,14 +338,14 @@ internal class RoutePlannerViewModel : ViewModel() {
             _uiState.update {
                 it.copy(
                     isFindingRoute = true,
-                    routeDialog = null,
+                    routeNotice = null,
                 )
             }
 
             try {
                 val loadResult = trailNetworkProvider.loadTrailNetwork()
                 currentCoroutineContext().ensureActive()
-                val routeDialog = when (loadResult) {
+                val routeNotice = when (loadResult) {
                     is TrailNetworkLoadResult.Success -> {
                         val outcome = findTrailRoute(
                             features = loadResult.features,
@@ -356,14 +357,15 @@ internal class RoutePlannerViewModel : ViewModel() {
                         val route = outcome.route
                         val closure = outcome.blockingClosures.firstOrNull()
                         if (route == null && closure != null) {
-                            RouteMessageDialog(title = closure.title, message = closure.guidance)
+                            RouteNotice(title = closure.title, message = closure.guidance, retryable = false)
                         } else if (route == null) {
-                            RouteMessageDialog(
+                            RouteNotice(
                                 title = "No trail route found",
                                 message = "No approved trail route was found within the current access-distance limit. Try points closer to mapped trail segments.",
+                                retryable = false,
                             )
                         } else {
-                            RouteMessageDialog(
+                            RouteNotice(
                                 title = "Trail route found",
                                 message = TrailRouteSummarySijko.summaryFor(route),
                                 route = route,
@@ -371,13 +373,13 @@ internal class RoutePlannerViewModel : ViewModel() {
                         }
                     }
                     TrailNetworkLoadResult.Unavailable -> {
-                        RouteMessageDialog(
+                        RouteNotice(
                             title = "Trail data unavailable",
                             message = "This build does not have trail-network route data available.",
                         )
                     }
                     is TrailNetworkLoadResult.Error -> {
-                        RouteMessageDialog(
+                        RouteNotice(
                             title = "Trail data error",
                             message = loadResult.message,
                         )
@@ -389,9 +391,9 @@ internal class RoutePlannerViewModel : ViewModel() {
                 }
                 _uiState.update {
                     it.copy(
-                        routeDialog = routeDialog,
+                        routeNotice = routeNotice,
                         isFindingRoute = false,
-                        lastRoute = routeDialog.route,
+                        lastRoute = routeNotice.route,
                     )
                 }
             } catch (exception: CancellationException) {
@@ -404,7 +406,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isFindingRoute = false,
-                        routeDialog = RouteMessageDialog(
+                        routeNotice = RouteNotice(
                             title = "Route search error",
                             message = exception.message ?: "Trail route search failed.",
                         ),
@@ -422,8 +424,8 @@ internal class RoutePlannerViewModel : ViewModel() {
         _uiState.update { it.copy(mapPointError = null) }
     }
 
-    fun dismissRouteDialog() {
-        _uiState.update { it.copy(routeDialog = null) }
+    fun dismissRouteNotice() {
+        _uiState.update { it.copy(routeNotice = null) }
     }
 
     private fun resolveCurrentLocation(
@@ -488,7 +490,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 locationError = null,
                 mapPointError = null,
                 autocompleteError = null,
-                routeDialog = null,
+                routeNotice = null,
             )
         }
     }
@@ -582,7 +584,7 @@ internal class RoutePlannerViewModel : ViewModel() {
     private fun invalidateRoute() {
         routeSearchJob?.cancel()
         routeRequestVersion += 1
-        _uiState.update { it.copy(isFindingRoute = false, routeDialog = null, lastRoute = null) }
+        _uiState.update { it.copy(isFindingRoute = false, routeNotice = null, lastRoute = null) }
     }
 
     private fun cancelEndpointWork(target: RouteEndpointTarget? = null) {

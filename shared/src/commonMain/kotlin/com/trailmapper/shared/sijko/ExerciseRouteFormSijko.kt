@@ -40,16 +40,17 @@ object ExerciseRouteFormSijko {
         isBusy: Boolean,
     ): Boolean = !isBusy && startAddress.isNotBlank() && startPoint != null && isDistanceValid(milesText)
 
-    /** Why Create is unavailable, in the order the rider would fix it; null once the form is ready. */
+    /**
+     * Why Create is unavailable, in the order the rider would fix it; null once the form is ready. A Start
+     * that was typed but not resolved is explained beside its field, so it is not repeated here.
+     */
     fun guidance(
         startAddress: String,
         startPoint: MapPoint?,
-        isResolvingStart: Boolean,
         milesText: String,
     ): String? = when {
         startAddress.isBlank() -> "Add a start to create a loop."
-        startPoint == null && isResolvingStart -> null
-        startPoint == null -> "Choose a suggestion, your current location, or a point on the map so the loop starts where you mean."
+        startPoint == null -> null
         milesText.isBlank() -> "Add a distance to create a loop."
         else -> null
     }

@@ -24,7 +24,7 @@ data class RoutePlannerUiState(
     val autocompleteError: String? = null,
     val locationError: String? = null,
     val mapPointError: String? = null,
-    val routeDialog: RouteMessageDialog? = null,
+    val routeNotice: RouteNotice? = null,
     val isFindingRoute: Boolean = false,
     /** The route found for the current endpoints, kept so the rider can reopen its map after Back. */
     val lastRoute: TrailRoute? = null,

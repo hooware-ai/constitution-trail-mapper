@@ -1926,7 +1926,6 @@ private fun ExerciseRoutePlanner(
                     ExerciseRouteFormSijko.guidance(
                         startAddress = uiState.startAddress,
                         startPoint = uiState.startPoint,
-                        isResolvingStart = uiState.hasPendingEndpointRequest,
                         milesText = uiState.targetMilesText,
                     )?.takeIf { !uiState.isFindingRoute }?.let { hint ->
                         Text(
@@ -2230,6 +2229,10 @@ private fun RoutePlanner(
                 )
             }
 
+            RouteSearchAvailabilitySijko.unresolvedHint(RouteEndpointTarget.Start, uiState.endpoints)
+                ?.takeIf { uiState.autocompleteSuggestions.isEmpty() && !uiState.hasPendingEndpointRequest }
+                ?.let { hint -> item { PlannerFieldHint(hint) } }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2282,6 +2285,10 @@ private fun RoutePlanner(
                 )
             }
 
+            RouteSearchAvailabilitySijko.unresolvedHint(RouteEndpointTarget.Destination, uiState.endpoints)
+                ?.takeIf { uiState.autocompleteSuggestions.isEmpty() && !uiState.hasPendingEndpointRequest }
+                ?.let { hint -> item { PlannerFieldHint(hint) } }
+
             item {
                 RouteLayer(
                     label = "Proposed trails",
@@ -2295,27 +2302,49 @@ private fun RoutePlanner(
             }
 
             item {
-                Button(
-                    onClick = {
-                        routePlannerViewModel.findTrailRoute(
-                            trailNetworkProvider = trailNetworkProvider,
-                            accessNetworkProvider = accessNetworkProvider,
+                val canFind = RouteSearchAvailabilitySijko.canSearch(uiState.endpoints) &&
+                    !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest
+                val findRoute = {
+                    routePlannerViewModel.findTrailRoute(
+                        trailNetworkProvider = trailNetworkProvider,
+                        accessNetworkProvider = accessNetworkProvider,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = findRoute,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = canFind,
+                    ) {
+                        if (uiState.isFindingRoute) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Finding your route…")
+                        } else {
+                            Text("Find trail route")
+                        }
+                    }
+                    RouteSearchAvailabilitySijko.guidance(uiState.endpoints)
+                        ?.takeIf { !uiState.isFindingRoute }
+                        ?.let { hint ->
+                            Text(
+                                text = hint,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    // A search that failed or found nothing is explained here, with a way to try again.
+                    uiState.routeNotice?.takeIf { it.route == null }?.let { notice ->
+                        RouteNoticeCard(
+                            notice = notice,
+                            onTryAgain = findRoute.takeIf { canFind && notice.retryable },
                         )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = RouteSearchAvailabilitySijko.canSearch(uiState.endpoints) &&
-                        !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest,
-                ) {
-                    if (uiState.isFindingRoute) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                    } else {
-                        Text("Find Trail Route")
                     }
                 }
             }
 
             uiState.lastRoute
-                ?.takeIf { trailRouteMapPresenter.isAvailable && !uiState.isFindingRoute }
+                ?.takeIf { !uiState.isFindingRoute }
                 ?.let { route ->
                     item {
                         Surface(
@@ -2329,7 +2358,10 @@ private fun RoutePlanner(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
                                     Text(
                                         text = "Route ready",
                                         style = MaterialTheme.typography.titleSmall,
@@ -2339,20 +2371,24 @@ private fun RoutePlanner(
                                         text = TrailRouteSummarySijko.summaryFor(route),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
                                     )
+                                    TrailRouteAdvisorySijko.forRoute(route).forEach { advisory ->
+                                        TrailRouteAdvisoryBanner(advisory, onReview = { externalLinkOpener.open(advisory.sourceUrl) })
+                                    }
                                 }
-                                Button(
-                                    onClick = {
-                                        trailRouteMapPresenter.showTrailRoute(
-                                            route,
-                                            routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
-                                        )
-                                    },
-                                ) {
-                                    Icon(imageVector = Icons.Filled.Map, contentDescription = null)
-                                    Text("Open map")
+                                if (trailRouteMapPresenter.isAvailable) {
+                                    Button(
+                                        onClick = {
+                                            trailRouteMapPresenter.showTrailRoute(
+                                                route,
+                                                routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
+                                            )
+                                        },
+                                    ) {
+                                        Icon(imageVector = Icons.Filled.Map, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Open map")
+                                    }
                                 }
                             }
                         }
@@ -2411,38 +2447,18 @@ private fun RoutePlanner(
         )
     }
 
-    uiState.routeDialog?.let { dialog ->
-        val drawableRoute = dialog.route.takeIf { trailRouteMapPresenter.isAvailable }
+    uiState.routeNotice?.let { notice ->
+        val drawableRoute = notice.route.takeIf { trailRouteMapPresenter.isAvailable }
         if (drawableRoute != null) {
             // Nothing asks the rider to save first; saving and sharing happen on the map.
-            LaunchedEffect(dialog) {
-                routePlannerViewModel.dismissRouteDialog()
+            LaunchedEffect(notice) {
+                routePlannerViewModel.dismissRouteNotice()
                 trailRouteMapPresenter.showTrailRoute(
                     drawableRoute,
                     routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
                 )
             }
-            return@let
         }
-        AlertDialog(
-            onDismissRequest = routePlannerViewModel::dismissRouteDialog,
-            title = { Text(dialog.title) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(dialog.message)
-                    dialog.route?.let { route ->
-                        TrailRouteAdvisorySijko.forRoute(route).forEach { advisory ->
-                            TrailRouteAdvisoryBanner(advisory, onReview = { externalLinkOpener.open(advisory.sourceUrl) })
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = routePlannerViewModel::dismissRouteDialog) {
-                    Text("OK")
-                }
-            },
-        )
     }
 
     if (showDeveloperOptions && developerOptionsActions != null) {
@@ -2728,6 +2744,50 @@ private fun AddressAutocompletePanel(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+/** Explains, next to the field, why typed text is not yet a place the router can use. */
+@Composable
+private fun PlannerFieldHint(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+/** A failed or empty search, shown where the rider is looking instead of in an OK dialog. */
+@Composable
+private fun RouteNoticeCard(
+    notice: RouteNotice,
+    onTryAgain: (() -> Unit)?,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = notice.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Text(
+                text = notice.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            if (onTryAgain != null) {
+                OutlinedButton(onClick = onTryAgain) { Text("Try again") }
             }
         }
     }

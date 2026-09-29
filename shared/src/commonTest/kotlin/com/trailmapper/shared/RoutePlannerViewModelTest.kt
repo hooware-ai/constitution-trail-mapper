@@ -47,6 +47,22 @@ class RoutePlannerViewModelTest {
     }
 
     @Test
+    fun searchingWithoutBothPointsExplainsWhatToChooseWithoutPromisingFutureWork() {
+        val viewModel = RoutePlannerViewModel()
+        viewModel.updateEndpointText(RouteEndpointTarget.Start, "Hershey", NoAddressAutocompleteProvider)
+        viewModel.updateEndpointText(RouteEndpointTarget.Destination, "Library", NoAddressAutocompleteProvider)
+
+        viewModel.findTrailRoute(DeferredTrailProvider(), NoAccessNetworkProvider)
+
+        val notice = viewModel.uiState.value.routeNotice
+        assertEquals("Choose both points", notice?.title)
+        assertTrue(notice?.message.orEmpty().contains("suggestion, your current location, or a point on the map"))
+        assertFalse(notice?.message.orEmpty().contains("geocoding"))
+        assertNull(notice?.route)
+        assertFalse(notice?.retryable ?: true)
+    }
+
+    @Test
     fun prepareRoutePrefillsSavedDestination() {
         val destination = savedDestination()
         val viewModel = RoutePlannerViewModel()
@@ -97,7 +113,7 @@ class RoutePlannerViewModelTest {
             provider.result.complete(Result.success(TrailNetworkLoadResult.Unavailable))
             runCurrent()
 
-            assertNull(viewModel.uiState.value.routeDialog, name)
+            assertNull(viewModel.uiState.value.routeNotice, name)
             assertFalse(viewModel.uiState.value.isFindingRoute, name)
         }
     }
@@ -122,7 +138,7 @@ class RoutePlannerViewModelTest {
                     oldProvider.result.complete(oldResult)
                     runCurrent()
                     assertTrue(viewModel.uiState.value.isFindingRoute)
-                    assertNull(viewModel.uiState.value.routeDialog)
+                    assertNull(viewModel.uiState.value.routeNotice)
                 }
                 newProvider.result.complete(Result.success(TrailNetworkLoadResult.Error("Current result")))
                 runCurrent()
@@ -130,7 +146,7 @@ class RoutePlannerViewModelTest {
                     oldProvider.result.complete(oldResult)
                     runCurrent()
                 }
-                assertEquals("Current result", viewModel.uiState.value.routeDialog?.message)
+                assertEquals("Current result", viewModel.uiState.value.routeNotice?.message)
                 assertFalse(viewModel.uiState.value.isFindingRoute)
             }
         }
@@ -321,7 +337,7 @@ class RoutePlannerViewModelTest {
             assertEquals(0, trailLoads, source)
             assertTrue(viewModel.uiState.value.hasPendingEndpointRequest, source)
             assertFalse(viewModel.uiState.value.isFindingRoute, source)
-            assertNull(viewModel.uiState.value.routeDialog, source)
+            assertNull(viewModel.uiState.value.routeNotice, source)
             gate.complete(Unit)
             runCurrent()
             assertFalse(viewModel.uiState.value.hasPendingEndpointRequest, source)
@@ -355,7 +371,7 @@ class RoutePlannerViewModelTest {
         runCurrent()
 
         assertEquals(RouteEndpointTarget.Start, viewModel.uiState.value.pendingLocationTarget)
-        assertNull(viewModel.uiState.value.routeDialog)
+        assertNull(viewModel.uiState.value.routeNotice)
         assertFalse(viewModel.uiState.value.isFindingRoute)
         viewModel.confirmCurrentLocation(provider)
         runCurrent()
@@ -387,11 +403,11 @@ class RoutePlannerViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isFindingRoute)
-        val route = kotlin.test.assertNotNull(state.lastRoute, "${state.routeDialog}")
-        assertEquals(route, state.routeDialog?.route)
+        val route = kotlin.test.assertNotNull(state.lastRoute, "${state.routeNotice}")
+        assertEquals(route, state.routeNotice?.route)
 
         // The map dismisses the dialog; the route stays for reopening after Back.
-        viewModel.dismissRouteDialog()
+        viewModel.dismissRouteNotice()
         assertEquals(route, viewModel.uiState.value.lastRoute)
 
         viewModel.requestMapPoint(RouteEndpointTarget.Destination, immediateMapProvider())
