@@ -390,6 +390,30 @@ class WebRoutingBridgeTest {
         }
     }
 
+    /** Reviewer fixture: a repeated junction at (0,0) that a second loop passes 4 m away at ~1696 m along. */
+    private fun repeatedJunctionLoop(): TrailRoute {
+        val path = listOf(
+            0.0 to -1000.0, 0.0 to 0.0, 100.0 to 0.0, 100.0 to 250.0, 4.0 to 250.0, 4.0 to 0.0,
+            4.0 to 600.0, -100.0 to 600.0, -100.0 to 0.0, 0.0 to 0.0, 0.0 to -1000.0,
+        ).map { (east, north) -> at(east, north) }
+        return TrailRoute(
+            segments = path.zipWithNext().map { (from, to) -> TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(from, to)) },
+            totalDistanceMeters = 4100.0, ordinaryAccessDistanceMeters = 0.0, totalCost = 1.0, kind = TrailRouteKind.ExerciseLoop,
+        )
+    }
+
+    @Test fun aRepeatedJunctionKeepsTheSupportedLaterOccurrenceWithAndWithoutSavedState() {
+        for (state in listOf(null, buildJsonObject { put("maximumProgress", 1700.0) })) {
+            val result = snapshot(repeatedJunctionLoop(), at(0.0, 0.0), progress = 1700.0, resume = true, state = state)
+            assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+            // The rider is at the junction the completed section also passes (~1000 m) but the supported pass is ~1696 m.
+            assertEquals(1696.0, result["progress"]!!.jsonPrimitive.double, 10.0)
+            assertEquals(1700.0, result["state"]!!.jsonObject["maximumProgress"]!!.jsonPrimitive.double, 10.0)
+            assertEquals(2404.0, result["remaining"]!!.jsonPrimitive.double, 15.0)
+            assertFalse(result["arrived"]!!.jsonPrimitive.boolean)
+        }
+    }
+
     @Test fun anOrdinaryLoopFixAfterReacquisitionDoesNotBecomeAmbiguous() {
         val result = snapshot(squareLoop(), at(1000.0, 500.0), progress = 1400.0, resume = true)
         assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)

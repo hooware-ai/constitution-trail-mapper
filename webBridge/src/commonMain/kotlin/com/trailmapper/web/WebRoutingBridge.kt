@@ -197,9 +197,17 @@ class WebRoutingBridge {
                 val best = later.minOfOrNull { it.distance }
                 val supported = if (best == null) null else later.filter { it.distance <= best + 5.0 }.minByOrNull { it.along }
                 when {
-                    supported != null && crossedFloor -> snapshot = requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(
-                        route, instructions, point, minimumProgressMeters = supported.along, previousProgressMeters = null,
-                    ))
+                    supported != null && crossedFloor -> {
+                        // The shared matcher can still fall back to an earlier, comparably close point (a repeated
+                        // junction), so ask it about the supported occurrence itself and verify what it returns.
+                        val pinned = requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(
+                            route, instructions, supported.point, minimumProgressMeters = supported.along, previousProgressMeters = null,
+                        ))
+                        if (kotlin.math.abs(pinned.distanceAlongRouteMeters - supported.along) <= PINNED_OCCURRENCE_TOLERANCE_METERS &&
+                            pinned.distanceAlongRouteMeters >= floor) {
+                            snapshot = pinned.copy(distanceFromRouteMeters = supported.distance)
+                        } else ambiguous = true
+                    }
                     supported == null && onRoute.isNotEmpty() -> ambiguous = true
                 }
             }
@@ -323,7 +331,7 @@ class WebRoutingBridge {
         require(route.totalDistanceMeters.isFinite() && route.totalDistanceMeters >= 0.0) { "Invalid route distance." }
         route.segments.flatMap { it.points }.forEach(::validatePoint)
     }
-    private class Occurrence(val along: Double, val distance: Double)
+    private class Occurrence(val along: Double, val distance: Double, val point: MapPoint)
 
     /** Every place along the route within on-route distance of [point], using the snapshot's leg arithmetic. */
     private fun onRouteOccurrences(route: TrailRoute, point: MapPoint): List<Occurrence> {
@@ -335,7 +343,7 @@ class WebRoutingBridge {
                 if (leg >= 0.1) {
                     val projection = TrailDistanceSijko.projectToSegment(point = point, segmentStart = start, segmentEnd = end)
                     if (projection.distanceMeters <= TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS) {
-                        found += Occurrence(cumulative + projection.distanceFromStartMeters.coerceIn(0.0, leg), projection.distanceMeters)
+                        found += Occurrence(cumulative + projection.distanceFromStartMeters.coerceIn(0.0, leg), projection.distanceMeters, projection.projectedPoint)
                     }
                     cumulative += leg
                 }
@@ -415,3 +423,4 @@ private data class BrowserNavigationState(
 )
 
 private const val TRAVERSAL_BACKTRACK_METERS = 60.0
+private const val PINNED_OCCURRENCE_TOLERANCE_METERS = 5.0

@@ -615,54 +615,70 @@ test("an exercise loop keeps its progress when the page is hidden and shown, and
   expect(afterReload).toBeGreaterThanOrEqual(before - 60);
 });
 
-async function seedOutAndBackRide(page: Page, progress: number) {
+type MeterPoint = [east: number, north: number];
+const OUT_AND_BACK: MeterPoint[] = [
+  [0, 0],
+  [0, 1000],
+  [0, 2000],
+  [0, 1000],
+  [0, 0],
+];
+/** Restore a saved ride on a synthetic loop given in metres east/north of a fixed origin. */
+async function seedLoopRide(
+  page: Page,
+  path: MeterPoint[],
+  progress: number,
+  total = 4000,
+) {
   await page.clock.install();
-  await page.addInitScript((progress) => {
-    const key = "trail-mapper.fixture:trail-mapper.web.active-ride.v1";
-    if (localStorage.getItem(key)) return;
-    const north = (meters: number) => ({
-      latitude: 40.5 + meters / 111_195,
-      longitude: -88.95,
-    });
-    const segment = (points: { latitude: number; longitude: number }[]) => ({
-      type: "Trail",
-      points,
-      isRouted: true,
-    });
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        version: 1,
-        record: {
-          key: "out-and-back",
-          title: "Out and back",
-          createdAt: Date.now(),
-          usedAt: Date.now(),
-          route: {
-            segments: [
-              segment([north(0), north(1000), north(2000)]),
-              segment([north(2000), north(1000), north(0)]),
-            ],
-            totalDistanceMeters: 4000,
-            ordinaryAccessDistanceMeters: 0,
-            totalCost: 1,
-            kind: "ExerciseLoop",
+  await page.addInitScript(
+    ({ path, progress, total }) => {
+      const key = "trail-mapper.fixture:trail-mapper.web.active-ride.v1";
+      if (localStorage.getItem(key)) return;
+      const at = ([east, north]: [number, number]) => ({
+        latitude: 40.5 + north / 111_195,
+        longitude: -88.95 + east / (111_195 * Math.cos((40.5 * Math.PI) / 180)),
+      });
+      const points = path.map(at);
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 1,
+          record: {
+            key: "seeded-loop",
+            title: "Seeded loop",
+            createdAt: Date.now(),
+            usedAt: Date.now(),
+            route: {
+              segments: points.slice(1).map((end, index) => ({
+                type: "Trail",
+                points: [points[index], end],
+                isRouted: true,
+              })),
+              totalDistanceMeters: total,
+              ordinaryAccessDistanceMeters: 0,
+              totalCost: 1,
+              kind: "ExerciseLoop",
+            },
+            draft: {
+              mode: "loop",
+              start: { label: "Trailhead", ...points[0] },
+              destination: null,
+              miles: 3,
+              proposed: false,
+            },
           },
-          draft: {
-            mode: "loop",
-            start: { label: "Trailhead", ...north(0) },
-            destination: null,
-            miles: 3,
-            proposed: false,
-          },
-        },
-        routeProgressMeters: progress,
-        creditedDistanceMeters: 2000,
-        updatedAt: Date.now(),
-      }),
-    );
-  }, progress);
+          routeProgressMeters: progress,
+          creditedDistanceMeters: 2000,
+          updatedAt: Date.now(),
+        }),
+      );
+    },
+    { path, progress, total },
+  );
 }
+const seedOutAndBackRide = (page: Page, progress: number) =>
+  seedLoopRide(page, OUT_AND_BACK, progress);
 test("reloading on the return leg of an out-and-back loop keeps the return pass", async ({
   page,
 }) => {
@@ -732,5 +748,45 @@ test("a position that only matches an earlier pass is ambiguous, not guidance or
     return JSON.parse(localStorage.getItem(key!)!);
   });
   expect(stored.routeProgressMeters).toBe(3200);
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
+
+test("a repeated junction never rewinds the saved progress into the completed section", async ({
+  page,
+}) => {
+  await seedLoopRide(
+    page,
+    [
+      [0, -1000],
+      [0, 0],
+      [100, 0],
+      [100, 250],
+      [4, 250],
+      [4, 0],
+      [4, 600],
+      [-100, 600],
+      [-100, 0],
+      [0, 0],
+      [0, -1000],
+    ],
+    1700,
+    4100,
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  // The old junction at (0, 0), where the supported later pass is 4 m away.
+  await acceptedFix(page, 40.5, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(1600);
+  expect(stored.routeProgressMeters).toBeLessThan(1800);
   expect(stored.creditedDistanceMeters).toBe(2000);
 });
