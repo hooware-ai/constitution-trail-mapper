@@ -173,18 +173,31 @@ class WebRoutingBridge {
             TrailRouteDeviationStatus.valueOf(state.deviationStatus), state.streakStartMillis, state.streakStartPoint,
             state.streakFixCount, state.returnFixCount, state.lastCredibleFixMillis,
         )
+        val instructions = TrailRouteTurnInstructionSijko.instructionsFor(route)
+        val loop = route.kind == TrailRouteKind.ExerciseLoop
+        // A loop keeps its last observed progress as an ordering floor even when reacquiring, so a rider
+        // on the return leg of repeated geometry is not matched to the completed outbound pass. Nothing is
+        // credited for this: reacquisition never adds distance, it only picks the occurrence.
         val snapshot = requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(
-            route, TrailRouteTurnInstructionSijko.instructionsFor(route), point,
-            minimumProgressMeters = if (!resuming && route.kind == TrailRouteKind.ExerciseLoop) progress else 0.0,
+            route, instructions, point,
+            minimumProgressMeters = if (loop) progress else 0.0,
             previousProgressMeters = progress.takeUnless { resuming },
         )) { "No drawable navigation geometry is available." }
+        // When reacquiring, a rider who is on the route only at a point earlier than their last progress is
+        // ambiguous (turned back, or an earlier pass of the same path): do not steer them as if off route
+        // or as if on the earlier leg; ask them to keep moving until the position is clear.
+        val ambiguous = resuming && loop && progress > 0.0 &&
+            snapshot.distanceFromRouteMeters > TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS &&
+            requireNotNull(TrailRouteNavigationSnapshotSijko.snapshotFor(route, instructions, point)).distanceFromRouteMeters <=
+            TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS
         val deviation = TrailRouteDeviationSijko.next(previousDeviation, fix, snapshot.distanceFromRouteMeters, now)
         val credible = TrailRouteDeviationSijko.isCredible(fix, now) && (fix.accuracyMeters ?: -1.0) >= 0.0
         val verified = if (credible && !resuming) ExerciseRouteCompletionSijko.verifiedProgressMeters(state.verifiedProgress, state.maximumProgress, snapshot) else state.verifiedProgress
         val departed = credible && !resuming && ExerciseRouteCompletionSijko.hasDeparted(route, snapshot, state.departed) || state.departed
         val nextState = BrowserNavigationState(
             maximumProgress = when {
-                !credible -> state.maximumProgress
+                !credible || ambiguous -> state.maximumProgress
+                resuming && loop -> maxOf(state.maximumProgress, snapshot.distanceAlongRouteMeters)
                 resuming -> snapshot.distanceAlongRouteMeters
                 else -> maxOf(state.maximumProgress, snapshot.distanceAlongRouteMeters)
             },
@@ -193,11 +206,12 @@ class WebRoutingBridge {
             streakStartPoint = deviation.streakStartPoint, streakFixCount = deviation.streakFixCount,
             returnFixCount = deviation.returnFixCount, lastCredibleFixMillis = deviation.lastCredibleFixMillis,
         )
-        val arrived = credible && !resuming && if (route.kind == TrailRouteKind.ExerciseLoop) {
+        val arrived = credible && !resuming && !ambiguous && if (route.kind == TrailRouteKind.ExerciseLoop) {
             ExerciseRouteCompletionSijko.shouldComplete(route, snapshot, departed, false, verified)
         } else snapshot.remainingDistanceMeters <= 25.0 && snapshot.distanceFromRouteMeters <= 35.0
         return buildJsonObject {
-            put("progress", if (credible) snapshot.distanceAlongRouteMeters else progress)
+            put("progress", if (credible && !ambiguous) snapshot.distanceAlongRouteMeters else progress)
+            put("ambiguous", ambiguous)
             put("remaining", snapshot.remainingDistanceMeters)
             put("distanceFromRoute", snapshot.distanceFromRouteMeters)
             put("offRoute", deviation.isConfirmed)

@@ -297,6 +297,78 @@ class WebRoutingBridgeTest {
         assertEquals(assertIs<TrailRouteRerouteOutcome.Replacement>(expected).route, actual)
     }
 
+    // ~1 degree of latitude is 111 km; these helpers build small synthetic loops around the origin.
+    private fun metersNorth(meters: Double) = meters / 6_371_008.8 * 180.0 / kotlin.math.PI
+    private fun at(eastMeters: Double, northMeters: Double) = MapPoint(metersNorth(northMeters), metersNorth(eastMeters))
+
+    /** 2 km out and the same 2 km back: every point of the outbound pass is repeated on the return pass. */
+    private fun outAndBackLoop(): TrailRoute {
+        val out = TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(at(0.0, 0.0), at(0.0, 1000.0), at(0.0, 2000.0)))
+        val back = TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(at(0.0, 2000.0), at(0.0, 1000.0), at(0.0, 0.0)))
+        return TrailRoute(
+            segments = listOf(out, back), totalDistanceMeters = 4000.0, ordinaryAccessDistanceMeters = 0.0,
+            totalCost = 1.0, kind = TrailRouteKind.ExerciseLoop,
+        )
+    }
+
+    /** A 1 km square that never repeats geometry. */
+    private fun squareLoop(): TrailRoute {
+        val corners = listOf(at(0.0, 0.0), at(1000.0, 0.0), at(1000.0, 1000.0), at(0.0, 1000.0), at(0.0, 0.0))
+        return TrailRoute(
+            segments = corners.zipWithNext().map { (from, to) -> TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(from, to)) },
+            totalDistanceMeters = 4000.0, ordinaryAccessDistanceMeters = 0.0, totalCost = 1.0, kind = TrailRouteKind.ExerciseLoop,
+        )
+    }
+
+    private fun snapshot(route: TrailRoute, point: MapPoint, progress: Double, resume: Boolean, state: JsonObject? = null): JsonObject =
+        call(loaded(), buildJsonObject {
+            put("op", "snapshot"); put("route", Json.encodeToJsonElement(route)); put("point", Json.encodeToJsonElement(point))
+            put("progress", progress); put("accuracy", 5.0); put("timestamp", now); put("now", now); put("resume", resume)
+            if (state != null) put("state", state)
+        })
+
+    @Test fun reacquiringOnTheReturnLegOfRepeatedGeometryKeepsTheReturnPass() {
+        val loop = outAndBackLoop()
+        // The rider was on the return pass (3000 m along), 1000 m north, and is reacquired at the same place.
+        val result = snapshot(loop, at(0.0, 1000.0), progress = 3000.0, resume = true)
+        assertEquals(3000.0, result["progress"]!!.jsonPrimitive.double, 5.0)
+        assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+        assertEquals(1000.0, result["remaining"]!!.jsonPrimitive.double, 5.0)
+        assertFalse(result["arrived"]!!.jsonPrimitive.boolean)
+        assertEquals(3000.0, result["state"]!!.jsonObject["maximumProgress"]!!.jsonPrimitive.double, 5.0)
+    }
+
+    @Test fun reacquiringOnTheOutboundPassStillMatchesTheOutboundPass() {
+        val result = snapshot(outAndBackLoop(), at(0.0, 1000.0), progress = 1000.0, resume = true)
+        assertEquals(1000.0, result["progress"]!!.jsonPrimitive.double, 5.0)
+        assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun reloadWithoutSavedNavigationStateStillUsesThePersistedProgress() {
+        // On a browser reload only the persisted progress is available; there is no saved maximum.
+        val result = snapshot(outAndBackLoop(), at(0.0, 1500.0), progress = 2450.0, resume = true, state = null)
+        assertEquals(2500.0, result["progress"]!!.jsonPrimitive.double, 5.0)
+        assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun reacquiringOnlyAtAnEarlierPointIsAmbiguousInsteadOfBeingDirectedOrCredited() {
+        val state = buildJsonObject { put("maximumProgress", 3200.0); put("verifiedProgress", 3000.0) }
+        val result = snapshot(squareLoop(), at(500.0, 0.0), progress = 3200.0, resume = true, state = state)
+        assertTrue(result["ambiguous"]!!.jsonPrimitive.boolean)
+        assertEquals(3200.0, result["progress"]!!.jsonPrimitive.double)
+        assertFalse(result["arrived"]!!.jsonPrimitive.boolean)
+        assertFalse(result["offRoute"]!!.jsonPrimitive.boolean)
+        val next = result["state"]!!.jsonObject
+        assertEquals(3200.0, next["maximumProgress"]!!.jsonPrimitive.double)
+        assertEquals(3000.0, next["verifiedProgress"]!!.jsonPrimitive.double)
+    }
+
+    @Test fun anOrdinaryLoopFixAfterReacquisitionDoesNotBecomeAmbiguous() {
+        val result = snapshot(squareLoop(), at(1000.0, 500.0), progress = 1400.0, resume = true)
+        assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+        assertEquals(1500.0, result["progress"]!!.jsonPrimitive.double, 5.0)
+    }
+
     private fun inspect(route: TrailRoute): JsonObject = call(loaded(), buildJsonObject {
         put("op", "inspect"); put("route", Json.encodeToJsonElement(route)); put("now", now)
     })

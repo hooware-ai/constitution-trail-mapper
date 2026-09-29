@@ -551,3 +551,135 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+test("an exercise loop keeps its progress when the page is hidden and shown, and after a reload", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const ride = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return key ? JSON.parse(localStorage.getItem(key)!) : null;
+    });
+  // Ride the stored route geometry about 80% of the way round, on its return leg.
+  const path = await (async () => {
+    await acceptedFix(page, 40.51, -88.95);
+    const stored = await ride();
+    return (stored.record.route.segments as any[]).flatMap((s) =>
+      (s.points as { latitude: number; longitude: number }[]).map((p) => [
+        p.latitude,
+        p.longitude,
+      ]),
+    );
+  })();
+  const stepEvery = Math.max(1, Math.floor(path.length / 60));
+  const target = Math.floor(path.length * 0.8);
+  for (let index = stepEvery; index <= target; index += stepEvery) {
+    await page.clock.fastForward(1000);
+    await acceptedFix(page, path[index][0], path[index][1]);
+  }
+  const [lat, lon] = path[target];
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, lat, lon);
+  const before = (await ride()).routeProgressMeters as number;
+  expect(before).toBeGreaterThan(1500);
+  // Hide, then show, and reacquire at the identical place: progress must not fall back to an earlier pass.
+  await page.evaluate(() => (window as any).__gps.visible(false));
+  await page.clock.fastForward(30_000);
+  await page.evaluate(() => (window as any).__gps.visible(true));
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, lat, lon);
+  const afterShow = (await ride()).routeProgressMeters as number;
+  expect(afterShow).toBeGreaterThanOrEqual(before - 60);
+  // Same after a reload.
+  await page.reload();
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, lat, lon);
+  const afterReload = (await ride()).routeProgressMeters as number;
+  expect(afterReload).toBeGreaterThanOrEqual(before - 60);
+});
+
+test("reloading on the return leg of an out-and-back loop keeps the return pass", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    const key = "trail-mapper.fixture:trail-mapper.web.active-ride.v1";
+    if (localStorage.getItem(key)) return;
+    const north = (meters: number) => ({
+      latitude: 40.5 + meters / 111_195,
+      longitude: -88.95,
+    });
+    const segment = (points: { latitude: number; longitude: number }[]) => ({
+      type: "Trail",
+      points,
+      isRouted: true,
+    });
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: 1,
+        record: {
+          key: "out-and-back",
+          title: "Out and back",
+          createdAt: Date.now(),
+          usedAt: Date.now(),
+          route: {
+            segments: [
+              segment([north(0), north(1000), north(2000)]),
+              segment([north(2000), north(1000), north(0)]),
+            ],
+            totalDistanceMeters: 4000,
+            ordinaryAccessDistanceMeters: 0,
+            totalCost: 1,
+            kind: "ExerciseLoop",
+          },
+          draft: {
+            mode: "loop",
+            start: { label: "Trailhead", ...north(0) },
+            destination: null,
+            miles: 3,
+            proposed: false,
+          },
+        },
+        routeProgressMeters: 3000,
+        creditedDistanceMeters: 2000,
+        updatedAt: Date.now(),
+      }),
+    );
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  // The rider is back at the 1 km mark, which the outbound pass also passes through.
+  await acceptedFix(page, 40.5 + 1000 / 111_195, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(2900);
+  expect(stored.routeProgressMeters).toBeLessThan(3100);
+  // Unobserved movement is never credited.
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
