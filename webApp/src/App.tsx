@@ -3,6 +3,7 @@ import { RoutingClient } from "./core";
 import { MapView } from "./MapView";
 import { AccessConnections } from "./AccessConnections";
 import {
+  type DialogNotice,
   EndpointField,
   Legend,
   Modal,
@@ -78,6 +79,12 @@ const storageFor = (mode: string): StoragePort => ({
   removeItem: (key) =>
     localStorage.removeItem("trail-mapper." + mode + ":" + key),
 });
+const storageIssueMessage = (error: StoreResult<unknown>["error"]) =>
+  error === "quota"
+    ? "Browser storage is full. This change was not saved."
+    : error === "corrupt" || error === "unsupported-version"
+      ? "Saved browser data could not be read. It has been preserved."
+      : "Browser storage is unavailable. This change was not saved.";
 const errorText = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -106,7 +113,32 @@ export function App() {
     [library, setLibrary] = useState<RouteLibrary>(EMPTY_LIBRARY);
   const [field, setField] = useState<"start" | "destination" | null>(null),
     [pickField, setPickField] = useState<"start" | "destination">("start"),
-    [popup, setPopup] = useState<Popup>(null);
+    [popup, setPopup] = useState<Popup>(null),
+    [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
+  const popupOpen = useRef(false),
+    dialogEpoch = useRef(0),
+    shownPopup = useRef<Popup>(null),
+    shareAttempt = useRef(0),
+    announceFrame = useRef(0);
+  popupOpen.current = popup !== null;
+  // Every open or close is a new dialog session; late results from an earlier one are ignored.
+  if (shownPopup.current !== popup) {
+    shownPopup.current = popup;
+    dialogEpoch.current++;
+  }
+  // Feedback belongs to one dialog session: never carried into the next one.
+  useEffect(() => {
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
+  }, [popup]);
+  /** Clear, then set on the next frame, so repeating the same message is still a change assistive tech announces. */
+  function announce(notice: DialogNotice, epoch = dialogEpoch.current) {
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
+    announceFrame.current = requestAnimationFrame(() => {
+      if (epoch === dialogEpoch.current) setDialogNotice(notice);
+    });
+  }
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -151,14 +183,12 @@ export function App() {
     if (result.ok) {
       setStorageError("");
       if (message) success(message, undo);
-    } else
-      setStorageError(
-        result.error === "quota"
-          ? "Browser storage is full. This change was not saved."
-          : result.error === "corrupt" || result.error === "unsupported-version"
-            ? "Saved browser data could not be read. It has been preserved."
-            : "Browser storage is unavailable. This change was not saved.",
-      );
+    } else {
+      const message = storageIssueMessage(result.error);
+      setStorageError(message);
+      // A dialog left open by the failed change shows the reason where it can be seen and heard.
+      if (popupOpen.current) announce({ kind: "error", message });
+    }
     return result.ok;
   }
   useEffect(() => {
@@ -725,18 +755,32 @@ export function App() {
     );
   }
   async function shareSummary() {
+    // This attempt belongs to the dialog session and the request that started it.
+    const epoch = dialogEpoch.current,
+      attempt = ++shareAttempt.current,
+      current = () =>
+        epoch === dialogEpoch.current && attempt === shareAttempt.current;
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
     const summary = privateRouteShare(location.href, preview?.distance);
     try {
       if (canShare) await navigator.share(summary);
-      else {
+      else
         await navigator.clipboard.writeText(summary.text + "\n" + summary.url);
-        success("Private summary copied");
-      }
+      if (!current()) return;
+      if (!canShare) success("Private summary copied");
       setPopup(null);
     } catch (e) {
+      if (!current()) return;
+      // Cancelling the system share sheet is the rider's choice, not a failure.
       if (!(e instanceof DOMException && e.name === "AbortError"))
-        setError(
-          "Sharing is unavailable. Select and copy the summary shown here.",
+        announce(
+          {
+            kind: "error",
+            message:
+              "Sharing is unavailable. Select and copy the summary shown here, then try again if you like.",
+          },
+          epoch,
         );
     }
   }
@@ -774,13 +818,14 @@ export function App() {
       link.download = "trail-mapper-route.geojson";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      success(
-        exactExport
-          ? "Full route downloaded with your endpoint approval"
-          : "Route downloaded with endpoint areas removed",
-      );
+      announce({
+        kind: "success",
+        message: exactExport
+          ? "Full route downloaded with your endpoint approval."
+          : "Route downloaded with endpoint areas removed.",
+      });
     } catch (e) {
-      setError(errorText(e));
+      announce({ kind: "error", message: errorText(e) });
     }
   }
   useEffect(() => {
@@ -1653,7 +1698,11 @@ export function App() {
         </Modal>
       )}
       {popup === "share" && (
-        <Modal title="Share route" onClose={() => setPopup(null)}>
+        <Modal
+          title="Share route"
+          notice={dialogNotice}
+          onClose={() => setPopup(null)}
+        >
           <h3>Private summary</h3>
           <p>
             Exact start and destination, route coordinates and your recent
@@ -1697,6 +1746,7 @@ export function App() {
       {popup === "clear" && (
         <Modal
           title={`Clear ${library.recent.length} recent routes?`}
+          notice={dialogNotice}
           onClose={() => setPopup(null)}
         >
           <p>Saved routes and places are not affected.</p>
@@ -1720,7 +1770,11 @@ export function App() {
         </Modal>
       )}
       {popup === "rename" && (
-        <Modal title="Rename" onClose={() => setPopup(null)}>
+        <Modal
+          title="Rename"
+          notice={dialogNotice}
+          onClose={() => setPopup(null)}
+        >
           <form
             onSubmit={(event) => {
               event.preventDefault();
