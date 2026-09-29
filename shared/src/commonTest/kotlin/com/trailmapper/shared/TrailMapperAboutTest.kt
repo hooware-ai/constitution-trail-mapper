@@ -6,6 +6,7 @@ package com.trailmapper.shared
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TrailMapperAboutTest {
@@ -31,7 +32,20 @@ class TrailMapperAboutTest {
         val proposed = sections.getValue("Proposed trails and estimated access")
         assertTrue(proposed.contains("Proposed trails are not open"))
         assertTrue(proposed.contains("stay off unless you turn them on"))
-        assertTrue(proposed.contains("does not include live road closures"))
+        assertTrue(proposed.contains("Neither includes live road closures"))
+    }
+
+    @Test
+    fun estimatedAccessIsDescribedAsAnUnverifiedLinkNotARoutedRoad() {
+        val proposed = TrailMapperAbout.disclosureSections()
+            .single { it.title == "Proposed trails and estimated access" }
+            .body
+
+        assertTrue(proposed.contains("mapped roads and paths when a connection is found"))
+        assertTrue(proposed.contains("estimated access instead"))
+        assertTrue(proposed.contains("straight, unverified link"))
+        assertTrue(proposed.contains("may not follow a usable road or path"))
+        assertFalse(proposed.contains("part of a route on ordinary roads"))
     }
 
     @Test

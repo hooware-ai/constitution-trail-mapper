@@ -74,8 +74,9 @@ object TrailMapperAbout {
             TrailMapperAboutDisclosureSection(
                 title = "Proposed trails and estimated access",
                 body = "Proposed trails are not open. They stay off unless you turn them on, and a route that " +
-                    "uses one says so. Estimated access is the part of a route on ordinary roads that gets you " +
-                    "to a trail; it is approximate and does not include live road closures.",
+                    "uses one says so. Getting to a trail follows mapped roads and paths when a connection is " +
+                    "found. When none is found, the map shows estimated access instead: a straight, unverified " +
+                    "link that may not follow a usable road or path. Neither includes live road closures.",
             ),
             TrailMapperAboutDisclosureSection(
                 title = "Safety",
