@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { RoutingClient } from "./core";
+import {
+  BrowserHistorySync,
+  resolvePop,
+  type PopContext,
+} from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { AccessConnections } from "./AccessConnections";
 import {
@@ -249,7 +254,7 @@ export function App() {
           const ride = restored.state;
           setSelected(ride.record);
           setDraft(ride.record.draft as Draft);
-          setScreen("preview");
+          restoreScreen("preview");
           setChecking(true);
           try {
             const inspected = routeOkay(
@@ -268,7 +273,7 @@ export function App() {
                 ride.routeProgressMeters,
                 ride.creditedDistanceMeters,
               );
-              setScreen("navigation");
+              restoreScreen("navigation");
             } else
               setError(
                 "Your previous ride needs review before navigation can resume.",
@@ -285,7 +290,7 @@ export function App() {
           setSelected(restoredSession.selected);
           setOrigin(restoredSession.origin);
           setSavedTab(restoredSession.savedTab);
-          setScreen(restoredSession.screen);
+          restoreScreen(restoredSession.screen);
           if (
             restoredSession.screen === "preview" &&
             restoredSession.selected
@@ -328,6 +333,93 @@ export function App() {
       if (clientRef.current === client) clientRef.current = null;
     };
   }, [local, bootAttempt]);
+  const overlayOpen = popup !== null || field !== null;
+  const historyRef = useRef<BrowserHistorySync | null>(null),
+    popContext = useRef<PopContext>({
+      screen,
+      overlayOpen,
+      navigating: false,
+      hasPreview: false,
+    }),
+    goRef = useRef<(next: Screen) => void>(() => {}),
+    fromPop = useRef(false),
+    restoring = useRef(false),
+    closingByPop = useRef(false),
+    lastSynced = useRef<{ screen: string; overlay: boolean } | null>(null);
+  popContext.current = {
+    screen,
+    overlayOpen,
+    navigating: screen === "navigation",
+    hasPreview: !!(selected && preview),
+  };
+  goRef.current = go;
+  /** Screens brought back from the previous visit relabel the current history entry instead of adding one. */
+  function restoreScreen(next: Screen) {
+    if (next !== popContext.current.screen) restoring.current = true;
+    setScreen(next);
+  }
+  // Browser Back/Forward: history entries hold only a screen name, never route or place data.
+  useEffect(() => {
+    // Record navigation from the first moment the UI is usable, not after restoration finishes.
+    const sync: BrowserHistorySync = new BrowserHistorySync(
+      window.history,
+      (target, direction) => {
+        const action = resolvePop(popContext.current, target, direction);
+        if (action.type === "close-overlay") {
+          closingByPop.current = true;
+          setPopup(null);
+          setField(null);
+        } else if (action.type === "keep-navigating") {
+          sync.push("navigation");
+          setToast({
+            message:
+              "Your ride is still active. Use Stop navigation to end it.",
+          });
+        } else if (action.type === "stay") {
+          sync.replace(popContext.current.screen);
+        } else if (action.screen !== popContext.current.screen) {
+          fromPop.current = true;
+          goRef.current(action.screen as Screen);
+        }
+      },
+    );
+    sync.start(popContext.current.screen);
+    historyRef.current = sync;
+    // An overlay that was already open when history started has no entry yet: give it one, so closing it
+    // pops an entry that exists instead of leaving the app.
+    if (popContext.current.overlayOpen)
+      sync.push(popContext.current.screen, true);
+    lastSynced.current = {
+      screen: popContext.current.screen,
+      overlay: popContext.current.overlayOpen,
+    };
+    const onPop = (event: PopStateEvent) => sync.handlePop(event.state);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      historyRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const sync = historyRef.current,
+      last = lastSynced.current;
+    if (!sync || !last) return;
+    if (last.overlay && !overlayOpen) {
+      if (closingByPop.current) closingByPop.current = false;
+      else sync.popOverlay();
+    }
+    if (last.screen !== screen) {
+      if (fromPop.current) {
+        fromPop.current = false;
+        sync.replace(screen);
+      } else if (restoring.current) {
+        restoring.current = false;
+        sync.replace(screen);
+      } else sync.push(screen);
+    }
+    if (!last.overlay && overlayOpen) sync.push(screen, true);
+    lastSynced.current = { screen, overlay: overlayOpen };
+  }, [screen, overlayOpen]);
   useEffect(() => {
     if (!sessionReady || !sessionRef.current) return;
     const savedScreen: BrowserSession["screen"] =
@@ -826,7 +918,15 @@ export function App() {
     share = privateRouteShare(location.href, preview?.distance);
   return (
     <div className={"app " + screen}>
-      <a className="skip-link" href="#route-controls">
+      <a
+        className="skip-link"
+        href="#route-controls"
+        onClick={(event) => {
+          // A fragment jump would add an entry the history model does not manage: move focus instead.
+          event.preventDefault();
+          panelRef.current?.focus();
+        }}
+      >
         Skip to route controls
       </a>
       <header className="app-header">
