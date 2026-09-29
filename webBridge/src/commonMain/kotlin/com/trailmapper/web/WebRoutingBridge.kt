@@ -191,13 +191,21 @@ class WebRoutingBridge {
         var ambiguous = false
         if (loop && progress > 0.0) {
             val floor = (progress - TRAVERSAL_BACKTRACK_METERS).coerceAtLeast(0.0)
-            val crossedFloor = snapshot.distanceAlongRouteMeters < floor
-            if (crossedFloor || snapshot.distanceFromRouteMeters > TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS) {
+            // After a gap any position behind the floor is suspect; on ordinary fixes only a rewind bigger
+            // than the continuity window is (small backtracking is normal and earns no progress or credit).
+            val rewindLimit = if (resuming) floor else (progress - TRAVERSAL_CONTINUITY_METERS).coerceAtLeast(0.0)
+            val crossedFloor = snapshot.distanceAlongRouteMeters < rewindLimit
+            if (crossedFloor || (resuming && snapshot.distanceFromRouteMeters > TrailRouteNavigationSnapshotSijko.OFF_ROUTE_METERS)) {
                 val onRoute = onRouteOccurrences(route, point)
                 val later = onRoute.filter { it.along >= floor }
                 val best = later.minOfOrNull { it.distance }
                 val supported = if (best == null) null else later.filter { it.distance <= best + 5.0 }.minByOrNull { it.along }
+                // A distant later pass competing with geometry just behind the rider is not a safe choice:
+                // the rider cannot be told which one they are on, so say so instead of jumping ahead.
+                val competingNearBehind = supported != null && supported.along - progress > TRAVERSAL_CONTINUITY_METERS &&
+                    onRoute.any { it.along < floor && it.along >= progress - TRAVERSAL_CONTINUITY_METERS }
                 when {
+                    competingNearBehind -> ambiguous = true
                     supported != null && crossedFloor -> {
                         // The shared matcher can still fall back to an earlier, comparably close point (a repeated
                         // junction), so ask it about the supported occurrence itself and verify what it returns.
@@ -424,4 +432,5 @@ private data class BrowserNavigationState(
 )
 
 private const val TRAVERSAL_BACKTRACK_METERS = 60.0
+private const val TRAVERSAL_CONTINUITY_METERS = 300.0
 private const val PINNED_OCCURRENCE_TOLERANCE_METERS = 5.0

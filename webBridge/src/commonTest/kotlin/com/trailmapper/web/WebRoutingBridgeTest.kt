@@ -432,6 +432,26 @@ class WebRoutingBridgeTest {
         }
     }
 
+    @Test fun smallBacktrackingOnAnOrdinaryFixNeitherJumpsToTheReturnPassNorCreditsDistance() {
+        // Progress 1000 m outbound; the rider is 61 m back (939 m north) 10 s later: stay on the outbound pass.
+        for (state in listOf<JsonObject?>(null, buildJsonObject { put("maximumProgress", 1000.0) })) {
+            val result = snapshot(outAndBackLoop(), at(0.0, 939.0), progress = 1000.0, resume = false, state = state)
+            assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)
+            assertEquals(939.0, result["progress"]!!.jsonPrimitive.double, 5.0)
+            assertEquals(3061.0, result["remaining"]!!.jsonPrimitive.double, 10.0)
+        }
+        // 50 m back is unchanged.
+        val fifty = snapshot(outAndBackLoop(), at(0.0, 950.0), progress = 1000.0, resume = false)
+        assertEquals(950.0, fifty["progress"]!!.jsonPrimitive.double, 5.0)
+    }
+
+    @Test fun aDistantLaterPassCompetingWithNearbyEarlierGeometryOnResumeIsAmbiguous() {
+        // After a gap the rider is 61 m behind on the outbound pass; the return pass 2 km ahead also matches.
+        val result = snapshot(outAndBackLoop(), at(0.0, 939.0), progress = 1000.0, resume = true)
+        assertTrue(result["ambiguous"]!!.jsonPrimitive.boolean)
+        assertEquals(1000.0, result["progress"]!!.jsonPrimitive.double)
+    }
+
     @Test fun anOrdinaryLoopFixAfterReacquisitionDoesNotBecomeAmbiguous() {
         val result = snapshot(squareLoop(), at(1000.0, 500.0), progress = 1400.0, resume = true)
         assertFalse(result["ambiguous"]!!.jsonPrimitive.boolean)

@@ -817,3 +817,27 @@ test("a repeated junction never rewinds the saved progress into the completed se
   expect(ahead.creditedDistanceMeters).toBeGreaterThan(2000);
   expect(ahead.creditedDistanceMeters).toBeLessThan(2150);
 });
+
+test("61 m of ordinary backtracking on the outbound pass never jumps to the return pass or credits distance", async ({
+  page,
+}) => {
+  await seedOutAndBackRide(page, 1000);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.5 + 1000 / 111_195, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await page.clock.fastForward(10_000);
+  await acceptedFix(page, 40.5 + 939 / 111_195, -88.95);
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return JSON.parse(localStorage.getItem(key!)!);
+  });
+  expect(stored.routeProgressMeters).toBeGreaterThan(900);
+  expect(stored.routeProgressMeters).toBeLessThan(1100);
+  expect(stored.creditedDistanceMeters).toBe(2000);
+});
