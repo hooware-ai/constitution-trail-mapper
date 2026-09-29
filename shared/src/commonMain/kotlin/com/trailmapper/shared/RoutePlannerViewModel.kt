@@ -14,6 +14,8 @@ import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteSummarySijko
 import com.trailmapper.shared.routing.TrailNetworkFeature
 import com.trailmapper.shared.sijko.AddressAutocompleteQuerySijko
+import com.trailmapper.shared.sijko.AddressPredictionRankingSijko
+import com.trailmapper.shared.sijko.AutocompleteProximitySijko
 import com.trailmapper.shared.sijko.CurrentLocationAddressApplySijko
 import com.trailmapper.shared.sijko.CurrentLocationEndpointAvailabilitySijko
 import com.trailmapper.shared.sijko.CurrentLocationResultMessageSijko
@@ -36,6 +38,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,11 +53,26 @@ internal class RoutePlannerViewModel : ViewModel() {
     )
     val uiState: StateFlow<RoutePlannerUiState> = _uiState
 
+    init {
+        // Start can resolve at any time (current location, map, a selection); Destination suggestions
+        // measured from the old Start must not outlive it.
+        viewModelScope.launch {
+            _uiState
+                .map { state -> state.endpoints.startPoint }
+                .distinctUntilChanged()
+                .collect { refreshDestinationSuggestionsForNewStart() }
+        }
+    }
+
     private var currentLocationJob: Job? = null
     private var mapPointJob: Job? = null
     private var routeSearchJob: Job? = null
     private var routeRequestVersion = 0L
     private var autocompleteJob: Job? = null
+    private var autocompleteProvider: AddressAutocompleteProvider? = null
+
+    /** Set while the rider's tapped suggestion is being resolved; a Start change must not disturb it. */
+    private var selectionJob: Job? = null
     private var currentLocationRequestTarget: RouteEndpointTarget? = null
     private var mapPointRequestTarget: RouteEndpointTarget? = null
     private var cachedAccessGraph: TrailGraph? = null
@@ -287,6 +306,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 }
             }
         }
+        selectionJob = autocompleteJob
     }
 
     fun findTrailRoute(
@@ -479,6 +499,7 @@ internal class RoutePlannerViewModel : ViewModel() {
         provider: AddressAutocompleteProvider,
     ) {
         autocompleteJob?.cancel()
+        autocompleteProvider = provider
         if (!provider.isAvailable || !AddressAutocompleteQuerySijko.shouldSearch(query)) {
             _uiState.update {
                 it.copy(
@@ -491,22 +512,30 @@ internal class RoutePlannerViewModel : ViewModel() {
 
         autocompleteJob = viewModelScope.launch {
             delay(AUTOCOMPLETE_DEBOUNCE_MILLIS)
+            val proximity = AutocompleteProximitySijko.anchorFor(target, _uiState.value.endpoints)
             _uiState.update {
                 it.copy(
                     autocompleteTarget = target,
                     isResolvingAutocomplete = true,
                     autocompleteError = null,
+                    autocompleteAnchor = proximity,
                 )
             }
             try {
-                val predictions = provider.predictions(query, target)
+                val predictions = AddressPredictionRankingSijko.rankNearestFirst(
+                    provider.predictions(query, target, proximity),
+                )
                 currentCoroutineContext().ensureActive()
                 _uiState.update { state ->
-                    if (state.autocompleteTarget == target) {
+                    val stillMeasuredFromStart = AutocompleteProximitySijko.anchorFor(target, state.endpoints) == proximity
+                    if (state.autocompleteTarget == target && stillMeasuredFromStart) {
                         state.copy(
                             autocompleteSuggestions = predictions,
                             isResolvingAutocomplete = false,
                         )
+                    } else if (state.autocompleteTarget == target) {
+                        // Start moved while this was in flight; a refresh for the new Start is on its way.
+                        state
                     } else {
                         state.copy(isResolvingAutocomplete = false)
                     }
@@ -524,6 +553,30 @@ internal class RoutePlannerViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    /** Drops Destination suggestions measured from a Start that has changed and searches again for the new one. */
+    private fun refreshDestinationSuggestionsForNewStart() {
+        val state = _uiState.value
+        if (state.autocompleteTarget != RouteEndpointTarget.Destination) return
+        if (selectionJob?.isActive == true) return
+        if (!state.isResolvingAutocomplete && state.autocompleteSuggestions.isEmpty()) return
+        val anchor = AutocompleteProximitySijko.anchorFor(RouteEndpointTarget.Destination, state.endpoints)
+        if (state.autocompleteAnchor == anchor) return
+
+        // A destination the rider already chose is theirs; only the suggestions change.
+        val provider = autocompleteProvider
+        if (provider == null || state.endpoints.destinationPoint != null) {
+            autocompleteJob?.cancel()
+            _uiState.update { it.copy(autocompleteSuggestions = emptyList(), isResolvingAutocomplete = false) }
+            return
+        }
+        _uiState.update { it.copy(autocompleteSuggestions = emptyList()) }
+        requestAutocompletePredictions(
+            target = RouteEndpointTarget.Destination,
+            query = state.endpoints.destination,
+            provider = provider,
+        )
     }
 
     private fun invalidateRoute() {
@@ -544,6 +597,7 @@ internal class RoutePlannerViewModel : ViewModel() {
             mapPointRequestTarget = null
         }
         autocompleteJob?.cancel()
+        selectionJob = null
         _uiState.update {
             it.copy(
                 resolvingLocationTarget = if (cancelLocation) null else it.resolvingLocationTarget,
