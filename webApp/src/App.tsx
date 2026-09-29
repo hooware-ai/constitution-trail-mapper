@@ -35,6 +35,7 @@ import {
   usableFix,
   type NavigationState,
 } from "./platform/navigation";
+import { acquirePlannerLocation } from "./platform/plannerLocation";
 import { ForegroundWakeLock } from "./platform/wakeLock";
 import { BrowserSessionStore, type BrowserSession } from "./platform/session";
 import {
@@ -122,6 +123,13 @@ export function App() {
     >(null),
     [renameValue, setRenameValue] = useState(""),
     [exactExport, setExactExport] = useState(false);
+  const [locationRequest, setLocationRequest] = useState<{
+    target: "start" | "destination";
+    phase: "waiting" | "failure";
+    message: string;
+  } | null>(null);
+  const cancelLocationRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelLocationRef.current?.(), []);
   const [sessionReady, setSessionReady] = useState(false);
   const sessionRef = useRef<BrowserSessionStore | null>(null);
   const clientRef = useRef<RoutingClient | null>(null),
@@ -358,7 +366,18 @@ export function App() {
     const timeout = setTimeout(() => setToast(null), toast.undo ? 12000 : 7000);
     return () => clearTimeout(timeout);
   }, [toast]);
+  function cancelLocation() {
+    cancelLocationRef.current?.();
+    cancelLocationRef.current = null;
+    setLocationRequest(null);
+    setBusy(false);
+  }
+  function openPlace(field: "start" | "destination") {
+    cancelLocation();
+    setField(field);
+  }
   function go(next: Screen) {
+    cancelLocation();
     if (controllerRef.current?.state.record && next !== "navigation")
       controllerRef.current.stop();
     const token = ++operation.current;
@@ -385,6 +404,7 @@ export function App() {
   }
   function choose(endpoint: Endpoint) {
     if (!field) return;
+    cancelLocation();
     setDraft((value) => ({ ...value, [field]: endpoint }));
     setField(null);
     setError("");
@@ -412,55 +432,38 @@ export function App() {
       if (token === operation.current) setBusy(false);
     }
   }
-  function currentLocation() {
-    const target = field;
+  function currentLocation(target = field) {
     if (!target) return;
+    cancelLocation();
     const token = ++operation.current;
     setField(null);
     setBusy(true);
     setError("");
-    if (!navigator.geolocation) {
-      setBusy(false);
-      setError(
-        "Location is unavailable in this browser. Choose a place or map point.",
-      );
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    cancelLocationRef.current = acquirePlannerLocation(
+      {
+        secureContext: window.isSecureContext,
+        location: navigator.geolocation
+          ? browserLocationPort(navigator.geolocation)
+          : undefined,
+      },
+      (event) => {
         if (token !== operation.current) return;
-        setBusy(false);
-        const fix = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: position.timestamp,
-        };
-        if (!usableFix(fix, Date.now())) {
-          setError(
-            "Location is not accurate enough yet. Choose a place or map point.",
-          );
-          return;
+        if (event.phase === "success") {
+          setBusy(false);
+          setLocationRequest(null);
+          setDraft((value) => ({
+            ...value,
+            [target]: {
+              label: "Current location",
+              latitude: event.fix.latitude,
+              longitude: event.fix.longitude,
+            },
+          }));
+        } else {
+          setBusy(event.phase === "waiting");
+          setLocationRequest({ target, ...event });
         }
-        setDraft((value) => ({
-          ...value,
-          [target]: {
-            label: "Current location",
-            latitude: fix.latitude,
-            longitude: fix.longitude,
-          },
-        }));
       },
-      (failure) => {
-        if (token !== operation.current) return;
-        setBusy(false);
-        setError(
-          failure.code === 1
-            ? "Location permission denied. Choose a place or map point."
-            : "Location unavailable. Choose a place or map point.",
-        );
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
   }
   function makeRecord(
@@ -901,6 +904,40 @@ export function App() {
               <button onClick={() => setError("")}>Dismiss</button>
             </div>
           )}
+          {locationRequest && (
+            <div
+              className={
+                locationRequest.phase === "failure" ? "error" : "warning"
+              }
+              role={locationRequest.phase === "failure" ? "alert" : "status"}
+            >
+              <p>{locationRequest.message}</p>
+              <div className="actions">
+                {locationRequest.phase === "failure" ? (
+                  <button
+                    onClick={() => currentLocation(locationRequest.target)}
+                  >
+                    Try location again
+                  </button>
+                ) : (
+                  <button onClick={cancelLocation}>
+                    Cancel location request
+                  </button>
+                )}
+                <button onClick={() => openPlace(locationRequest.target)}>
+                  Choose a place
+                </button>
+                <button
+                  onClick={() => {
+                    setPickField(locationRequest.target);
+                    go("map-picker");
+                  }}
+                >
+                  Pick on map
+                </button>
+              </div>
+            </div>
+          )}
           {storageError && (
             <div className="warning" role="alert">
               {storageError}
@@ -969,27 +1006,28 @@ export function App() {
               <EndpointField
                 label="Start"
                 value={draft.start}
-                onClick={() => setField("start")}
+                onClick={() => openPlace("start")}
               />
               {!isPlanner && (
                 <>
                   <button
                     className="swap"
                     aria-label="Swap start and destination"
-                    onClick={() =>
+                    onClick={() => {
+                      cancelLocation();
                       setDraft({
                         ...draft,
                         start: draft.destination,
                         destination: draft.start,
-                      })
-                    }
+                      });
+                    }}
                   >
                     ⇅ Swap
                   </button>
                   <EndpointField
                     label="Destination"
                     value={draft.destination}
-                    onClick={() => setField("destination")}
+                    onClick={() => openPlace("destination")}
                   />
                 </>
               )}
@@ -1058,7 +1096,6 @@ export function App() {
               >
                 {isPlanner ? "Make loop" : "Find route"}
               </button>
-              {busy && <p role="status">Getting your location…</p>}
               <p className="caption">
                 Select a resolved start{!isPlanner ? " and destination" : ""}.
                 Unmapped access will be identified before navigation.
@@ -1585,7 +1622,7 @@ export function App() {
             setField(null);
             go("map-picker");
           }}
-          onLocation={currentLocation}
+          onLocation={() => currentLocation()}
           onClose={() => setField(null)}
         />
       )}

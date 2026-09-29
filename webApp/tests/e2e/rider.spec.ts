@@ -508,6 +508,7 @@ test("current location resolves explicitly, endpoint swap works, and zero-length
   await page
     .getByRole("button", { name: "Use current location", exact: true })
     .click();
+  await page.evaluate(() => (window as any).__gps.fix(40.51, -88.95));
   await expect(
     page.getByRole("button", { name: "Start: Current location", exact: true }),
   ).toBeVisible();
