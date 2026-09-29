@@ -187,7 +187,7 @@ fun App(
     trailAccountProvider: TrailAccountProvider = NoTrailAccountProvider,
     trailRouteShareProvider: TrailRouteShareProvider = NoTrailRouteShareProvider,
     recentTrailRouteStore: RecentTrailRouteStore = NoRecentTrailRouteStore,
-    plannerDraftStore: PlannerDraftStore = NoPlannerDraftStore,
+    plannerDraftCoordinator: PlannerDraftCoordinator = PlannerDraftCoordinator.None,
     developerOptionsActions: DeveloperOptionsActions? = null,
 ) {
     MaterialTheme(colorScheme = TrailMapperColorScheme) {
@@ -308,7 +308,7 @@ fun App(
                         trailNetworkProvider = trailNetworkProvider,
                         accessNetworkProvider = accessNetworkProvider,
                         trailRouteMapPresenter = trailRouteMapPresenter,
-                        plannerDraftStore = plannerDraftStore,
+                        plannerDraftCoordinator = plannerDraftCoordinator,
                         developerOptionsActions = developerOptionsActions,
                         onOpenLocalGuide = {
                             navController.navigate(TrailMapperScreen.LocalGuide.route) { launchSingleTop = true }
@@ -326,7 +326,7 @@ fun App(
                         trailNetworkProvider = trailNetworkProvider,
                         accessNetworkProvider = accessNetworkProvider,
                         completedExerciseSessionStore = completedExerciseSessionStore,
-                        plannerDraftStore = plannerDraftStore,
+                        plannerDraftCoordinator = plannerDraftCoordinator,
                         trailRouteMapPresenter = trailRouteMapPresenter,
                         trailRouteShareProvider = trailRouteShareProvider,
                         developerOptionsActions = developerOptionsActions,
@@ -1443,7 +1443,7 @@ private fun currentEpochMillis(): Long = Clock.System.now().toEpochMilliseconds(
 @Composable
 private fun rememberPlannerDraftSession(
     slot: String,
-    store: PlannerDraftStore,
+    coordinator: PlannerDraftCoordinator,
     state: Any?,
     restore: (String) -> Unit,
     currentDraft: () -> String?,
@@ -1453,25 +1453,20 @@ private fun rememberPlannerDraftSession(
     // Survives process death with the screen's saved state, so a restored screen knows it was recreated.
     var visited by rememberSaveable { mutableStateOf(false) }
     val session = remember {
-        PlannerDraftSession(slot, store, recreated = visited, restore = restore, settle = settle)
-            .also { created -> PlannerDraftOwnership.claim(slot, created) }
+        PlannerDraftSession(slot, coordinator, recreated = visited, restore = restore, settle = settle)
     }
     LaunchedEffect(Unit) { visited = true }
 
-    // Leaving for good (not rotating, not being killed) removes the draft, unless a newer visit has
-    // already taken the slot over.
+    // Leaving for good (not rotating, not being killed) removes the draft. Whether this screen still owns
+    // the slot is decided when the discard runs, so a newer visit's draft is never erased.
     val discardScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-    setDiscardHook {
-        if (PlannerDraftOwnership.release(slot, session)) {
-            discardScope.launch { store.clear(slot) }
-        }
-    }
+    setDiscardHook { discardScope.launch { session.discard() } }
 
     LaunchedEffect(state, session.ready) {
         if (!session.ready) return@LaunchedEffect
         delay(DRAFT_SAVE_DEBOUNCE_MILLIS)
         val serialized = withContext(Dispatchers.Default) { currentDraft() }
-        if (serialized == null) store.clear(slot) else store.save(slot, serialized)
+        if (serialized == null) session.clear() else session.save(serialized)
     }
     return session
 }
@@ -1817,7 +1812,7 @@ private fun ExerciseRoutePlanner(
     trailNetworkProvider: TrailNetworkProvider,
     accessNetworkProvider: AccessNetworkProvider,
     completedExerciseSessionStore: CompletedExerciseSessionStore,
-    plannerDraftStore: PlannerDraftStore,
+    plannerDraftCoordinator: PlannerDraftCoordinator,
     trailRouteMapPresenter: TrailRouteMapPresenter,
     trailRouteShareProvider: TrailRouteShareProvider,
     developerOptionsActions: DeveloperOptionsActions?,
@@ -1832,7 +1827,7 @@ private fun ExerciseRoutePlanner(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val draftSession = rememberPlannerDraftSession(
         slot = PlannerDraftJsonSijko.EXERCISE_SLOT,
-        store = plannerDraftStore,
+        coordinator = plannerDraftCoordinator,
         state = uiState,
         restore = { serialized ->
             PlannerDraftJsonSijko.decodeExercise(serialized, currentEpochMillis())?.let(viewModel::restoreDraft)
@@ -2187,7 +2182,7 @@ private fun RoutePlanner(
     trailNetworkProvider: TrailNetworkProvider,
     accessNetworkProvider: AccessNetworkProvider,
     trailRouteMapPresenter: TrailRouteMapPresenter,
-    plannerDraftStore: PlannerDraftStore,
+    plannerDraftCoordinator: PlannerDraftCoordinator,
     developerOptionsActions: DeveloperOptionsActions?,
     onOpenLocalGuide: () -> Unit,
     externalLinkOpener: ExternalLinkOpener,
@@ -2197,7 +2192,7 @@ private fun RoutePlanner(
     val uiState by routePlannerViewModel.uiState.collectAsStateWithLifecycle()
     val draftSession = rememberPlannerDraftSession(
         slot = PlannerDraftJsonSijko.ROUTE_SLOT,
-        store = plannerDraftStore,
+        coordinator = plannerDraftCoordinator,
         state = uiState,
         restore = { serialized ->
             PlannerDraftJsonSijko.decodeRoute(serialized, currentEpochMillis())?.let(routePlannerViewModel::restoreDraft)

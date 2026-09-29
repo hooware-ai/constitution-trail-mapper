@@ -109,7 +109,7 @@ class PlannerDraftSessionTest {
 
             override suspend fun clear(slot: String) = Unit
         }
-        val session = PlannerDraftSession("route", store, recreated = true, restore = {}, settle = { settled += 1 })
+        val session = PlannerDraftSession("route", PlannerDraftCoordinator(store), recreated = true, restore = {}, settle = { settled += 1 })
 
         val first = launch { session.restoreIfRecreated() }
         runCurrent()
@@ -140,7 +140,7 @@ class PlannerDraftSessionTest {
 
             override suspend fun clear(slot: String) = Unit
         }
-        val session = PlannerDraftSession("route", store, recreated = false, restore = { error("must not restore") }, settle = { settled += 1 })
+        val session = PlannerDraftSession("route", PlannerDraftCoordinator(store), recreated = false, restore = { error("must not restore") }, settle = { settled += 1 })
 
         session.restoreIfRecreated()
 
@@ -149,85 +149,183 @@ class PlannerDraftSessionTest {
         assertTrue(session.ready)
     }
 
-    // ---- 4: discard ownership and ordered storage ----
+    // ---- 4: ordered storage and ownership checked when an operation runs ----
 
-    @Test
-    fun aLateDiscardFromAnOlderVisitDoesNotTouchANewerVisitsDraft() {
-        val older = Any()
-        val newer = Any()
-        PlannerDraftOwnership.claim("route", older)
-        PlannerDraftOwnership.claim("route", newer)
+    private class FakeStore : PlannerDraftStore {
+        val disk = mutableMapOf<String, String>()
+        var gate: CompletableDeferred<Unit>? = null
+        var writing: CompletableDeferred<Unit>? = null
+        var uncancellableWrites = false
 
-        assertFalse(PlannerDraftOwnership.release("route", older))
-        assertTrue(PlannerDraftOwnership.release("route", newer))
-        assertFalse(PlannerDraftOwnership.release("route", newer))
+        override suspend fun load(slot: String): String? {
+            gate?.await()
+            return disk[slot]
+        }
+
+        override suspend fun save(slot: String, serialized: String) {
+            if (uncancellableWrites) {
+                // A write that has begun cannot be cancelled part way, like a blocking commit.
+                withContext(NonCancellable) {
+                    writing?.complete(Unit)
+                    gate?.await()
+                    disk[slot] = serialized
+                }
+            } else {
+                disk[slot] = serialized
+            }
+        }
+
+        override suspend fun clear(slot: String) {
+            disk.remove(slot)
+        }
     }
 
     @Test
     fun aClearWaitsForASaveThatIsAlreadyWritingSoTheDraftStaysCleared() = runTest(dispatcher) {
-        val writing = CompletableDeferred<Unit>()
-        val finishWrite = CompletableDeferred<Unit>()
-        val disk = mutableMapOf<String, String>()
-        val store = SerializedPlannerDraftStore(object : PlannerDraftStore {
-            override suspend fun load(slot: String): String? = disk[slot]
+        val store = FakeStore().apply {
+            uncancellableWrites = true
+            gate = CompletableDeferred()
+            writing = CompletableDeferred()
+        }
+        val coordinator = PlannerDraftCoordinator(store)
+        val owner = Any()
+        coordinator.claim("route", owner)
 
-            override suspend fun save(slot: String, serialized: String) {
-                // A write that has begun cannot be cancelled part way, like a blocking commit.
-                withContext(NonCancellable) {
-                    writing.complete(Unit)
-                    finishWrite.await()
-                    disk[slot] = serialized
-                }
-            }
-
-            override suspend fun clear(slot: String) {
-                disk.remove(slot)
-            }
-        })
-
-        val save = launch { store.save("route", "abandoned draft") }
+        val save = launch { coordinator.save("route", owner, "abandoned draft") }
         runCurrent()
-        assertTrue(writing.isCompleted)
+        assertTrue(store.writing!!.isCompleted)
         save.cancel()
-        val clear = launch { store.clear("route") }
+        val clear = launch { coordinator.clear("route", owner) }
         runCurrent()
         assertFalse(clear.isCompleted, "clear must wait for the write already in progress")
 
-        finishWrite.complete(Unit)
+        store.gate!!.complete(Unit)
         runCurrent()
 
         assertTrue(clear.isCompleted)
-        assertNull(disk["route"], "the cleared draft must not be revived by the cancelled save")
+        assertNull(store.disk["route"], "the cleared draft must not be revived by the cancelled save")
     }
 
     @Test
     fun aSaveCancelledBeforeItsTurnNeverWrites() = runTest(dispatcher) {
-        val release = CompletableDeferred<Unit>()
-        val disk = mutableMapOf<String, String>()
-        val store = SerializedPlannerDraftStore(object : PlannerDraftStore {
-            override suspend fun load(slot: String): String? {
-                release.await()
-                return disk[slot]
-            }
+        val store = FakeStore().apply { gate = CompletableDeferred() }
+        val coordinator = PlannerDraftCoordinator(store)
+        val owner = Any()
+        coordinator.claim("route", owner)
 
-            override suspend fun save(slot: String, serialized: String) {
-                disk[slot] = serialized
-            }
-
-            override suspend fun clear(slot: String) {
-                disk.remove(slot)
-            }
-        })
-
-        val busy = launch { store.load("route") }
+        val busy = launch { coordinator.load("route") }
         runCurrent()
-        val waitingSave = launch { store.save("route", "queued draft") }
+        val waitingSave = launch { coordinator.save("route", owner, "queued draft") }
         runCurrent()
         waitingSave.cancel()
-        release.complete(Unit)
+        store.gate!!.complete(Unit)
         runCurrent()
 
         assertTrue(busy.isCompleted)
-        assertNull(disk["route"])
+        assertNull(store.disk["route"])
+    }
+
+    @Test
+    fun aDelayedDiscardFromAnOlderVisitCannotEraseANewerVisitsDraft() = runTest(dispatcher) {
+        val store = FakeStore().apply { gate = CompletableDeferred() }
+        val coordinator = PlannerDraftCoordinator(store)
+        val older = Any()
+        val newer = Any()
+        coordinator.claim("route", older)
+
+        // The older screen is discarded, but its clear is still waiting for the lock when the next visit
+        // starts, claims the slot and saves.
+        val busy = launch { coordinator.load("route") }
+        runCurrent()
+        val oldDiscard = launch { coordinator.discard("route", older) }
+        runCurrent()
+        coordinator.claim("route", newer)
+        val newSave = launch { coordinator.save("route", newer, "new draft") }
+        runCurrent()
+
+        store.gate!!.complete(Unit)
+        runCurrent()
+
+        assertTrue(busy.isCompleted && oldDiscard.isCompleted && newSave.isCompleted)
+        assertEquals("new draft", store.disk["route"])
+    }
+
+    @Test
+    fun aLateSaveFromAnOlderVisitCannotOverwriteANewerVisitsDraft() = runTest(dispatcher) {
+        val store = FakeStore().apply { gate = CompletableDeferred() }
+        val coordinator = PlannerDraftCoordinator(store)
+        val older = Any()
+        val newer = Any()
+        coordinator.claim("route", older)
+
+        val busy = launch { coordinator.load("route") }
+        runCurrent()
+        val oldSave = launch { coordinator.save("route", older, "old draft") }
+        runCurrent()
+        coordinator.claim("route", newer)
+        val newSave = launch { coordinator.save("route", newer, "new draft") }
+        runCurrent()
+
+        store.gate!!.complete(Unit)
+        runCurrent()
+
+        assertTrue(busy.isCompleted && oldSave.isCompleted && newSave.isCompleted)
+        assertEquals("new draft", store.disk["route"])
+    }
+
+    @Test
+    fun aDiscardedOwnerCannotWriteAgain() = runTest(dispatcher) {
+        val store = FakeStore()
+        val coordinator = PlannerDraftCoordinator(store)
+        val owner = Any()
+        coordinator.claim("route", owner)
+        coordinator.save("route", owner, "draft")
+
+        coordinator.discard("route", owner)
+        coordinator.save("route", owner, "resurrected")
+
+        assertNull(store.disk["route"])
+    }
+
+    @Test
+    fun aRecreatedActivityUsesTheProcessCoordinatorSoItsClearWaitsForTheOldSave() = runTest(dispatcher) {
+        PlannerDraftCoordinator.resetProcessInstanceForTest()
+        val store = FakeStore().apply {
+            uncancellableWrites = true
+            gate = CompletableDeferred()
+            writing = CompletableDeferred()
+        }
+        var created = 0
+        val beforeRotation = PlannerDraftCoordinator.forProcess {
+            created += 1
+            store
+        }
+        val afterRotation = PlannerDraftCoordinator.forProcess {
+            created += 1
+            store
+        }
+        assertTrue(beforeRotation === afterRotation)
+        assertEquals(1, created)
+
+        val oldScreen = Any()
+        val newScreen = Any()
+        beforeRotation.claim("route", oldScreen)
+        val oldSave = launch { beforeRotation.save("route", oldScreen, "abandoned draft") }
+        runCurrent()
+        assertTrue(store.writing!!.isCompleted)
+        oldSave.cancel()
+
+        // The recreated Activity's screen takes the slot and clears it (its form is empty).
+        afterRotation.claim("route", newScreen)
+        val newClear = launch { afterRotation.clear("route", newScreen) }
+        runCurrent()
+        assertFalse(newClear.isCompleted, "the new clear must wait for the write that is already in progress")
+
+        store.gate!!.complete(Unit)
+        runCurrent()
+
+        assertTrue(newClear.isCompleted)
+        assertNull(store.disk["route"], "the abandoned draft must not survive the recreated Activity's clear")
+        PlannerDraftCoordinator.resetProcessInstanceForTest()
     }
 }
