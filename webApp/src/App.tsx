@@ -812,7 +812,8 @@ export function App() {
       stopNavigation();
       return;
     }
-    if (screen === "searching") {
+    // Leaving the map picker (search or picker) returns to the planner with its draft untouched.
+    if (screen === "searching" || screen === "map-picker") {
       go("planner");
       return;
     }
