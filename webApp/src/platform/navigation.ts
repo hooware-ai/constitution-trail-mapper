@@ -183,6 +183,14 @@ export class ForegroundNavigationController {
         message: "Navigation paused while this page is hidden.",
       });
   }
+  /**
+   * Swap the route of the current ride (reroute, rejoin, return to start). Route-relative progress starts
+   * over on the new geometry, but the ride's observed-distance total is the same ride's and carries over.
+   * Use `start()` for an explicitly new ride.
+   */
+  replaceRoute(record: RouteRecord): void {
+    this.start(record, 0, this.state.creditedDistanceMeters);
+  }
   restore(): RouteRecord | null {
     const stored = this.deps.storage?.read();
     if (!stored) return null;

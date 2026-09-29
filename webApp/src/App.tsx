@@ -666,7 +666,7 @@ export function App() {
       setPreview(result);
       setSelected(record);
       snapshotState.current = undefined;
-      controller.start(record);
+      controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));
     } catch (e) {
       if (token === operation.current) setError(errorText(e));
