@@ -115,10 +115,30 @@ export function App() {
     [pickField, setPickField] = useState<"start" | "destination">("start"),
     [popup, setPopup] = useState<Popup>(null),
     [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
-  const popupOpen = useRef(false);
+  const popupOpen = useRef(false),
+    dialogEpoch = useRef(0),
+    shownPopup = useRef<Popup>(null),
+    shareAttempt = useRef(0),
+    announceFrame = useRef(0);
   popupOpen.current = popup !== null;
+  // Every open or close is a new dialog session; late results from an earlier one are ignored.
+  if (shownPopup.current !== popup) {
+    shownPopup.current = popup;
+    dialogEpoch.current++;
+  }
   // Feedback belongs to one dialog session: never carried into the next one.
-  useEffect(() => setDialogNotice(null), [popup]);
+  useEffect(() => {
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
+  }, [popup]);
+  /** Clear, then set on the next frame, so repeating the same message is still a change assistive tech announces. */
+  function announce(notice: DialogNotice, epoch = dialogEpoch.current) {
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
+    announceFrame.current = requestAnimationFrame(() => {
+      if (epoch === dialogEpoch.current) setDialogNotice(notice);
+    });
+  }
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -167,9 +187,7 @@ export function App() {
       const message = storageIssueMessage(result.error);
       setStorageError(message);
       // A dialog left open by the failed change shows the reason where it can be seen and heard.
-      setDialogNotice((current) =>
-        popupOpen.current ? { kind: "error", message } : current,
-      );
+      if (popupOpen.current) announce({ kind: "error", message });
     }
     return result.ok;
   }
@@ -737,28 +755,37 @@ export function App() {
     );
   }
   async function shareSummary() {
+    // This attempt belongs to the dialog session and the request that started it.
+    const epoch = dialogEpoch.current,
+      attempt = ++shareAttempt.current,
+      current = () =>
+        epoch === dialogEpoch.current && attempt === shareAttempt.current;
+    cancelAnimationFrame(announceFrame.current);
     setDialogNotice(null);
     const summary = privateRouteShare(location.href, preview?.distance);
     try {
       if (canShare) await navigator.share(summary);
-      else {
+      else
         await navigator.clipboard.writeText(summary.text + "\n" + summary.url);
-        success("Private summary copied");
-      }
+      if (!current()) return;
+      if (!canShare) success("Private summary copied");
       setPopup(null);
     } catch (e) {
+      if (!current()) return;
       // Cancelling the system share sheet is the rider's choice, not a failure.
       if (!(e instanceof DOMException && e.name === "AbortError"))
-        setDialogNotice({
-          kind: "error",
-          message:
-            "Sharing is unavailable. Select and copy the summary shown here, then try again if you like.",
-        });
+        announce(
+          {
+            kind: "error",
+            message:
+              "Sharing is unavailable. Select and copy the summary shown here, then try again if you like.",
+          },
+          epoch,
+        );
     }
   }
   function downloadGeoJson() {
     if (!selected || !preview) return;
-    setDialogNotice(null);
     try {
       const coordinates = preview.segments.flatMap((s) =>
         s.points.map((p) => [p.longitude, p.latitude] as Coordinate),
@@ -791,14 +818,14 @@ export function App() {
       link.download = "trail-mapper-route.geojson";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setDialogNotice({
+      announce({
         kind: "success",
         message: exactExport
           ? "Full route downloaded with your endpoint approval."
           : "Route downloaded with endpoint areas removed.",
       });
     } catch (e) {
-      setDialogNotice({ kind: "error", message: errorText(e) });
+      announce({ kind: "error", message: errorText(e) });
     }
   }
   useEffect(() => {

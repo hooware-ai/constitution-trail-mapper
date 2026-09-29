@@ -1185,7 +1185,3 @@ dialog::backdrop {
   padding: 12px 14px;
   margin: 12px 0;
 }
-dialog [role="alert"]:empty,
-dialog [role="status"]:empty {
-  display: none;
-}
