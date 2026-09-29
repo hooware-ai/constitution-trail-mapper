@@ -85,6 +85,19 @@ export const emptyDraft = (): Draft => ({
   miles: 5,
   proposed: false,
 });
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+const isEndpoint = (value: unknown): value is Endpoint =>
+  isPoint(value) && typeof (value as Endpoint).label === "string";
+/** `miles` persists as null when the planner held NaN (JSON has no NaN). */
+export const isDraft = (value: unknown): value is Draft =>
+  isObject(value) &&
+  (value.mode === "point" || value.mode === "loop") &&
+  (value.start === null || isEndpoint(value.start)) &&
+  (value.destination === null || isEndpoint(value.destination)) &&
+  ((typeof value.miles === "number" && Number.isFinite(value.miles)) ||
+    value.miles === null) &&
+  typeof value.proposed === "boolean";
 export const miles = (meters: number) => (meters / 1609.344).toFixed(1);
 export function isPoint(p: unknown): p is Point {
   const q = p as Point;

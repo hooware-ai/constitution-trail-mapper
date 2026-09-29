@@ -1,4 +1,4 @@
-import { emptyDraft, isPoint, type Draft, type Endpoint } from "../types";
+import { emptyDraft, isDraft, type Draft, type Endpoint } from "../types";
 import {
   RECENT_MAX_AGE_MS,
   type RouteRecord,
@@ -17,16 +17,7 @@ export interface BrowserSession {
 }
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
-const endpoint = (value: unknown): value is Endpoint =>
-  isPoint(value) && typeof (value as Endpoint).label === "string";
-const validDraft = (value: unknown): value is Draft =>
-  object(value) &&
-  (value.mode === "point" || value.mode === "loop") &&
-  (value.start === null || endpoint(value.start)) &&
-  (value.destination === null || endpoint(value.destination)) &&
-  ((typeof value.miles === "number" && Number.isFinite(value.miles)) ||
-    value.miles === null) &&
-  typeof value.proposed === "boolean";
+const validDraft = isDraft;
 const validRecord = (value: unknown): value is RouteRecord =>
   object(value) &&
   typeof value.key === "string" &&

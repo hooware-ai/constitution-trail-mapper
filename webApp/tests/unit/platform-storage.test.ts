@@ -4,6 +4,8 @@ import {
   LocalRouteStore,
   ActiveRideStore,
   LIBRARY_KEY,
+  QUARANTINE_KEY,
+  ACTIVE_RIDE_KEY,
   RECENT_MAX_AGE_MS,
   stableRouteKey,
   type RouteRecord,
@@ -38,7 +40,11 @@ const record = (key = "one", usedAt = NOW): RouteRecord => ({
     ],
   },
   draft: {
+    mode: "point",
+    start: { label: "Private home", latitude: 40, longitude: -89 },
     destination: { label: "Private work", latitude: 40.02, longitude: -89 },
+    miles: 5,
+    proposed: false,
   },
 });
 test("successful routes deduplicate, saving moves an item, opening and deleting saved never resurrect it", () => {
@@ -253,4 +259,128 @@ test("exact GeoJSON preserves disconnected source paths without inventing connec
     [-89, 40.02],
   );
   assert.deepEqual(result.features[1].geometry.coordinates[0], [-88, 41]);
+});
+
+const seed = (
+  storage: MemoryStorage,
+  library: Partial<Record<"saved" | "recent" | "places", unknown[]>>,
+) =>
+  storage.values.set(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 1,
+      saved: [],
+      recent: [],
+      places: [],
+      ...library,
+    }),
+  );
+test("a record with a null or malformed draft never reaches the app and does not hide valid records", () => {
+  for (const draft of [
+    null,
+    "x",
+    [],
+    {},
+    { mode: "walk" },
+    { mode: "point" },
+  ]) {
+    const storage = new MemoryStorage();
+    seed(storage, {
+      recent: [{ ...record("bad"), draft }, record("good")],
+    });
+    const result = new LocalRouteStore(storage, () => NOW).read();
+    assert.equal(result.ok, true);
+    assert.deepEqual(
+      result.state.recent.map((item) => item.key),
+      ["good"],
+    );
+    assert.equal(result.quarantined, 1);
+  }
+});
+test("invalid saved, recent and place records are quarantined while valid ones survive", () => {
+  const storage = new MemoryStorage();
+  seed(storage, {
+    saved: [record("saved-ok"), { ...record("saved-bad"), route: null }],
+    recent: [{ ...record("recent-bad"), draft: null }, record("recent-ok")],
+    places: [
+      { key: "p", label: "Park", latitude: 40, longitude: -89, createdAt: NOW },
+      {
+        key: "q",
+        label: "Nowhere",
+        latitude: 400,
+        longitude: -89,
+        createdAt: NOW,
+      },
+    ],
+  });
+  const original = storage.values.get(LIBRARY_KEY)!;
+  const store = new LocalRouteStore(storage, () => NOW);
+  const result = store.read();
+  assert.equal(result.quarantined, 3);
+  assert.deepEqual(
+    result.state.saved.map((item) => item.key),
+    ["saved-ok"],
+  );
+  assert.deepEqual(
+    result.state.recent.map((item) => item.key),
+    ["recent-ok"],
+  );
+  assert.deepEqual(
+    result.state.places.map((item) => item.key),
+    ["p"],
+  );
+  // The original payload stays recoverable until the rider deletes it.
+  assert.equal(store.hasQuarantine(), true);
+  assert.equal(
+    JSON.parse(storage.values.get(QUARANTINE_KEY)!)[0].raw,
+    original,
+  );
+  // The library was rewritten, so a later read is clean and later writes work.
+  assert.equal(store.read().quarantined, undefined);
+  assert.equal(store.save(record("new")).ok, true);
+  assert.equal(store.hasQuarantine(), true);
+  store.clearQuarantine();
+  assert.equal(store.hasQuarantine(), false);
+  assert.equal(store.read().state.saved.length, 2);
+});
+test("a failed quarantine write preserves the original library and still shows valid records", () => {
+  const storage = new MemoryStorage();
+  seed(storage, {
+    recent: [{ ...record("bad"), draft: null }, record("good")],
+  });
+  const original = storage.values.get(LIBRARY_KEY);
+  storage.fail = true;
+  const result = new LocalRouteStore(storage, () => NOW).read();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "quota");
+  assert.deepEqual(
+    result.state.recent.map((item) => item.key),
+    ["good"],
+  );
+  assert.equal(storage.values.get(LIBRARY_KEY), original);
+});
+test("a non-array collection is still corrupt and preserved", () => {
+  const storage = new MemoryStorage();
+  storage.values.set(
+    LIBRARY_KEY,
+    JSON.stringify({ version: 1, saved: {}, recent: [], places: [] }),
+  );
+  assert.equal(new LocalRouteStore(storage, () => NOW).read().error, "corrupt");
+});
+test("an active ride with a malformed record is reported corrupt instead of restored", () => {
+  const storage = new MemoryStorage();
+  storage.values.set(
+    ACTIVE_RIDE_KEY,
+    JSON.stringify({
+      version: 1,
+      record: { ...record(), draft: null },
+      routeProgressMeters: 1,
+      creditedDistanceMeters: 1,
+      updatedAt: NOW,
+    }),
+  );
+  const result = new ActiveRideStore(storage).read();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "corrupt");
+  assert.equal(result.state, null);
 });

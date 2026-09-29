@@ -109,6 +109,7 @@ export function App() {
     [popup, setPopup] = useState<Popup>(null);
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
+    [unreadableSaved, setUnreadableSaved] = useState(false),
     [busy, setBusy] = useState(false),
     [checking, setChecking] = useState(false),
     [online, setOnline] = useState(navigator.onLine),
@@ -148,6 +149,7 @@ export function App() {
     undo?: () => void,
   ) {
     setLibrary(result.state);
+    setUnreadableSaved(storeRef.current?.hasQuarantine() ?? false);
     if (result.ok) {
       setStorageError("");
       if (message) success(message, undo);
@@ -947,6 +949,22 @@ export function App() {
           {storageError && (
             <div className="warning" role="alert">
               {storageError}
+            </div>
+          )}
+          {unreadableSaved && (
+            <div className="warning" role="status">
+              Some saved items in this browser could not be read and were set
+              aside. Your other routes and places are unaffected.{" "}
+              <button
+                onClick={() => {
+                  applyStore(
+                    storeRef.current!.clearQuarantine(),
+                    "Unreadable data deleted",
+                  );
+                }}
+              >
+                Delete unreadable data
+              </button>
             </div>
           )}
           {nav.storageError && (

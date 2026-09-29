@@ -1,3 +1,4 @@
+import { isDraft } from "../types";
 /** Browser-only storage: no account, query, analytics or synchronization transport. */
 export interface StoragePort {
   getItem(key: string): string | null;
@@ -37,8 +38,12 @@ export interface StoreResult<T> {
   ok: boolean;
   state: T;
   error?: StorageIssue;
+  /** Unreadable saved items set aside in quarantine by this read; the rest of the library is intact. */
+  quarantined?: number;
 }
 export const LIBRARY_KEY = "trail-mapper.web.library.v1";
+export const QUARANTINE_KEY = "trail-mapper.web.library.quarantine.v1";
+const QUARANTINE_LIMIT = 3;
 export const ACTIVE_RIDE_KEY = "trail-mapper.web.active-ride.v1";
 export const RECENT_LIMIT = 20;
 export const RECENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -63,9 +68,8 @@ function isRoute(value: unknown): value is RouteRecord {
     finite(value.usedAt) &&
     value.createdAt >= 0 &&
     value.usedAt >= 0 &&
-    value.route !== undefined &&
-    value.route !== null &&
-    value.draft !== undefined
+    object(value.route) &&
+    isDraft(value.draft)
   );
 }
 function isPlace(value: unknown): value is PlaceRecord {
@@ -158,14 +162,34 @@ export class LocalRouteStore {
         };
       if (
         !Array.isArray(parsed.saved) ||
-        !parsed.saved.every(isRoute) ||
         !Array.isArray(parsed.recent) ||
-        !parsed.recent.every(isRoute) ||
-        !Array.isArray(parsed.places) ||
-        !parsed.places.every(isPlace)
+        !Array.isArray(parsed.places)
       )
         throw new Error("invalid");
-      const state = normalize(parsed as unknown as RouteLibrary, this.now());
+      const saved = parsed.saved.filter(isRoute),
+        recent = parsed.recent.filter(isRoute),
+        places = parsed.places.filter(isPlace),
+        dropped =
+          parsed.saved.length -
+          saved.length +
+          (parsed.recent.length - recent.length) +
+          (parsed.places.length - places.length);
+      if (dropped > 0) {
+        // Keep the original bytes recoverable before the library is rewritten without them.
+        try {
+          this.quarantine(raw, dropped);
+        } catch (error) {
+          return {
+            ok: false,
+            state: normalize({ version: 1, saved, recent, places }, this.now()),
+            error: writeIssue(error),
+          };
+        }
+      }
+      const state = normalize(
+        { version: 1, saved, recent, places },
+        this.now(),
+      );
       const normalized = JSON.stringify(state);
       if (normalized !== raw) {
         try {
@@ -174,9 +198,43 @@ export class LocalRouteStore {
           return { ok: false, state, error: writeIssue(error) };
         }
       }
-      return { ok: true, state };
+      return dropped > 0
+        ? { ok: true, state, quarantined: dropped }
+        : { ok: true, state };
     } catch {
       return { ok: false, state: emptyLibrary(), error: "corrupt" };
+    }
+  }
+  private quarantine(raw: string, dropped: number) {
+    let entries: unknown[] = [];
+    try {
+      const parsed: unknown = JSON.parse(
+        this.storage.getItem(QUARANTINE_KEY) ?? "[]",
+      );
+      if (Array.isArray(parsed)) entries = parsed;
+    } catch {
+      // An unreadable quarantine is replaced; the library copy in `raw` is what matters.
+    }
+    entries.push({ at: this.now(), dropped, raw });
+    this.storage.setItem(
+      QUARANTINE_KEY,
+      JSON.stringify(entries.slice(-QUARANTINE_LIMIT)),
+    );
+  }
+  /** Explicit rider action: permanently delete previously set-aside unreadable data. */
+  clearQuarantine(): StoreResult<RouteLibrary> {
+    try {
+      this.storage.removeItem(QUARANTINE_KEY);
+    } catch (error) {
+      return { ...this.read(), ok: false, error: writeIssue(error) };
+    }
+    return this.read();
+  }
+  hasQuarantine(): boolean {
+    try {
+      return this.storage.getItem(QUARANTINE_KEY) !== null;
+    } catch {
+      return false;
     }
   }
   private change(
