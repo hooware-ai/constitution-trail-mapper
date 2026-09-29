@@ -53,15 +53,12 @@ class ExerciseRouteFormSijkoTest {
 
     @Test
     fun guidanceNamesTheNextThingToFixAndClearsWhenReady() {
-        assertEquals("Add a start to create a loop.", ExerciseRouteFormSijko.guidance("", null, false, ""))
-        assertEquals(
-            "Choose a suggestion, your current location, or a point on the map so the loop starts where you mean.",
-            ExerciseRouteFormSijko.guidance("Hershey", null, false, "5"),
-        )
-        assertNull(ExerciseRouteFormSijko.guidance("Hershey", null, isResolvingStart = true, milesText = "5"))
-        assertEquals("Add a distance to create a loop.", ExerciseRouteFormSijko.guidance("Home", point, false, ""))
-        assertNull(ExerciseRouteFormSijko.guidance("Home", point, false, "5"))
-        assertNull(ExerciseRouteFormSijko.guidance("Home", point, false, "500"))
+        assertEquals("Add a start to create a loop.", ExerciseRouteFormSijko.guidance("", null, ""))
+        // A typed but unresolved start is explained beside its field, not repeated here.
+        assertNull(ExerciseRouteFormSijko.guidance("Hershey", null, "5"))
+        assertEquals("Add a distance to create a loop.", ExerciseRouteFormSijko.guidance("Home", point, ""))
+        assertNull(ExerciseRouteFormSijko.guidance("Home", point, "5"))
+        assertNull(ExerciseRouteFormSijko.guidance("Home", point, "500"))
     }
 
     @Test
