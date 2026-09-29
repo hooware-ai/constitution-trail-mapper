@@ -1,5 +1,5 @@
 /**
- * Job: Verify recent routes are left out of every Android backup path while other files keep the default.
+ * Job: Verify recent routes and unfinished planner forms are left out of every Android backup path while other files keep the default.
  *
  */
 package com.trailmapper.android.routing
@@ -13,24 +13,26 @@ import org.w3c.dom.Element
 
 class RecentRouteBackupRulesTest {
     private val recentFile = "${AndroidRecentTrailRouteStore.PREFERENCES_NAME}.xml"
+    private val draftFile = "${AndroidPlannerDraftStore.PREFERENCES_NAME}.xml"
+    private val expected = listOf("sharedpref" to recentFile, "sharedpref" to draftFile)
 
     @Test
-    fun androidTwelveRulesExcludeRecentRoutesFromCloudBackupAndDeviceTransfer() {
+    fun androidTwelveRulesExcludeLocalOnlyFilesFromCloudBackupAndDeviceTransfer() {
         val rules = parse("src/main/res/xml/data_extraction_rules.xml")
 
         listOf("cloud-backup", "device-transfer").forEach { section ->
             val element = rules.getElementsByTagName(section).item(0) as Element
-            assertEquals(listOf("sharedpref" to recentFile), excludes(element), section)
+            assertEquals(expected, excludes(element), section)
             // An include would narrow backup to listed files and change what else is kept.
             assertEquals(0, element.getElementsByTagName("include").length, section)
         }
     }
 
     @Test
-    fun olderAndroidRulesExcludeRecentRoutesOnly() {
+    fun olderAndroidRulesExcludeLocalOnlyFilesOnly() {
         val rules = parse("src/main/res/xml/backup_rules.xml")
 
-        assertEquals(listOf("sharedpref" to recentFile), excludes(rules))
+        assertEquals(expected, excludes(rules))
         assertEquals(0, rules.getElementsByTagName("include").length)
     }
 

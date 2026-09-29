@@ -23,11 +23,13 @@ import com.trailmapper.android.map.AndroidTrailNetworkMapPresenter
 import com.trailmapper.android.map.AndroidTrailRouteMapPresenter
 import com.trailmapper.android.map.MapPointPickerActivity
 import com.trailmapper.android.routing.AndroidAccessNetworkProvider
+import com.trailmapper.android.routing.AndroidPlannerDraftStore
 import com.trailmapper.android.routing.AndroidRecentTrailRouteStore
 import com.trailmapper.android.routing.AndroidSavedDestinationStore
 import com.trailmapper.android.routing.AndroidSavedTrailRouteStore
 import com.trailmapper.android.routing.AndroidTrailNetworkProvider
 import com.trailmapper.android.routing.AndroidTrailRouteShareProvider
+import com.trailmapper.shared.PlannerDraftCoordinator
 import com.trailmapper.shared.App
 import com.trailmapper.shared.MapPointSelectionResult
 import com.trailmapper.shared.sijko.ForegroundLocationGrantSijko
@@ -121,6 +123,8 @@ class MainActivity : ComponentActivity() {
         val completedExerciseSessionStore = AndroidCompletedExerciseSessionStore(applicationContext)
         val trailRouteShareProvider = AndroidTrailRouteShareProvider(applicationContext)
         val recentTrailRouteStore = AndroidRecentTrailRouteStore(applicationContext)
+        // One coordinator per process, so recreating this Activity keeps the same lock and owners.
+        val plannerDraftCoordinator = PlannerDraftCoordinator.forProcess { AndroidPlannerDraftStore(applicationContext) }
         val developerOptionsActions = if (BuildConfig.DEBUG) {
             AndroidDeveloperOptionsActions(this)
         } else {
@@ -143,6 +147,7 @@ class MainActivity : ComponentActivity() {
                 trailAccountProvider = resultBridge,
                 trailRouteShareProvider = trailRouteShareProvider,
                 recentTrailRouteStore = recentTrailRouteStore,
+                plannerDraftCoordinator = plannerDraftCoordinator,
                 developerOptionsActions = developerOptionsActions,
             )
         }

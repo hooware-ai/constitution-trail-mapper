@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Backup rules before Android 12. Recent routes stay on this device. Only exclusions are listed, so
+    Backup rules before Android 12. Recent routes and unfinished planner forms stay on this device. Only exclusions are listed, so
     every other file keeps the default behavior while #20 decides the policy for the rest.
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="trail_mapper_recent_routes.xml" />
+    <exclude domain="sharedpref" path="trail_mapper_planner_drafts.xml" />
 </full-backup-content>

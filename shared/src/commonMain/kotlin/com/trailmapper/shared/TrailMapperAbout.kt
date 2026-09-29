@@ -88,7 +88,9 @@ object TrailMapperAbout {
                 title = "Data and privacy",
                 body = "Routes and destinations are saved locally on this device. Google sign-in is optional " +
                     "and currently does not sync routes or destinations. Location is used only when you " +
-                    "request it for routing or navigation.",
+                    "request it for routing or navigation. A route form you have not finished is also kept " +
+                    "on this device, out of backups, so it survives the app being closed while you share; " +
+                    "leaving the form clears it.",
             ),
             TrailMapperAboutDisclosureSection(
                 title = "Independent project",

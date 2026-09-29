@@ -4,6 +4,9 @@
  */
 package com.trailmapper.shared.sijko
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class RouteEndpoints(
     val start: String = "",
     val destination: String = "",

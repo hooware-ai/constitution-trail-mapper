@@ -138,6 +138,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.Stable
+import kotlin.time.Clock
+import com.trailmapper.shared.sijko.PlannerDraftJsonSijko
 import kotlinx.coroutines.launch
 import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteSummarySijko
@@ -179,6 +187,7 @@ fun App(
     trailAccountProvider: TrailAccountProvider = NoTrailAccountProvider,
     trailRouteShareProvider: TrailRouteShareProvider = NoTrailRouteShareProvider,
     recentTrailRouteStore: RecentTrailRouteStore = NoRecentTrailRouteStore,
+    plannerDraftCoordinator: PlannerDraftCoordinator = PlannerDraftCoordinator.None,
     developerOptionsActions: DeveloperOptionsActions? = null,
 ) {
     MaterialTheme(colorScheme = TrailMapperColorScheme) {
@@ -299,6 +308,7 @@ fun App(
                         trailNetworkProvider = trailNetworkProvider,
                         accessNetworkProvider = accessNetworkProvider,
                         trailRouteMapPresenter = trailRouteMapPresenter,
+                        plannerDraftCoordinator = plannerDraftCoordinator,
                         developerOptionsActions = developerOptionsActions,
                         onOpenLocalGuide = {
                             navController.navigate(TrailMapperScreen.LocalGuide.route) { launchSingleTop = true }
@@ -316,6 +326,7 @@ fun App(
                         trailNetworkProvider = trailNetworkProvider,
                         accessNetworkProvider = accessNetworkProvider,
                         completedExerciseSessionStore = completedExerciseSessionStore,
+                        plannerDraftCoordinator = plannerDraftCoordinator,
                         trailRouteMapPresenter = trailRouteMapPresenter,
                         trailRouteShareProvider = trailRouteShareProvider,
                         developerOptionsActions = developerOptionsActions,
@@ -1427,6 +1438,41 @@ private fun RecentTrailRouteRow(
 private val NAVIGATION_RAIL_MIN_WIDTH = 600.dp
 private const val PLAN_RECENT_ROUTE_COUNT = 3
 
+private fun currentEpochMillis(): Long = Clock.System.now().toEpochMilliseconds()
+
+@Composable
+private fun rememberPlannerDraftSession(
+    slot: String,
+    coordinator: PlannerDraftCoordinator,
+    state: Any?,
+    restore: (String) -> Unit,
+    currentDraft: () -> String?,
+    setDiscardHook: ((() -> Unit)?) -> Unit,
+    settle: () -> Unit,
+): PlannerDraftSession {
+    // Survives process death with the screen's saved state, so a restored screen knows it was recreated.
+    var visited by rememberSaveable { mutableStateOf(false) }
+    val session = remember {
+        PlannerDraftSession(slot, coordinator, recreated = visited, restore = restore, settle = settle)
+    }
+    LaunchedEffect(Unit) { visited = true }
+
+    // Leaving for good (not rotating, not being killed) removes the draft. Whether this screen still owns
+    // the slot is decided when the discard runs, so a newer visit's draft is never erased.
+    val discardScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+    setDiscardHook { discardScope.launch { session.discard() } }
+
+    LaunchedEffect(state, session.ready) {
+        if (!session.ready) return@LaunchedEffect
+        delay(DRAFT_SAVE_DEBOUNCE_MILLIS)
+        val serialized = withContext(Dispatchers.Default) { currentDraft() }
+        if (serialized == null) session.clear() else session.save(serialized)
+    }
+    return session
+}
+
+private const val DRAFT_SAVE_DEBOUNCE_MILLIS = 250L
+
 @Composable
 private fun HomeSectionHeader(
     title: String,
@@ -1766,6 +1812,7 @@ private fun ExerciseRoutePlanner(
     trailNetworkProvider: TrailNetworkProvider,
     accessNetworkProvider: AccessNetworkProvider,
     completedExerciseSessionStore: CompletedExerciseSessionStore,
+    plannerDraftCoordinator: PlannerDraftCoordinator,
     trailRouteMapPresenter: TrailRouteMapPresenter,
     trailRouteShareProvider: TrailRouteShareProvider,
     developerOptionsActions: DeveloperOptionsActions?,
@@ -1778,6 +1825,18 @@ private fun ExerciseRoutePlanner(
         ExerciseRoutePlannerViewModel(completedExerciseSessionStore)
     }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val draftSession = rememberPlannerDraftSession(
+        slot = PlannerDraftJsonSijko.EXERCISE_SLOT,
+        coordinator = plannerDraftCoordinator,
+        state = uiState,
+        restore = { serialized ->
+            PlannerDraftJsonSijko.decodeExercise(serialized, currentEpochMillis())?.let(viewModel::restoreDraft)
+        },
+        currentDraft = { viewModel.toDraft(currentEpochMillis())?.let(PlannerDraftJsonSijko::encodeExercise) },
+        setDiscardHook = viewModel::setDiscardHook,
+        settle = viewModel::closeDraftRestore,
+    )
+    LaunchedEffect(draftSession) { draftSession.restoreIfRecreated() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var showDeveloperOptions by remember { mutableStateOf(false) }
@@ -2123,6 +2182,7 @@ private fun RoutePlanner(
     trailNetworkProvider: TrailNetworkProvider,
     accessNetworkProvider: AccessNetworkProvider,
     trailRouteMapPresenter: TrailRouteMapPresenter,
+    plannerDraftCoordinator: PlannerDraftCoordinator,
     developerOptionsActions: DeveloperOptionsActions?,
     onOpenLocalGuide: () -> Unit,
     externalLinkOpener: ExternalLinkOpener,
@@ -2130,6 +2190,17 @@ private fun RoutePlanner(
 ) {
     val routePlannerViewModel: RoutePlannerViewModel = viewModel { RoutePlannerViewModel() }
     val uiState by routePlannerViewModel.uiState.collectAsStateWithLifecycle()
+    val draftSession = rememberPlannerDraftSession(
+        slot = PlannerDraftJsonSijko.ROUTE_SLOT,
+        coordinator = plannerDraftCoordinator,
+        state = uiState,
+        restore = { serialized ->
+            PlannerDraftJsonSijko.decodeRoute(serialized, currentEpochMillis())?.let(routePlannerViewModel::restoreDraft)
+        },
+        currentDraft = { routePlannerViewModel.toDraft(currentEpochMillis())?.let(PlannerDraftJsonSijko::encodeRoute) },
+        setDiscardHook = routePlannerViewModel::setDiscardHook,
+        settle = routePlannerViewModel::closeDraftRestore,
+    )
     var showDeveloperOptions by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -2151,6 +2222,8 @@ private fun RoutePlanner(
         isLoadingInitialDestination,
     ) {
         if (!isLoadingInitialDestination) {
+            // After the process was killed, the draft goes back first so preparing does not blank it.
+            draftSession.restoreIfRecreated()
             routePlannerViewModel.prepareRoute(initialDestination)
         }
     }
