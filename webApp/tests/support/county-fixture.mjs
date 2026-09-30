@@ -1,7 +1,9 @@
 // A SYNTHETIC stand-in for the private licensed extract and its reviewed manifest, in the real file formats.
-// Self-authored geometry near the review area; hashes are arbitrary. It exercises the packaging, loading and
+// Self-authored geometry near the review area; evidence hashes are real digests of the synthetic geometry and raw
+// attributes (the same canonical form the extractor uses), so authentication is exercised. It exercises the packaging, loading and
 // revalidation code paths without any county data. It is not county data and proves nothing about it.
 import { createHash } from "node:crypto";
+import { canonicalSha256 } from "../../tools/lib/canonical-json.mjs";
 
 const hex = (seed) => createHash("sha256").update(seed).digest("hex");
 const LIST = [
@@ -109,18 +111,31 @@ export function scaledList(count = 254, vertices = 40, columns = 12) {
   return list;
 }
 
+/** The raw source attributes the extractor hashes (tools/fetch-web-review-data.py ATTRIBUTE_FIELDS). */
+const rawAttributes = (id, name) => ({
+  OBJECTID: Number(id.split(":")[1]),
+  FACILITYID: `F-${id}`,
+  NAME: `  ${name} `,
+  LENGTH: 0.5,
+  SURFTYPE: 2,
+  loc: 1,
+  facilitytype: 3,
+  activitytype: 1,
+  systemname: 7,
+});
+
 export function makeCounty({
   reviewedOn = "2026-01-01",
   excluded = [9999],
   list = LIST,
 } = {}) {
-  const entries = list.map(([id, , roles]) => {
+  const entries = list.map(([id, name, roles, paths]) => {
     const [layer, objectId] = id.split(":").map(Number);
     return {
       selectionLayerId: layer,
       objectId,
-      geometrySha256: hex("g" + id),
-      attributesSha256: hex("a" + id),
+      geometrySha256: canonicalSha256(paths),
+      attributesSha256: canonicalSha256(rawAttributes(id, name)),
       routeRoles: roles,
     };
   });
@@ -175,11 +190,14 @@ export function makeCounty({
           id,
           sourceLayerId: 8,
           objectId: Number(id.split(":")[1]),
+          facilityId: `F-${id}`,
           name,
           statusCode: "1",
           status: "Existing",
           routeRoles: roles,
+          facilityTypeCode: "3",
           facilityType: "Separated Trail",
+          comfortCode: "1",
           comfort: "All Ages and Abilities",
           enabledByDefault: true,
           paths,
@@ -187,8 +205,9 @@ export function makeCounty({
             sourceUrl: SOURCE_URL,
             license: "CC BY 4.0",
             licenseUrl: LICENSE_URL,
-            geometrySha256: hex("g" + id),
-            attributesSha256: hex("a" + id),
+            geometrySha256: canonicalSha256(paths),
+            attributesSha256: canonicalSha256(rawAttributes(id, name)),
+            attributes: rawAttributes(id, name),
             selectionLayerId: Number(id.split(":")[0]),
             reviewedOn,
           },

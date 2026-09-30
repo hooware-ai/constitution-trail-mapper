@@ -13,7 +13,7 @@ import { makeCounty } from "../support/county-fixture.mjs";
 async function packaged() {
   const county = makeCounty();
   const built = await buildPackage({
-    input: county.input,
+    inputText: JSON.stringify(county.input),
     manifest: county.manifest,
     manifestBytes: Buffer.from(JSON.stringify(county.manifest)),
     approval: county.approval,
@@ -121,6 +121,37 @@ test("unknown schemas and formats are incompatible; missing or invalid fields ar
       "data-corrupt",
     ],
     ["missing approval", change((r) => delete r.approval), "data-corrupt"],
+    ["omitted replaced by {}", change((r) => (r.omitted = {})), "data-corrupt"],
+    [
+      "omitted ids not numbers",
+      change((r) => (r.omitted.proposedFeatureIds = ["x"])),
+      "data-corrupt",
+    ],
+    [
+      "omitted ids not a list",
+      change((r) => (r.omitted.proposedFeatureIds = 5)),
+      "data-corrupt",
+    ],
+    [
+      "omitted supplements missing",
+      change((r) => delete r.omitted.supplements),
+      "data-corrupt",
+    ],
+    [
+      "omitted access roads blank",
+      change((r) => (r.omitted.accessRoads = " ")),
+      "data-corrupt",
+    ],
+    [
+      "blocker that is not a string",
+      change((r) => (r.approval.blockers = [{ x: 1 }])),
+      "data-corrupt",
+    ],
+    [
+      "approver of the wrong type",
+      change((r) => (r.approval.approvedBy = 7)),
+      "data-corrupt",
+    ],
   ];
   for (const [name, value, expected] of expectations)
     assert.equal(

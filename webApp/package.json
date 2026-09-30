@@ -20,7 +20,8 @@
     "preview:vite": "vite preview --host 127.0.0.1",
     "measure:dist": "node tools/measure-dist.mjs",
     "package:dataset": "node tools/package-dataset.mjs",
-    "test:county": "playwright test -c playwright.county.config.ts"
+    "test:county": "playwright test -c playwright.county.config.ts",
+    "verify:county": "node tools/verify-county-package.mjs"
   },
   "dependencies": {
     "leaflet": "1.9.4",

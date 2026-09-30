@@ -37,7 +37,7 @@ async function workspace() {
 }
 const build = (county: ReturnType<typeof makeCounty>) =>
   buildPackage({
-    input: county.input,
+    inputText: JSON.stringify(county.input),
     manifest: county.manifest,
     manifestBytes: Buffer.from(JSON.stringify(county.manifest)),
     approval: county.approval,
@@ -136,6 +136,54 @@ const drift: Array<
     /reviewed evidence hashes/,
   ],
   [
+    "geometry replaced while every hash label is left intact",
+    (c) => {
+      for (const feature of c.input.layers[0].features)
+        feature.paths = [
+          [
+            [0, 0],
+            [0.001, 0],
+          ],
+        ];
+    },
+    /geometry that does not match its reviewed evidence/,
+  ],
+  [
+    "one vertex nudged while the hash labels are left intact",
+    (c) => {
+      c.input.layers[0].features[3].paths[0][0][1] += 0.000001;
+    },
+    /geometry that does not match its reviewed evidence/,
+  ],
+  [
+    "attributes replaced while the hash labels are left intact",
+    (c) => {
+      c.input.layers[0].features[1].provenance.attributes.SURFTYPE = 9;
+    },
+    /attributes that do not match its reviewed evidence/,
+  ],
+  [
+    "an extract with no raw source attributes",
+    (c) => {
+      delete c.input.layers[0].features[0].provenance.attributes;
+    },
+    /carries no raw source attributes/,
+  ],
+  [
+    "a name that differs from the authenticated attributes",
+    (c) => {
+      c.input.layers[0].features[0].name = "Somewhere else";
+    },
+    /described differently from its authenticated source attributes/,
+  ],
+  [
+    "a facility label swapped between trails",
+    (c) => {
+      c.input.layers[0].features[2].facilityType = "Shared Roadway";
+    },
+    /differently from other trails/,
+  ],
+  [
     "different routing roles",
     (c) => {
       c.input.layers[0].features[0].routeRoles = ["SharedRoadways"];
@@ -196,7 +244,7 @@ const drift: Array<
     (c) => {
       c.input.layers[0].features[0].paths = [[[-88.9, 40.5]]];
     },
-    /invalid geometry/,
+    /geometry that does not match its reviewed evidence/,
   ],
   [
     "non-finite coordinates",
@@ -208,7 +256,7 @@ const drift: Array<
         ],
       ];
     },
-    /invalid geometry/,
+    /geometry that does not match its reviewed evidence/,
   ],
   [
     "an excluded proposed geometry that has slipped in",
@@ -361,6 +409,108 @@ test("a written package re-verifies, and tampering, strays and a changed manifes
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("the shipped network is authenticated against the reviewed evidence, not against its own labels", async () => {
+  const { dir, files } = await workspace();
+  try {
+    const built = await packageFromFiles({
+      inputFile: files.input,
+      manifestPath: files.manifest,
+      approvalPath: files.approval,
+      outDir: files.out,
+    });
+    const { createHash } = await import("node:crypto");
+    // Re-issue the package with every geometry replaced but every label, count and id intact, and a self-consistent
+    // content hash: the package hash cannot vouch for it, the reviewed evidence can.
+    const forge = async (mutate: (network: any) => void, name: string) => {
+      const network = JSON.parse(
+        (await readFile(join(files.out, built.file))).toString("utf8"),
+      );
+      mutate(network);
+      const body = Buffer.from(JSON.stringify(network));
+      const sha = createHash("sha256").update(body).digest("hex");
+      const dirName = join(dir, name);
+      await mkdir(dirName, { recursive: true });
+      const file = `trails.${sha.slice(0, 12)}.json`;
+      await writeFile(join(dirName, file), body);
+      const record = JSON.parse(
+        await readFile(join(files.out, "dataset.json"), "utf8"),
+      );
+      record.content = {
+        ...record.content,
+        file,
+        sha256: sha,
+        bytes: body.length,
+      };
+      await writeFile(join(dirName, "dataset.json"), JSON.stringify(record));
+      return dirName;
+    };
+    const features = (n: any) => n.layers[0].features;
+    await assert.rejects(
+      verifyPackageDir(
+        await forge((n) => {
+          for (const f of features(n))
+            f.paths = [
+              [
+                [0, 0],
+                [0.001, 0],
+              ],
+            ];
+        }, "geometry"),
+        files.manifest,
+      ),
+      /geometry that does not match its reviewed evidence/,
+    );
+    await assert.rejects(
+      verifyPackageDir(
+        await forge((n) => {
+          features(n)[0].provenance.attributes.NAME = "Other";
+        }, "attributes"),
+        files.manifest,
+      ),
+      /attributes that do not match its reviewed evidence/,
+    );
+    await assert.rejects(
+      verifyPackageDir(
+        await forge((n) => {
+          features(n)[0].routeRoles = ["SharedRoadways"];
+        }, "roles"),
+        files.manifest,
+      ),
+      /different routing roles/,
+    );
+    await assert.rejects(
+      verifyPackageDir(
+        await forge((n) => {
+          features(n)[0].name = "Renamed";
+        }, "name"),
+        files.manifest,
+      ),
+      /named differently from its authenticated source attributes/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+test("numbers keep the text the extractor hashed: integers written as floats and small exponents still authenticate", async () => {
+  const { canonicalSha256 } = await import(
+    "../../tools/lib/canonical-json.mjs"
+  );
+  const { parseWithNumbers, canonical, sha256Text } = await import(
+    "../../tools/lib/canonical-json.mjs"
+  );
+  // Python's json.dumps writes 1.0, -89.0 and 2e-05 this way; a parsed JS number would print 1, -89 and 0.00002.
+  const python = "[[-89.0,40.5],[1e-05,2],[3.25,-0.0]]";
+  assert.equal(canonical(parseWithNumbers(python)), python);
+  assert.equal(
+    sha256Text(canonical(parseWithNumbers(python))),
+    sha256Text(python),
+  );
+  assert.equal(
+    canonicalSha256({ b: 1, a: [2] }),
+    sha256Text('{"a":[2],"b":1}'),
+  );
 });
 
 test("the committed reviewed manifest admits exactly 254 features and excludes the six proposed IDs", async () => {

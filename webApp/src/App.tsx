@@ -302,6 +302,7 @@ export function App() {
         if (disposed) return;
         initialized = true;
         setNetwork(data);
+        if (data.datasetRecord) client.pinDataset(data.datasetRecord);
         const wake = new ForegroundWakeLock(navigator.wakeLock);
         const controller = new ForegroundNavigationController({
           location: navigator.geolocation
@@ -970,6 +971,14 @@ export function App() {
   }
   function downloadGeoJson() {
     if (!selected || !preview) return;
+    // Its lines would be exported as verified existing trail, but the loaded data no longer confirms them.
+    if (routeNeedsRecalculation(preview)) {
+      announce({
+        kind: "error",
+        message: `${staleRouteMessage(preview)} It cannot be exported as verified trail: recalculate it first.`,
+      });
+      return;
+    }
     try {
       const coordinates = preview.segments.flatMap((s) =>
         s.points.map((p) => [p.longitude, p.latitude] as Coordinate),
@@ -995,6 +1004,9 @@ export function App() {
           dataset: {
             label: network?.label ?? "Unknown dataset",
             mode: network?.mode ?? "unknown",
+            // What the route was planned on and what it was checked against are different facts once data changes.
+            ...(selected.dataset ? { plannedOn: selected.dataset } : {}),
+            ...(preview.network ? { routeCheck: preview.network.status } : {}),
             ...(network?.datasetRecord
               ? {
                   id: network.datasetRecord.id,

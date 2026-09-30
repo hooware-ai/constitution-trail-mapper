@@ -138,10 +138,12 @@ run("Kotlin core build + manifest", "node", ["tools/build-core.mjs"]);
 run("Type check", "npx", ["tsc", "--noEmit"]);
 run("Unit tests", "npm", ["test"]);
 if (datasetKind === "county")
-  run("Verify the county dataset package", "node", [
-    "-e",
-    'import("./tools/lib/dataset-package.mjs").then((m) => m.verifyPackageDir()).then(({ record }) => console.log("county package ok:", record.version, record.content.featureCount + " features")).catch((e) => { console.error(e.message + " Run `npm run package:dataset` first."); process.exit(1); })',
-  ]);
+  run(
+    "Verify the county dataset package",
+    process.execPath,
+    ["tools/verify-county-package.mjs"],
+    { shell: false },
+  );
 run(
   `Production build (${datasetKind}; verifies the core manifest)`,
   "npx",

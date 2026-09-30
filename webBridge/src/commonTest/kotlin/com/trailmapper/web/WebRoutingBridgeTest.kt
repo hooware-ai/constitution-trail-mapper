@@ -582,6 +582,49 @@ class WebRoutingBridgeTest {
         assertTrue("not-eligible" in networkIssueCodes(result))
     }
 
+    private fun branch(id: String, vararg path: String) =
+        """{"id":"$id","name":"$id","status":"Existing","routeRoles":["TrailBranches"],"facilityType":"Off-Road Trail","paths":[[${path.joinToString(",")}]]}"""
+    private fun network(vararg features: String) = """{"layers":[{"features":[${features.joinToString(",")}]}]}"""
+    private fun status(result: JsonObject) = result["network"]!!.jsonObject["status"]!!.jsonPrimitive.content
+
+    @Test fun aRouteThatOnlyResemblesAnEarlierOneNeverBorrowsItsVerdict() {
+        // Same feature id, edge count and vertex count; only the middle vertex differs between the two networks.
+        val before = network(branch("test:1", "[-89.0,40.4]", "[-89.01,40.42]", "[-88.98,40.42]"))
+        val after = network(branch("test:1", "[-89.0,40.4]", "[-89.005,40.42]", "[-88.98,40.42]"))
+        val old = savedRouteFrom(loaded(before, trust = false))
+        val bridge = loaded(after, trust = false)
+        assertEquals("stale", status(inspectSaved(bridge, old)))
+        // Planning the current route warms whatever the check remembers; the old route must stay stale afterwards.
+        val current = savedRouteFrom(bridge)
+        assertEquals("current", status(inspectSaved(bridge, current)))
+        val again = inspectSaved(bridge, old)
+        assertEquals("stale", status(again))
+        assertFalse(again["canNavigate"]!!.jsonPrimitive.boolean)
+        // And the other order: a stale verdict must not block the route that is valid now.
+        val reversed = loaded(after, trust = false)
+        assertEquals("stale", status(inspectSaved(reversed, old)))
+        assertEquals("current", status(inspectSaved(reversed, savedRouteFrom(reversed))))
+    }
+
+    private val connectorMain = branch("main:1", "[-89.0,40.4]", "[-89.0,40.42]")
+    private val connectorSpur = branch("spur:1", "[-89.01,40.41]", "[-89.00003,40.41]")
+    private fun connectorRoute(bridge: WebRoutingBridge) =
+        plan(bridge, from = MapPoint(40.41, -89.01), to = MapPoint(40.42, -89.0)).getValue("route")
+
+    @Test fun aConnectorIsCheckedAlongItsTrailAndOnlyTheJunctionHopIsExempt() {
+        val original = loaded(network(connectorMain, connectorSpur), trust = false)
+        val saved = connectorRoute(original)
+        val unchanged = inspectSaved(original, saved)
+        assertEquals("current", status(unchanged))
+        assertTrue(unchanged["canNavigate"]!!.jsonPrimitive.boolean)
+        // The main trail's top moves ~400 m east: the ~1.1 km of it a connector rides is no longer where it was.
+        val moved = network(branch("main:1", "[-89.0,40.4]", "[-88.995,40.42]"), connectorSpur)
+        val cold = inspectSaved(loaded(moved, trust = false), saved)
+        assertEquals("stale", status(cold))
+        assertTrue("geometry-changed" in networkIssueCodes(cold))
+        assertFalse(cold["canNavigate"]!!.jsonPrimitive.boolean)
+    }
+
     @Test fun aRouteWithoutFeatureIdentitiesIsUnverifiableUnlessTheDatasetIsAFixture() {
         val legacy = Json.encodeToJsonElement(TrailRoute(
             segments = listOf(TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(start, finish))),

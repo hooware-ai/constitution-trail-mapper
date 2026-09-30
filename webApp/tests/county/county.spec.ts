@@ -535,3 +535,178 @@ test("an exercise loop is planned on the packaged trails and stays a loop", asyn
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeEnabled();
 });
+
+test("a stale route cannot be exported as verified trail, in either privacy mode", async ({
+  page,
+}) => {
+  await seedPlaces(page);
+  await planWestToNorth(page);
+  await serveNetwork(page, (n) => {
+    for (const layer of n.layers)
+      layer.features = layer.features.filter((f) => f.id !== "54:9001");
+  });
+  await openRecent(page, /Synthetic west end to Synthetic north end/, {
+    restored: true,
+  });
+  await expect(page.locator(".stale-route")).toBeVisible();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  for (const exact of [false, true]) {
+    const box = dialog.getByRole("checkbox", {
+      name: /Include exact start and destination/,
+    });
+    if (exact) await box.check();
+    await dialog.getByRole("button", { name: /Download/ }).click();
+    await expect(dialog.getByRole("alert")).toContainText(
+      "cannot be exported as verified trail",
+    );
+    await expect(dialog.getByRole("alert")).toContainText(
+      "no longer in the data",
+    );
+  }
+  expect(downloads).toBe(0);
+});
+
+test("an export names both the data the route was planned on and the data it was checked against", async ({
+  page,
+}) => {
+  await seedPlaces(page);
+  await planWestToNorth(page);
+  // A different, still compatible network: the route stays valid but the data identity differs.
+  await serveNetwork(page, (n) => {
+    feature(n, "16:9005").routeRoles = ["ParkConnectors"];
+    feature(n, "16:9005").paths = [
+      [
+        [-88.9, 40.551],
+        [-88.88, 40.551],
+      ],
+    ];
+  });
+  await openRecent(page, /Synthetic west end to Synthetic north end/, {
+    restored: true,
+  });
+  await expect(page.locator(".stale-route")).toHaveCount(0);
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Download/ }).click();
+  const file = JSON.parse(
+    await (
+      await import("node:fs/promises")
+    ).readFile((await (await downloaded).path())!, "utf8"),
+  );
+  const dataset = file.routeContext.dataset;
+  expect(dataset.routeCheck).toBe("current");
+  expect(dataset.version).toMatch(/^changed\./);
+  expect(dataset.plannedOn.version).toMatch(/^2026-01-01\./);
+  expect(dataset.plannedOn.contentSha256).not.toBe(dataset.contentSha256);
+});
+
+test("recovery and restarts keep routing, saving and showing the exact data the page started with", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Native = window.Worker;
+    (window as any).__workers = [];
+    window.Worker = class extends Native {
+      constructor(...args: ConstructorParameters<typeof Worker>) {
+        super(...args);
+        (window as any).__workers.push(this);
+      }
+    } as typeof Worker;
+  });
+  await seedPlaces(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Synthetic west end");
+  await choose(page, "Destination", "Synthetic north end");
+  const original = await (await page.request.get("/data/dataset.json")).json();
+  // The site publishes new data while this page is open.
+  await serveNetwork(page, (n) => {
+    feature(n, "54:9002").paths = [
+      [
+        [-88.97, 40.5],
+        [-88.97, 40.53],
+      ],
+    ];
+  });
+  await page.evaluate(() =>
+    ((window as any).__workers as Worker[])
+      .at(-1)!
+      .dispatchEvent(new ErrorEvent("error")),
+  );
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await page.getByRole("button", { name: "Restart route planning" }).click();
+  await expect(page.getByText("Route planning restarted")).toBeVisible();
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  const stored = await page.evaluate(
+    (key) => JSON.parse(localStorage.getItem(key)!),
+    LIBRARY_KEY,
+  );
+  // The route was made on the original data and is recorded as such, not against what the site serves now.
+  expect(stored.recent[0].dataset.contentSha256).toBe(original.content.sha256);
+  expect(stored.recent[0].dataset.version).toBe(original.version);
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await page.getByRole("button", { name: "Updates", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Trail data" })).toContainText(
+    original.version,
+  );
+});
+
+test("when the data a page started with is no longer served, a restart says so and asks for a reload", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Native = window.Worker;
+    (window as any).__workers = [];
+    window.Worker = class extends Native {
+      constructor(...args: ConstructorParameters<typeof Worker>) {
+        super(...args);
+        (window as any).__workers.push(this);
+      }
+    } as typeof Worker;
+  });
+  await seedPlaces(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  const original = await (await page.request.get("/data/dataset.json")).json();
+  await page.route(`**/data/${original.content.file}`, (route) =>
+    route.fulfill({ status: 404 }),
+  );
+  await page.evaluate(() =>
+    ((window as any).__workers as Worker[])
+      .at(-1)!
+      .dispatchEvent(new ErrorEvent("error")),
+  );
+  await page.getByRole("button", { name: "Restart route planning" }).click();
+  await expect(page.getByRole("alert").last()).toContainText(
+    "reload the page to use the current data",
+  );
+});
+
+test("a description with damaged omission details is refused at load, with Retry, instead of blanking Explore", async ({
+  page,
+}) => {
+  const record = await (await page.request.get("/data/dataset.json")).json();
+  let damaged = true;
+  await page.route("**/data/dataset.json", (route) =>
+    damaged
+      ? route.fulfill({ json: { ...record, omitted: {} } })
+      : route.continue(),
+  );
+  const alert = await expectLoadFailure(
+    page,
+    /does not say what it leaves out/,
+  );
+  damaged = false;
+  await alert.getByRole("button", { name: "Retry loading" }).click();
+  await expect(page.locator(".review-banner")).toContainText(
+    "Review candidate",
+  );
+});

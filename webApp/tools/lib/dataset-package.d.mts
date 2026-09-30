@@ -9,11 +9,12 @@ export const committedApprovalFile: string;
 export class AdmissionError extends Error {}
 export function admittedFeatures(manifest: any): Map<string, any>;
 export function excludedIds(manifest: any): Set<string>;
-export function admit(input: any, manifest: any): any[];
-export function toNetwork(features: any[]): any;
+export const ATTRIBUTE_FIELDS: string[];
+export function admit(inputText: string, manifest: any): any[];
+export function toNetworkText(features: any[]): string;
 export function readApprovalRecord(file?: string): Promise<any>;
 export function buildPackage(args: {
-  input: any;
+  inputText: string;
   manifest: any;
   manifestBytes: Uint8Array;
   approval: any;

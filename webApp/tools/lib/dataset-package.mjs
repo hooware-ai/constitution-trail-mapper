@@ -14,6 +14,12 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { sha256, repoRoot, webRoot } from "./core.mjs";
+import {
+  canonical,
+  parseWithNumbers,
+  sha256Text,
+  toPlain,
+} from "./canonical-json.mjs";
 
 export const NETWORK_SCHEMA = "trail-mapper.network/1";
 export const RECORD_SCHEMA = "trail-mapper.dataset/1";
@@ -91,8 +97,64 @@ export function excludedIds(manifest) {
   );
 }
 
+/** The source attribute fields the reviewed attributes hash covers (tools/fetch-web-review-data.py ATTRIBUTE_FIELDS). */
+export const ATTRIBUTE_FIELDS = [
+  "OBJECTID",
+  "FACILITYID",
+  "NAME",
+  "LENGTH",
+  "SURFTYPE",
+  "loc",
+  "facilitytype",
+  "activitytype",
+  "systemname",
+];
+const codeText = (value) => (value == null ? null : String(value));
+const cleanName = (value) => String(value ?? "").trim() || null;
+
+/**
+ * Recomputes what a feature's reviewed evidence hashes cover from the data actually in hand (its geometry, and the raw
+ * source attributes) and compares them with the manifest. A hash label copied next to the data proves nothing.
+ */
+export function authenticateEvidence(id, entry, pathsTree, attributesTree) {
+  if (sha256Text(canonical(pathsTree)) !== entry.geometrySha256)
+    refuse(`${id} has geometry that does not match its reviewed evidence.`);
+  if (
+    !attributesTree ||
+    typeof attributesTree !== "object" ||
+    Array.isArray(attributesTree) ||
+    Object.keys(attributesTree).length !== ATTRIBUTE_FIELDS.length ||
+    !ATTRIBUTE_FIELDS.every((field) => field in attributesTree)
+  )
+    refuse(
+      `${id} carries no raw source attributes; regenerate the extract with the current python tools/fetch-web-review-data.py.`,
+    );
+  if (sha256Text(canonical(attributesTree)) !== entry.attributesSha256)
+    refuse(`${id} has attributes that do not match its reviewed evidence.`);
+  const raw = toPlain(attributesTree);
+  if (raw.OBJECTID !== entry.objectId)
+    refuse(`${id} carries attributes of a different source feature.`);
+  return raw;
+}
+
+/** The same code must always mean the same label; a swapped label would change how a trail is described. */
+export function labelConsistency() {
+  const seen = { facilityType: new Map(), comfort: new Map() };
+  return (id, kind, code, label) => {
+    const known = seen[kind];
+    if (known.has(code) && known.get(code) !== label)
+      refuse(
+        `${id} describes ${kind} code ${code} differently from other trails.`,
+      );
+    known.set(code, label);
+  };
+}
+export { cleanName, codeText };
+
 /** Admission: the extractor output must be exactly the reviewed subset, single licensed layer, nothing else. */
-export function admit(input, manifest) {
+export function admit(inputText, manifest) {
+  const tree = parseWithNumbers(inputText);
+  const input = toPlain(tree);
   const entries = admittedFeatures(manifest);
   const excluded = excludedIds(manifest);
   if (!input || typeof input !== "object")
@@ -129,7 +191,8 @@ export function admit(input, manifest) {
   const seen = new Set();
   const layerCounts = {};
   const features = [];
-  for (const feature of layer.features) {
+  const consistent = labelConsistency();
+  for (const [index, feature] of layer.features.entries()) {
     const id = feature?.id;
     if (typeof id !== "string") refuse("A feature has no identifier.");
     if (excluded.has(id))
@@ -158,6 +221,30 @@ export function admit(input, manifest) {
       provenance.selectionLayerId !== entry.selectionLayerId
     )
       refuse(`${id} does not match its reviewed evidence hashes.`);
+    const featureTree = tree.layers[0].features[index];
+    const raw = authenticateEvidence(
+      id,
+      entry,
+      featureTree.paths,
+      featureTree.provenance?.attributes,
+    );
+    if (
+      feature.objectId !== entry.objectId ||
+      feature.name !== cleanName(raw.NAME) ||
+      feature.facilityId !== raw.FACILITYID ||
+      feature.facilityTypeCode !== codeText(raw.facilitytype) ||
+      feature.comfortCode !== codeText(raw.loc)
+    )
+      refuse(
+        `${id} is described differently from its authenticated source attributes.`,
+      );
+    consistent(
+      id,
+      "facilityType",
+      feature.facilityTypeCode,
+      feature.facilityType,
+    );
+    consistent(id, "comfort", feature.comfortCode, feature.comfort);
     if (
       provenance.license !== manifest.license ||
       provenance.sourceUrl !== manifest.licensedSourceUrl
@@ -174,7 +261,12 @@ export function admit(input, manifest) {
       refuse(`${id} has invalid geometry.`);
     layerCounts[entry.selectionLayerId] =
       (layerCounts[entry.selectionLayerId] ?? 0) + 1;
-    features.push(feature);
+    features.push({
+      ...feature,
+      // The exact source text of what the hashes cover, spliced verbatim into the shipped network.
+      pathsText: canonical(featureTree.paths),
+      attributesText: canonical(featureTree.provenance.attributes),
+    });
   }
   const missing = [...entries.keys()].filter((id) => !seen.has(id));
   if (missing.length)
@@ -194,36 +286,26 @@ export function admit(input, manifest) {
   return features;
 }
 
-/** The runtime network: only what the router reads, plus the evidence hashes for later audits. */
-export function toNetwork(features) {
+/**
+ * The runtime network as text: what the router reads plus the raw evidence the hashes cover. Geometry and attributes are
+ * spliced in exactly as the extractor wrote them, so anyone can recompute the reviewed digests from the shipped file.
+ */
+export function toNetworkText(features) {
   const ordered = [...features].sort((a, b) => {
     const [la, oa] = a.id.split(":").map(Number);
     const [lb, ob] = b.id.split(":").map(Number);
     return la - lb || oa - ob;
   });
-  return {
-    schema: NETWORK_SCHEMA,
-    layers: [
-      {
-        id: 8,
-        name: "Reviewed licensed McGIS trails",
-        featureCount: ordered.length,
-        features: ordered.map((feature) => ({
-          id: feature.id,
-          name: feature.name ?? null,
-          status: "Existing",
-          routeRoles: feature.routeRoles,
-          facilityType: feature.facilityType ?? null,
-          comfort: feature.comfort ?? null,
-          paths: feature.paths,
-          provenance: {
-            geometrySha256: feature.provenance.geometrySha256,
-            attributesSha256: feature.provenance.attributesSha256,
-          },
-        })),
-      },
-    ],
-  };
+  const one = (feature) =>
+    `{"id":${JSON.stringify(feature.id)},"name":${JSON.stringify(feature.name ?? null)},"status":"Existing",` +
+    `"routeRoles":${JSON.stringify(feature.routeRoles)},"facilityType":${JSON.stringify(feature.facilityType ?? null)},` +
+    `"comfort":${JSON.stringify(feature.comfort ?? null)},"paths":${feature.pathsText},` +
+    `"provenance":{"geometrySha256":${JSON.stringify(feature.provenance.geometrySha256)},` +
+    `"attributesSha256":${JSON.stringify(feature.provenance.attributesSha256)},"attributes":${feature.attributesText}}}`;
+  return (
+    `{"schema":${JSON.stringify(NETWORK_SCHEMA)},"layers":[{"id":8,"name":"Reviewed licensed McGIS trails",` +
+    `"featureCount":${ordered.length},"features":[${ordered.map(one).join(",")}]}]}`
+  );
 }
 
 export async function readApprovalRecord(file = approvalRecordFile) {
@@ -238,14 +320,14 @@ export async function readApprovalRecord(file = approvalRecordFile) {
  * verbatim from the committed approval record; nothing here can mark a dataset approved.
  */
 export async function buildPackage({
-  input,
+  inputText,
   manifest,
   manifestBytes,
   approval,
 }) {
-  const features = admit(input, manifest);
-  const network = toNetwork(features);
-  const body = Buffer.from(JSON.stringify(network), "utf8");
+  const features = admit(inputText, manifest);
+  const input = JSON.parse(inputText);
+  const body = Buffer.from(toNetworkText(features), "utf8");
   const contentSha = sha256(body);
   const file = `trails.${contentSha.slice(0, 12)}.json`;
   const layerCounts = {};
@@ -336,7 +418,7 @@ export async function packageFromFiles({
   }
   const manifestBytes = await readFile(manifestPath);
   const built = await buildPackage({
-    input: JSON.parse(inputBytes.replace(/^﻿/, "")),
+    inputText: inputBytes.replace(/^﻿/, ""),
     manifest: JSON.parse(manifestBytes.toString("utf8")),
     manifestBytes,
     approval: await readApprovalRecord(approvalPath),
@@ -362,7 +444,8 @@ export function checkPackage(record, body, manifestBytes) {
     refuse(
       "The package was made from a different reviewed manifest than the one committed.",
     );
-  const network = JSON.parse(body.toString("utf8"));
+  const tree = parseWithNumbers(body.toString("utf8"));
+  const network = toPlain(tree);
   if (network.schema !== NETWORK_SCHEMA)
     refuse("The packaged network has an unknown schema.");
   const entries = admittedFeatures(manifest);
@@ -373,7 +456,9 @@ export function checkPackage(record, body, manifestBytes) {
     refuse("The packaged trails are not exactly the reviewed set.");
   for (const id of ids)
     if (excluded.has(id)) refuse(`${id} is excluded but present.`);
-  for (const feature of features) {
+  const consistent = labelConsistency();
+  const treeFeatures = tree.layers.flatMap((layer) => layer.features);
+  for (const [index, feature] of features.entries()) {
     const entry = entries.get(feature.id);
     if (
       feature.status !== "Existing" ||
@@ -381,6 +466,26 @@ export function checkPackage(record, body, manifestBytes) {
       feature.provenance?.attributesSha256 !== entry.attributesSha256
     )
       refuse(`${feature.id} does not match its reviewed evidence.`);
+    if (JSON.stringify(feature.routeRoles) !== JSON.stringify(entry.routeRoles))
+      refuse(`${feature.id} has different routing roles than reviewed.`);
+    // Recomputed from the shipped bytes: the geometry the router will use and the attributes it was described by.
+    const raw = authenticateEvidence(
+      feature.id,
+      entry,
+      treeFeatures[index].paths,
+      treeFeatures[index].provenance?.attributes,
+    );
+    if (feature.name !== cleanName(raw.NAME))
+      refuse(
+        `${feature.id} is named differently from its authenticated source attributes.`,
+      );
+    consistent(
+      feature.id,
+      "facilityType",
+      codeText(raw.facilitytype),
+      feature.facilityType,
+    );
+    consistent(feature.id, "comfort", codeText(raw.loc), feature.comfort);
   }
   if (record.content.featureCount !== features.length)
     refuse("The recorded feature count is wrong.");

@@ -56,6 +56,15 @@ export interface ExportContext {
     reviewedOn?: string;
     extractedAtUtc?: string;
     approved?: boolean;
+    /** The data the route was planned on; the fields above describe the data it was checked against. */
+    plannedOn?: {
+      kind: string;
+      id: string;
+      version: string;
+      contentSha256: string;
+    };
+    /** current/trusted only: a stale or unverifiable route is never exported. */
+    routeCheck?: string;
   };
   exportedAt: string;
   /** The route uses proposed infrastructure even if no segment says which part. */

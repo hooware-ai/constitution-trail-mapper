@@ -17,22 +17,22 @@ import { artifactFiles, distDir } from "./lib/provenance.mjs";
 
 const runs = Number(process.argv[process.argv.indexOf("--runs") + 1]) || 5;
 const countyMode = process.argv.includes("--county");
-// Start and destination on the synthetic lattice (tests/support/county-fixture.mjs scaledList): nodes (0,0) and (5,5).
+// Start and destination for --county: `--from lat,lon --to lat,lon`, else the synthetic lattice nodes (0,0) and (5,5)
+// (tests/support/county-fixture.mjs scaledList). Both must lie on the artifact's trails.
+const coordinates = (flag, fallback) => {
+  const index = process.argv.indexOf(flag);
+  if (index < 0) return fallback;
+  const [latitude, longitude] = process.argv[index + 1].split(",").map(Number);
+  return { latitude, longitude };
+};
+const from = coordinates("--from", { latitude: 40.45, longitude: -89.03 });
+const to = coordinates("--to", { latitude: 40.475, longitude: -89.0 });
+// --loop <miles> (county mode; a preset of 3, 5, 10 or 15) measures making an exercise loop from the start instead.
+const loopIndex = process.argv.indexOf("--loop");
+const loopMiles = loopIndex > 0 ? Number(process.argv[loopIndex + 1]) : 0;
 const seededPlaces = [
-  {
-    key: "a",
-    label: "Lattice start",
-    latitude: 40.45,
-    longitude: -89.03,
-    createdAt: 1,
-  },
-  {
-    key: "b",
-    label: "Lattice finish",
-    latitude: 40.475,
-    longitude: -89.0,
-    createdAt: 1,
-  },
+  { key: "a", label: "Measured start", createdAt: 1, ...from },
+  { key: "b", label: "Measured finish", createdAt: 1, ...to },
 ];
 const freePort = () =>
   new Promise((resolve, reject) => {
@@ -104,7 +104,11 @@ try {
     samples.domContentLoaded.push(Date.now() - started);
     await page.getByRole("button", { name: /Go somewhere/ }).waitFor();
     samples.interactive.push(Date.now() - started);
-    await page.getByRole("button", { name: /Go somewhere/ }).click();
+    await page
+      .getByRole("button", {
+        name: loopMiles ? /Make an exercise loop/ : /Go somewhere/,
+      })
+      .click();
     const choose = async (field, name) => {
       await page
         .getByRole("button", { name: new RegExp("^" + field + ":") })
@@ -117,14 +121,24 @@ try {
     };
     await choose(
       "Start",
-      countyMode ? "Lattice start" : "Review trailhead · East",
+      countyMode ? "Measured start" : "Review trailhead · East",
     );
-    await choose(
-      "Destination",
-      countyMode ? "Lattice finish" : "Review trailhead · South",
-    );
+    if (loopMiles)
+      await page
+        .getByRole("button", { name: `${loopMiles} mi`, exact: true })
+        .click();
+    else
+      await choose(
+        "Destination",
+        countyMode ? "Measured finish" : "Review trailhead · South",
+      );
     const route = Date.now();
-    await page.getByRole("button", { name: "Find route", exact: true }).click();
+    await page
+      .getByRole("button", {
+        name: loopMiles ? "Make loop" : "Find route",
+        exact: true,
+      })
+      .click();
     await page
       .getByRole("heading", { name: "Route preview", exact: true })
       .waitFor();
@@ -149,7 +163,9 @@ const result = {
   medianMs: {
     domContentLoaded: median(samples.domContentLoaded),
     interactive: median(samples.interactive),
-    firstRoutePlan: median(samples.firstRoute),
+    [loopMiles ? `${loopMiles}MileLoopPlan` : "firstRoutePlan"]: median(
+      samples.firstRoute,
+    ),
   },
   allMs: samples,
 };

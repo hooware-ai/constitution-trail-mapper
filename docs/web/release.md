@@ -76,4 +76,4 @@ A file scan passing is never approval. A real dataset can only become releasable
 
 ## What this does not certify
 
-Real data, physical iPhone/Android browsers, authentication, hosting or a public launch: #47, #41, #31-#33 and #51 remain gates. Built-artifact smoke tests use the fixture network (or, for `--dataset county`, check the county files, headers and provenance); automated runs never request map tiles. No real-data artifact exists until an authorized person runs the extractor and `npm run package:dataset`.
+Real data, physical iPhone/Android browsers, authentication, hosting or a public launch: #47, #41, #31-#33 and #51 remain gates. Built-artifact smoke tests use the fixture network (or, for `--dataset county`, check the county files, headers and provenance); automated runs never request map tiles. A real-data county artifact is produced by `python tools/fetch-web-review-data.py`, `npm run package:dataset` and `npm run release:check -- --dataset county`; see [county-dataset.md](county-dataset.md) for what it was measured to do.

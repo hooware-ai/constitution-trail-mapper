@@ -46,30 +46,41 @@ async function fetchOrExplain(url: string, what: string): Promise<Response> {
 }
 
 /** The packaged county candidate: fetched, described, hash-checked, then and only then given to the router. */
-async function loadCounty(): Promise<Loaded> {
+async function loadCounty(pinned?: unknown): Promise<Loaded> {
   const base = import.meta.env.BASE_URL;
-  const described = await fetchOrExplain(
-    `${base}data/dataset.json`,
-    "The trail data description",
-  );
-  let raw: unknown;
-  try {
-    raw = await described.json();
-  } catch {
-    throw new DatasetError(
-      "data-corrupt",
-      "The trail data description is not readable.",
+  let raw: unknown = pinned;
+  if (pinned === undefined) {
+    const described = await fetchOrExplain(
+      `${base}data/dataset.json`,
+      "The trail data description",
     );
+    try {
+      raw = await described.json();
+    } catch {
+      throw new DatasetError(
+        "data-corrupt",
+        "The trail data description is not readable.",
+      );
+    }
   }
   const record = parseDatasetRecord(raw, __TRAIL_CHANNEL__);
-  const content = await fetchOrExplain(
-    `${base}data/${record.content.file}`,
-    "The trail data",
-  );
-  const trails = await verifyDatasetContent(
-    await content.arrayBuffer(),
-    record,
-  );
+  // A replacement worker is pinned to the exact data the page started with (the network file is named by its hash), so
+  // the page's identity, map and saved routes always describe the data being routed on. Newer data needs a reload.
+  const reload = pinned
+    ? " The trail data changed since this page opened; reload the page to use the current data."
+    : "";
+  let trails: string;
+  try {
+    const content = await fetchOrExplain(
+      `${base}data/${record.content.file}`,
+      "The trail data",
+    );
+    trails = await verifyDatasetContent(await content.arrayBuffer(), record);
+  } catch (error) {
+    if (error instanceof DatasetError && reload)
+      throw new DatasetError(error.code, error.message + reload);
+    throw error;
+  }
   return {
     trails,
     mode: "county",
@@ -145,7 +156,7 @@ self.onmessage = async (event: MessageEvent) => {
         import.meta.env.DEV && request.local
           ? await loadLocalReview()
           : __TRAIL_DATASET__ === "county"
-            ? await loadCounty()
+            ? await loadCounty(request.pinned)
             : await loadFixture();
       const result = JSON.parse(
         dispatch(

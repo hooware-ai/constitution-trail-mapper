@@ -171,9 +171,26 @@ export function parseDatasetRecord(
         "data-corrupt",
         `The trail data description lacks ${key}.`,
       );
+  // Everything the Trail data section renders is validated here, so a damaged description is a load error with Retry
+  // and never a blank screen later.
+  if (
+    !Array.isArray(omitted.proposedFeatureIds) ||
+    !omitted.proposedFeatureIds.every(
+      (id) => typeof id === "number" && Number.isInteger(id) && id > 0,
+    ) ||
+    !text(omitted.supplements) ||
+    !text(omitted.accessRoads)
+  )
+    throw new DatasetError(
+      "data-corrupt",
+      "The trail data description does not say what it leaves out.",
+    );
   if (
     typeof approval.approved !== "boolean" ||
-    !Array.isArray(approval.blockers)
+    !Array.isArray(approval.blockers) ||
+    !approval.blockers.every((blocker) => text(blocker)) ||
+    (approval.approvedBy != null && typeof approval.approvedBy !== "string") ||
+    (approval.approvedOn != null && typeof approval.approvedOn !== "string")
   )
     throw new DatasetError(
       "data-corrupt",

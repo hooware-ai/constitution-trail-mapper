@@ -288,3 +288,23 @@ test("no request is accepted while a replacement is still initializing", async (
   assert.equal(client.isUnavailable, false);
   client.dispose();
 });
+test("once pinned, cancellation and recovery reboot on exactly the dataset the page started with", async () => {
+  const workers: FakeWorker[] = [];
+  const client = new RoutingClient(() => {
+    const w = new FakeWorker();
+    workers.push(w);
+    return w as any;
+  });
+  await client.call({ op: "boot", local: false });
+  // Before the first boot has finished nothing is pinned: it is the boot that decides what the page uses.
+  assert.equal(workers[0].sent[0].request.pinned, undefined);
+  const record = { id: "county", version: "A" };
+  client.pinDataset(record);
+  await client.cancel();
+  assert.deepEqual(workers[1].sent[0].request.pinned, record);
+  workers[1].crash();
+  await assert.rejects(client.call({ op: "plan" }), RoutingUnavailableError);
+  await client.recover();
+  assert.deepEqual(workers[2].sent[0].request.pinned, record);
+  client.dispose();
+});

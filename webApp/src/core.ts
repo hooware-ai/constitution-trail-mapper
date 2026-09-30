@@ -67,6 +67,14 @@ export class RoutingClient {
     };
     return worker;
   }
+  /**
+   * After the first successful boot: every later boot of this client (restart or cancellation) loads exactly the data
+   * the page started with instead of asking the site what is current.
+   */
+  pinDataset(record: unknown) {
+    if (this.bootRequest)
+      this.bootRequest = { ...this.bootRequest, pinned: record };
+  }
   async call<T = any>(request: Record<string, unknown>): Promise<T> {
     if (this.disposed) throw new Error("Routing has been closed.");
     if (request.op === "boot") {
