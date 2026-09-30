@@ -23,6 +23,7 @@ export function MapView({
   position,
   closures = [],
   fixture,
+  county = false,
 }: {
   features: Feature[];
   route: RouteResult | null;
@@ -33,6 +34,8 @@ export function MapView({
   position?: Point;
   closures?: Closure[];
   fixture: boolean;
+  /** Packaged county data: credit the county license, not the OSM/Census sources of the older local files. */
+  county?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
@@ -77,12 +80,14 @@ export function MapView({
     if (!m) return;
     const credit = fixture
       ? "Synthetic review geometry · CC0"
-      : 'Trail data: <a href="https://www.mcgis.org">McGIS and members</a> · U.S. Census · <a href="https://www.openstreetmap.org/copyright">© OSM contributors / ODbL</a>';
+      : county
+        ? 'Trail data: <a href="https://www.mcgis.org">McGIS and members</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · changes: reviewed subset, normalized'
+        : 'Trail data: <a href="https://www.mcgis.org">McGIS and members</a> · U.S. Census · <a href="https://www.openstreetmap.org/copyright">© OSM contributors / ODbL</a>';
     m.attributionControl.addAttribution(credit);
     return () => {
       m.attributionControl.removeAttribution(credit);
     };
-  }, [fixture]);
+  }, [fixture, county]);
   useEffect(() => {
     const m = map.current,
       g = layers.current;

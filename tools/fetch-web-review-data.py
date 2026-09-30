@@ -187,6 +187,8 @@ def normalize(manifest, source, generated_at):
                 "licenseUrl": LICENSE_URL,
                 "geometrySha256": entry["geometrySha256"],
                 "attributesSha256": entry["attributesSha256"],
+                # The exact values that hash covers, so packaging and audits can recompute it instead of trusting the label.
+                "attributes": {field: attributes[field] for field in ATTRIBUTE_FIELDS},
                 "selectionLayerId": layer_id,
                 "selectionSourceUrl": SELECTION_LAYERS[layer_id],
                 "reviewedOn": manifest["reviewedOn"],
@@ -213,6 +215,8 @@ def normalize(manifest, source, generated_at):
             "licenseItemModified": item.get("modified"),
             "licensedSourceUrl": LICENSED_URL,
             "reviewManifestSha256": digest(manifest),
+            # The coded-value meanings the manifest pins by digest (licensedDomainsSha256): decoded labels are checked against them.
+            "domains": domain_values,
             "changes": "Reviewed subset selected; attributes decoded and normalized; source geometry retained.",
             "selectionSources": SELECTION_LAYERS,
             "disclaimer": "Source data is for display and reference. Current access and accuracy are not guaranteed.",

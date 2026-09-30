@@ -43,7 +43,29 @@ export interface ExportGap {
 export interface ExportContext {
   kind: string;
   /** Dataset the route was planned on, e.g. its label and whether it is the synthetic review network. */
-  dataset: { label: string; mode: string };
+  dataset: {
+    label: string;
+    mode: string;
+    /** Identity and rights of the data, so an exported file says what it was planned on and under which license. */
+    id?: string;
+    version?: string;
+    contentSha256?: string;
+    license?: string;
+    licenseUrl?: string;
+    changes?: string;
+    reviewedOn?: string;
+    extractedAtUtc?: string;
+    approved?: boolean;
+    /** The data the route was planned on; the fields above describe the data it was checked against. */
+    plannedOn?: {
+      kind: string;
+      id: string;
+      version: string;
+      contentSha256: string;
+    };
+    /** current/trusted only: a stale or unverifiable route is never exported. */
+    routeCheck?: string;
+  };
   exportedAt: string;
   /** The route uses proposed infrastructure even if no segment says which part. */
   proposedRoute: boolean;

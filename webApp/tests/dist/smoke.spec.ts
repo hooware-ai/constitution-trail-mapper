@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 // Smoke tests against the BUILT artifact served with the production header set. Basemap tiles are never
 // requested: the optional basemap is off by default and the tile origin is asserted absent.
 
+// A county artifact has different places and provenance; its own checks are in county-smoke.spec.ts.
+const county = process.env.TRAIL_EXPECT_DATASET === "county";
 async function collect(page: Page) {
   const responses: Response[] = [];
   const consoleErrors: string[] = [];
@@ -51,7 +53,13 @@ test("a fresh load serves the app with the production headers and no failing or 
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Synthetic review network/).first(),
+    page
+      .getByText(
+        county
+          ? /Review candidate|reviewed trails/
+          : /Synthetic review network/,
+      )
+      .first(),
   ).toBeVisible();
   const headers = document!.headers();
   expect(headers["content-security-policy"]).toContain("default-src 'self'");
@@ -104,6 +112,7 @@ test("bundled assets are hashed, immutable and served with correct module types"
 test("the routing worker starts and plans a route, and a reload works", async ({
   page,
 }) => {
+  test.skip(county, "plans between synthetic review places");
   const seen = await collect(page);
   await page.goto("/");
   await planRoute(page);
@@ -165,6 +174,7 @@ test("an unknown asset is a real 404 while an unknown page falls back to the app
 test("provenance identifies this artifact and states it is fixture-only and not publishable", async ({
   request,
 }) => {
+  test.skip(county, "fixture provenance; see county-smoke.spec.ts");
   const response = await request.get("/provenance.json");
   expect(response.status()).toBe(200);
   expect(response.headers()["cache-control"]).toBe("no-cache");

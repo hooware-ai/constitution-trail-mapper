@@ -5,9 +5,12 @@
 //   -> desktop+mobile browser suite on a port this run owns -> built-artifact smoke tests on another owned port.
 // It has no dependencies of its own, so it works before `npm ci`.
 //
-//   node tools/release.mjs [--skip-install] [--skip-e2e] [--allow-dirty] [--public]
+//   node tools/release.mjs [--skip-install] [--skip-e2e] [--allow-dirty] [--public] [--dataset county]
 //
 // --public additionally requires an approved dataset (see release/dataset.json): it fails today by design.
+// --dataset county builds the packaged county candidate (npm run package:dataset must have produced and verified
+// webApp/generated/county from the private extract) instead of the synthetic fixture; the county-mode browser suite
+// on synthetic data runs in either case, because it is what proves the production loading path.
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -16,6 +19,18 @@ import { join } from "node:path";
 import { gradleInvocation, repoRoot, webRoot } from "./lib/core.mjs";
 
 const args = new Set(process.argv.slice(2));
+const datasetArg = process.argv.indexOf("--dataset");
+const datasetKind =
+  datasetArg > 0 ? (process.argv[datasetArg + 1] ?? "") : "fixture";
+if (datasetKind !== "fixture" && datasetKind !== "county") {
+  console.error('--dataset must be "fixture" or "county".');
+  process.exit(2);
+}
+const buildEnv = {
+  TRAIL_DATASET: datasetKind,
+  TRAIL_CHANNEL: args.has("--public") ? "public" : "review",
+  ...(datasetKind === "county" ? { TRAIL_EXPECT_DATASET: "county" } : {}),
+};
 const windows = process.platform === "win32";
 const report = {
   startedAt: new Date().toISOString(),
@@ -122,7 +137,19 @@ run("Kotlin bridge tests (JVM + JS)", gradle.command, gradle.args, {
 run("Kotlin core build + manifest", "node", ["tools/build-core.mjs"]);
 run("Type check", "npx", ["tsc", "--noEmit"]);
 run("Unit tests", "npm", ["test"]);
-run("Production build (verifies the core manifest)", "npx", ["vite", "build"]);
+if (datasetKind === "county")
+  run(
+    "Verify the county dataset package",
+    process.execPath,
+    ["tools/verify-county-package.mjs"],
+    { shell: false },
+  );
+run(
+  `Production build (${datasetKind}; verifies the core manifest)`,
+  "npx",
+  ["vite", "build"],
+  { env: buildEnv },
+);
 run("Provenance", "node", [
   "tools/write-provenance.mjs",
   ...(args.has("--allow-dirty") ? [] : ["--strict"]),
@@ -153,9 +180,19 @@ run(
   "npx",
   ["playwright", "test", "-c", "playwright.dist.config.ts"],
   {
-    env: { TRAIL_TEST_PORT: distPort },
+    env: { TRAIL_TEST_PORT: distPort, ...buildEnv },
   },
 );
+if (!args.has("--skip-e2e")) {
+  // Packaged-dataset production path on SYNTHETIC data, two owned ports (review and public builds).
+  const countyPort = String(await freePort());
+  run(
+    `County-mode suite on synthetic data (ports ${countyPort} and ${Number(countyPort) + 1})`,
+    "npx",
+    ["playwright", "test", "-c", "playwright.county.config.ts"],
+    { env: { TRAIL_TEST_PORT: countyPort } },
+  );
+}
 run("Re-verify provenance after the suites", "node", ["tools/audit-dist.mjs"]);
 
 const provenance = JSON.parse(

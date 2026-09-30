@@ -52,7 +52,12 @@ export class RoutingClient {
         data.result.ok === false ||
         (data.result.route === null && data.result.error)
       )
-        p.reject(new Error(data.result.error ?? "No safe route was found."));
+        p.reject(
+          Object.assign(
+            new Error(data.result.error ?? "No safe route was found."),
+            data.result.code ? { code: data.result.code as string } : {},
+          ),
+        );
       else p.resolve(data.result);
     };
     worker.onerror = () => {
@@ -61,6 +66,14 @@ export class RoutingClient {
       this.terminalFailure();
     };
     return worker;
+  }
+  /**
+   * After the first successful boot: every later boot of this client (restart or cancellation) loads exactly the data
+   * the page started with instead of asking the site what is current.
+   */
+  pinDataset(record: unknown) {
+    if (this.bootRequest)
+      this.bootRequest = { ...this.bootRequest, pinned: record };
   }
   async call<T = any>(request: Record<string, unknown>): Promise<T> {
     if (this.disposed) throw new Error("Routing has been closed.");

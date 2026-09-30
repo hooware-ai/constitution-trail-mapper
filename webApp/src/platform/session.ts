@@ -28,6 +28,19 @@ const validRecord = (value: unknown): value is RouteRecord =>
   Number.isFinite(value.usedAt) &&
   object(value.route) &&
   validDraft(value.draft);
+const keptDataset = (value: unknown): RouteRecord["dataset"] | undefined =>
+  object(value) &&
+  ["kind", "id", "version", "contentSha256"].every(
+    (key) =>
+      typeof value[key] === "string" && (value[key] as string).length > 0,
+  )
+    ? {
+        kind: value.kind as string,
+        id: value.id as string,
+        version: value.version as string,
+        contentSha256: value.contentSha256 as string,
+      }
+    : undefined;
 const cleanEndpoint = (value: Endpoint | null): Endpoint | null =>
   value
     ? {
@@ -106,6 +119,10 @@ export class BrowserSessionStore {
               usedAt: value.selected.usedAt,
               route: value.selected.route,
               draft: cleanDraft(value.selected.draft as Draft),
+              // Which data the route was planned on survives a reload, so it can still be exported truthfully.
+              ...(keptDataset(value.selected.dataset)
+                ? { dataset: keptDataset(value.selected.dataset) }
+                : {}),
             }
           : null,
       savedTab: value.savedTab,

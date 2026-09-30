@@ -106,3 +106,35 @@ test("session quota failure is reported and empty custom miles can restore for c
   storage.fail = true;
   assert.equal(store.write(value).error, "quota");
 });
+test("a restored preview keeps which data its route was planned on, and drops a malformed identity", () => {
+  const storage = new MemoryStorage(),
+    store = new BrowserSessionStore(storage, () => NOW),
+    value = session();
+  value.screen = "preview";
+  const dataset = {
+    kind: "county",
+    id: "county",
+    version: "2026-01-01.abc",
+    contentSha256: "a".repeat(64),
+  };
+  value.selected = {
+    key: "route",
+    title: "Loop",
+    createdAt: NOW,
+    usedAt: NOW,
+    route: { segments: [] },
+    draft: value.draft,
+    dataset,
+  };
+  store.write(value);
+  assert.deepEqual(
+    new BrowserSessionStore(storage, () => NOW).read().state!.selected!.dataset,
+    dataset,
+  );
+  (value.selected as any).dataset = { kind: "county", id: 7 };
+  store.write(value);
+  assert.equal(
+    new BrowserSessionStore(storage, () => NOW).read().state!.selected!.dataset,
+    undefined,
+  );
+});

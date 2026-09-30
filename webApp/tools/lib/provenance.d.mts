@@ -11,11 +11,21 @@ export interface DatasetIdentity {
   approved?: boolean;
   id?: string;
   version?: string;
+  content?: {
+    sha256?: string | null;
+    distPath?: string;
+    bytes?: number | null;
+  };
+  sourceManifestSha256?: string | null;
+  inconsistencies?: string[];
+  blockers?: string[];
   [extra: string]: unknown;
 }
 export interface ProvenancePaths {
   distDir?: string;
   datasetFile?: string;
+  approvalFile?: string;
+  manifestFile?: string;
   webRoot?: string;
   core?: import("./core.mjs").CorePaths;
 }
