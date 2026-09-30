@@ -710,3 +710,47 @@ test("hidden intervals and unobserved movement add no distance across a route re
   f.controller.start({ ...record, key: "new-ride" });
   assert.equal(f.controller.state.creditedDistanceMeters, 0);
 });
+
+test("an ambiguous reacquisition shows no guidance, credits nothing and keeps reacquiring", async () => {
+  let ambiguous = true;
+  const f = fixture();
+  const controller = new ForegroundNavigationController({
+    location: f.location,
+    clock: f.clock,
+    evaluate: async () => ({
+      routeProgressMeters: 3200,
+      distanceFromRouteMeters: 0,
+      instruction: "Turn around",
+      remainingMeters: 800,
+      ambiguous,
+    }),
+  });
+  controller.start(record, 3200, 50);
+  f.callbacks.at(-1)!.success({
+    latitude: 40,
+    longitude: -89,
+    accuracy: 10,
+    timestamp: f.now(),
+  });
+  await flush();
+  assert.equal(controller.state.phase, "reacquiring");
+  assert.equal(controller.state.guidance, null);
+  assert.match(
+    controller.state.message,
+    /can't tell where you are on the loop/,
+  );
+  assert.equal(controller.state.creditedDistanceMeters, 50);
+  assert.equal(controller.state.routeProgressMeters, 3200);
+  // A later clear position resumes guidance, still without crediting the unobserved gap.
+  ambiguous = false;
+  f.advance(1000);
+  f.callbacks.at(-1)!.success({
+    latitude: 40,
+    longitude: -89,
+    accuracy: 10,
+    timestamp: f.now(),
+  });
+  await flush();
+  assert.equal(controller.state.phase, "navigating");
+  assert.equal(controller.state.creditedDistanceMeters, 50);
+});
