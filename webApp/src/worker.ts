@@ -1,52 +1,173 @@
 /// <reference lib="webworker" />
 import { dispatch } from "@trail-core";
-import fixture from "./data/review-network.json";
+import {
+  DatasetError,
+  identityOf,
+  parseDatasetRecord,
+  sha256Hex,
+  verifyDatasetContent,
+  type DatasetIdentity,
+  type DatasetRecord,
+} from "./dataset";
+
+// Fixed at build time (src/globals.d.ts). A county build has no fixture code path: the fixture import is removed.
+interface Loaded {
+  trails: string;
+  access?: string;
+  mode: "fixture" | "local" | "county";
+  label: string;
+  identity: DatasetIdentity | null;
+  record: DatasetRecord | null;
+  /** Fixture-only: accept hand-built routes that carry no feature identities. */
+  trustSerializedRoutes: boolean;
+}
+
+async function fetchOrExplain(url: string, what: string): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-cache" });
+  } catch {
+    throw new DatasetError(
+      "data-unavailable",
+      `${what} could not be downloaded. Check your connection and retry.`,
+    );
+  }
+  if (response.status === 404)
+    throw new DatasetError(
+      "data-missing",
+      `${what} is missing from this site. Retry; if it persists the site needs attention.`,
+    );
+  if (!response.ok)
+    throw new DatasetError(
+      "data-unavailable",
+      `${what} could not be downloaded (HTTP ${response.status}). Retry in a moment.`,
+    );
+  return response;
+}
+
+/** The packaged county candidate: fetched, described, hash-checked, then and only then given to the router. */
+async function loadCounty(): Promise<Loaded> {
+  const base = import.meta.env.BASE_URL;
+  const described = await fetchOrExplain(
+    `${base}data/dataset.json`,
+    "The trail data description",
+  );
+  let raw: unknown;
+  try {
+    raw = await described.json();
+  } catch {
+    throw new DatasetError(
+      "data-corrupt",
+      "The trail data description is not readable.",
+    );
+  }
+  const record = parseDatasetRecord(raw, __TRAIL_CHANNEL__);
+  const content = await fetchOrExplain(
+    `${base}data/${record.content.file}`,
+    "The trail data",
+  );
+  const trails = await verifyDatasetContent(
+    await content.arrayBuffer(),
+    record,
+  );
+  return {
+    trails,
+    mode: "county",
+    label: record.label,
+    identity: identityOf(record),
+    record,
+    trustSerializedRoutes: false,
+  };
+}
+
+async function loadFixture(): Promise<Loaded> {
+  // Removed from county builds by the compile-time constant, so a county build cannot serve fixture data.
+  if (__TRAIL_DATASET__ !== "fixture")
+    throw new DatasetError(
+      "data-incompatible",
+      "The synthetic review network is not part of this build.",
+    );
+  const { default: fixture } = await import("./data/review-network.json");
+  const trails = JSON.stringify(fixture);
+  return {
+    trails,
+    mode: "fixture",
+    label: "Synthetic review network — do not ride these paths",
+    identity: {
+      kind: "fixture",
+      id: "synthetic-review-network",
+      version: "1",
+      contentSha256: await sha256Hex(
+        new TextEncoder().encode(trails).buffer as ArrayBuffer,
+      ).catch(() => "unavailable"),
+    },
+    record: null,
+    trustSerializedRoutes: true,
+  };
+}
+
+async function loadLocalReview(): Promise<Loaded & { access?: string }> {
+  const response = await fetch("/local-review-data", { cache: "no-store" });
+  if (
+    !response.ok ||
+    !response.headers.get("content-type")?.includes("application/json")
+  )
+    throw new Error(
+      "Local data is unavailable. Start the local-data review server or choose the synthetic review network.",
+    );
+  const data = await response.json();
+  const base = JSON.parse(data.trails.replace(/^\uFEFF/, ""));
+  const extra = JSON.parse(data.supplement.replace(/^\uFEFF/, ""));
+  return {
+    trails: JSON.stringify({
+      ...base,
+      layers: [...base.layers, ...extra.layers],
+    }),
+    access: data.access,
+    mode: "local",
+    label: data.label,
+    identity: null,
+    record: null,
+    trustSerializedRoutes: false,
+  };
+}
+
 self.onmessage = async (event: MessageEvent) => {
   const { id, request } = event.data;
   try {
     if (request.op === "boot") {
-      let data: any;
       if (request.local && !import.meta.env.DEV)
         throw new Error(
           "Local network review is available only in the local development server.",
         );
-      if (import.meta.env.DEV && request.local) {
-        const response = await fetch("/local-review-data", {
-          cache: "no-store",
-        });
-        if (
-          !response.ok ||
-          !response.headers.get("content-type")?.includes("application/json")
-        )
-          throw new Error(
-            "Local data is unavailable. Start the local-data review server or choose the synthetic review network.",
-          );
-        data = await response.json();
-        const base = JSON.parse(data.trails.replace(/^\uFEFF/, ""));
-        const extra = JSON.parse(data.supplement.replace(/^\uFEFF/, ""));
-        data.trails = JSON.stringify({
-          ...base,
-          layers: [...base.layers, ...extra.layers],
-        });
-      } else
-        data = {
-          trails: JSON.stringify(fixture),
-          mode: "fixture",
-          label: "Synthetic review network — do not ride these paths",
-        };
+      // Exactly one source per boot, chosen by the build and the explicit development flag: no fallbacks.
+      const data =
+        import.meta.env.DEV && request.local
+          ? await loadLocalReview()
+          : __TRAIL_DATASET__ === "county"
+            ? await loadCounty()
+            : await loadFixture();
       const result = JSON.parse(
         dispatch(
           JSON.stringify({
             op: "initialize",
             trails: data.trails,
             access: data.access,
+            dataset: data.identity,
+            trustSerializedRoutes: data.trustSerializedRoutes,
             now: Date.now(),
           }),
         ),
       );
+      if (result.ok === false) throw new Error(result.error);
       self.postMessage({
         id,
-        result: { ...result, mode: data.mode, label: data.label },
+        result: {
+          ...result,
+          mode: data.mode,
+          label: data.label,
+          datasetRecord: data.record,
+        },
       });
     } else
       self.postMessage({
@@ -58,6 +179,7 @@ self.onmessage = async (event: MessageEvent) => {
       id,
       result: {
         ok: false,
+        code: error instanceof DatasetError ? error.code : undefined,
         error:
           error instanceof Error ? error.message : "The routing worker failed.",
       },

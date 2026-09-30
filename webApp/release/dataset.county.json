@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "kind": "county",
+  "id": "mclean-reviewed-existing-trails",
+  "label": "McLean County reviewed trails (candidate data, not approved)",
+  "approved": false,
+  "approvedBy": null,
+  "approvedOn": null,
+  "license": "CC-BY-4.0",
+  "attribution": "Trail data: McLean County GIS Consortium (McGIS) and members, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Reviewed existing trails only; filtered and normalized by Constitution Trail Mapper. Routes are generated and are not an official county map.",
+  "licenseEvidence": [
+    "https://www.arcgis.com/sharing/rest/content/items/a2a54b1f94704061abc90686fbc5c220?f=json",
+    "https://creativecommons.org/licenses/by/4.0/"
+  ],
+  "omitted": {
+    "supplements": "OpenStreetMap-derived trail supplements are not included: whether a merged routing graph is a derivative database under the ODbL is unresolved (docs/web/data-rights.md).",
+    "accessRoads": "Street access data is not included, so routes only connect where the reviewed trails themselves connect; unverified street connections are never invented."
+  },
+  "blockers": [
+    "The redistribution basis for the six proposed branch geometries (OBJECTIDs 1929, 1952, 2349, 3824, 4275, 4772) is unresolved; they are omitted.",
+    "The ODbL classification of a merged OpenStreetMap graph is unresolved; supplements and street access data are omitted.",
+    "The owner has not approved this source composition for public release.",
+    "Physical iPhone Safari and Android Chrome acceptance (#41) has not been done.",
+    "Hosting, basemap and sign-in decisions are open (docs/web/hosting-runbook.md)."
+  ]
+}
