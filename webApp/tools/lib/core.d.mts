@@ -3,6 +3,7 @@ export const repoRoot: string;
 export const coreOutputDir: string;
 export const coreEntry: string;
 export const coreManifestPath: string;
+export function gradleCommand(): string;
 export interface CorePaths {
   root?: string;
   outputDir?: string;

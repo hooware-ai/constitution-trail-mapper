@@ -1,7 +1,12 @@
 // Builds the Kotlin/JS core from this checkout. Old output is removed first, so a failed or skipped build can never
 // leave a previous library in place, and a manifest ties the new output to the exact sources that produced it.
 import { spawnSync } from "node:child_process";
-import { repoRoot, removeCoreOutputs, writeCoreManifest } from "./lib/core.mjs";
+import {
+  gradleCommand,
+  repoRoot,
+  removeCoreOutputs,
+  writeCoreManifest,
+} from "./lib/core.mjs";
 
 const windows = process.platform === "win32";
 
@@ -9,7 +14,7 @@ export async function buildCore() {
   await removeCoreOutputs();
   const started = Date.now();
   const result = spawnSync(
-    windows ? "gradlew.bat" : "./gradlew",
+    gradleCommand(),
     [":webBridge:jsBrowserProductionLibraryDistribution", "--console=plain"],
     { cwd: repoRoot, stdio: "inherit", shell: windows },
   );

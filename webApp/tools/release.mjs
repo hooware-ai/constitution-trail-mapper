@@ -10,9 +10,10 @@
 // --public additionally requires an approved dataset (see release/dataset.json): it fails today by design.
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { repoRoot, webRoot } from "./lib/core.mjs";
+import { gradleCommand, repoRoot, webRoot } from "./lib/core.mjs";
 
 const args = new Set(process.argv.slice(2));
 const windows = process.platform === "win32";
@@ -42,14 +43,13 @@ function run(label, command, commandArgs, options = {}) {
 function finish(code) {
   report.finishedAt = new Date().toISOString();
   report.ok = code === 0;
-  mkdir(join(webRoot, "dist-report"), { recursive: true })
-    .then(() =>
-      writeFile(
-        join(webRoot, "dist-report", "release-report.json"),
-        JSON.stringify(report, null, 2) + "\n",
-      ),
-    )
-    .finally(() => process.exit(code));
+  // Synchronous on purpose: nothing may run after a failure has been recorded.
+  mkdirSync(join(webRoot, "dist-report"), { recursive: true });
+  writeFileSync(
+    join(webRoot, "dist-report", "release-report.json"),
+    JSON.stringify(report, null, 2) + "\n",
+  );
+  process.exit(code);
 }
 
 function freePort() {
@@ -106,7 +106,7 @@ try {
   finish(2);
 }
 
-const gradle = windows ? "gradlew.bat" : "./gradlew";
+const gradle = gradleCommand();
 if (!args.has("--skip-install"))
   run("Locked dependency install (npm ci)", "npm", ["ci"]);
 run(

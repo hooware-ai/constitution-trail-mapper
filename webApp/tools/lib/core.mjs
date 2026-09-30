@@ -30,6 +30,14 @@ export const coreOutputDir = join(
   "productionLibrary",
 );
 export const coreEntry = join(coreOutputDir, "TrailMapper-webBridge.mjs");
+/** The Gradle wrapper as a command string that survives spaces in the checkout path (shell mode on Windows). */
+export function gradleCommand() {
+  const wrapper = join(
+    repoRoot,
+    process.platform === "win32" ? "gradlew.bat" : "gradlew",
+  );
+  return process.platform === "win32" ? `"${wrapper}"` : wrapper;
+}
 export const coreManifestPath = join(
   repoRoot,
   "webBridge",
