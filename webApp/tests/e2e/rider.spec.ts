@@ -584,3 +584,187 @@ test("a structurally invalid stored route is set aside without blanking the app"
   ).toBeFocused();
   expect(failures).toEqual([]);
 });
+
+test("a crashed routing worker is reported at once and an explicit restart recovers without losing the draft", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Original = window.Worker;
+    const created: Worker[] = [];
+    (window as any).__workers = created;
+    window.Worker = class extends Original {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        created.push(this);
+      }
+    } as typeof Worker;
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await choose(page, "Destination", "Review trailhead · South");
+  await page.evaluate(() => {
+    const workers = (window as any).__workers as Worker[];
+    workers.at(-1)!.dispatchEvent(new ErrorEvent("error"));
+  });
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  const alert = page.getByRole("alert").filter({
+    hasText: "Route planning stopped unexpectedly",
+  });
+  await expect(alert).toBeVisible({ timeout: 2000 });
+  await expect(alert).not.toContainText(/Kotlin|rebuild/i);
+  await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+    "Review trailhead · East",
+  );
+  await alert.getByRole("button", { name: "Restart route planning" }).click();
+  await expect(alert).toHaveCount(0);
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+});
+
+async function trackWorkers(page: Page) {
+  await page.addInitScript(() => {
+    const Original = window.Worker;
+    const created: Worker[] = [];
+    (window as any).__workers = created;
+    (window as any).__dropInspect = false;
+    (window as any).__holdBoot = false;
+    (window as any).__heldBoots = [];
+    window.Worker = class extends Original {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        created.push(this);
+      }
+      postMessage(message: any, ...rest: any[]) {
+        if (message?.request?.op === "boot" && (window as any).__holdBoot) {
+          (window as any).__heldBoots.push(() =>
+            (super.postMessage as any)(message, ...rest),
+          );
+          return;
+        }
+        if (message?.request?.op === "inspect" && (window as any).__dropInspect)
+          return;
+        (super.postMessage as any)(message, ...rest);
+      }
+    } as typeof Worker;
+  });
+}
+const crashWorker = (page: Page) =>
+  page.evaluate(() =>
+    ((window as any).__workers as Worker[])
+      .at(-1)!
+      .dispatchEvent(new ErrorEvent("error")),
+  );
+test("a worker crash between location updates clears turn guidance at once and restart resumes only after a fresh fix", async ({
+  page,
+}) => {
+  await trackWorkers(page);
+  await page.clock.install();
+  await plan(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await acceptedFix(page, 40.51, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await crashWorker(page);
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Route planning stopped" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Restart route planning to continue"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Restart route planning" }).click();
+  await expect(page.getByText("Route planning restarted")).toBeVisible();
+  // Still no guidance until a new location is evaluated successfully.
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.51, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+});
+test("a worker crash while opening a saved route can be restarted and the same route previews", async ({
+  page,
+}) => {
+  await trackWorkers(page);
+  await plan(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Saved · View" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Saved · View" }).click();
+  await page.evaluate(() => ((window as any).__dropInspect = true));
+  await page
+    .getByRole("button", {
+      name: /Review trailhead · East to Review trailhead · South/,
+    })
+    .first()
+    .click();
+  await crashWorker(page);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Route planning stopped" }),
+  ).toBeVisible();
+  await page.evaluate(() => ((window as any).__dropInspect = false));
+  await page.getByRole("button", { name: "Restart route planning" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start navigation", exact: true }),
+  ).toBeEnabled();
+  await expect(page.getByText("No route is available")).toHaveCount(0);
+});
+
+test("opening another saved route while a restart boots is not overwritten by the abandoned restart", async ({
+  page,
+}) => {
+  await trackWorkers(page);
+  await plan(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  // A second, different saved route: an exercise loop.
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Saved · View" }).click();
+  await page.evaluate(() => ((window as any).__dropInspect = true));
+  await page
+    .getByRole("button", {
+      name: /Review trailhead · East to Review trailhead · South/,
+    })
+    .first()
+    .click();
+  await crashWorker(page);
+  await page.evaluate(() => {
+    (window as any).__dropInspect = false;
+    (window as any).__holdBoot = true;
+  });
+  await page.getByRole("button", { name: "Restart route planning" }).click();
+  // Back to Saved and open the loop while the replacement worker is still booting.
+  await page.getByRole("button", { name: "← Back" }).click();
+  await page
+    .getByRole("button", { name: /mi loop from/ })
+    .first()
+    .click();
+  await page.evaluate(() => {
+    (window as any).__holdBoot = false;
+    ((window as any).__heldBoots as Array<() => void>)
+      .splice(0)
+      .forEach((f) => f());
+  });
+  await page.waitForTimeout(500);
+  // The abandoned restart must not attach the first route's 1.4 mi preview to the loop.
+  await expect(page.getByText("1.4", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: /mi loop from Review trailhead/ }),
+  ).toBeVisible();
+});

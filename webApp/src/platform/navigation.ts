@@ -177,6 +177,14 @@ export class ForegroundNavigationController {
     };
     this.emit();
   }
+  /** Route matching is offline: drop live guidance now, keep route/progress/credit, and re-evaluate on the next fix. */
+  routingUnavailable(): void {
+    if (!this.state.record || this.state.phase === "idle") return;
+    this.lose(
+      "location-lost",
+      "Route guidance is unavailable. Restart route planning to continue.",
+    );
+  }
   setVisible(visible: boolean): void {
     if (visible === this.visible) return;
     this.visible = visible;
