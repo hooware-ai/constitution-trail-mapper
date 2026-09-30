@@ -1,3 +1,4 @@
+export const DOMAINS: Record<string, Record<string, string>>;
 export function scaledList(
   count?: number,
   vertices?: number,

@@ -625,6 +625,38 @@ class WebRoutingBridgeTest {
         assertFalse(cold["canNavigate"]!!.jsonPrimitive.boolean)
     }
 
+    @Test fun anUnsnappedShortTrailShiftedTwelveMetersNorthIsStaleEvenThoughEveryPointIsNearAnEnd() {
+        val ends = listOf("[-89.0,40.4]", "[-88.99929223953718,40.4]")
+        val shifted = listOf("[-89.0,40.400107797341]", "[-88.99929223953718,40.400107797341]")
+        val original = loaded(network(branch("short:1", *ends.toTypedArray())), trust = false)
+        val saved = plan(original, from = MapPoint(40.4, -89.0), to = MapPoint(40.4, -88.99929223953718)).getValue("route")
+        assertEquals("current", status(inspectSaved(original, saved)))
+        val moved = loaded(network(branch("short:1", *shifted.toTypedArray())), trust = false)
+        val result = inspectSaved(moved, saved)
+        assertEquals("stale", status(result))
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue("geometry-changed" in networkIssueCodes(result))
+    }
+
+    @Test fun aRouteFromTheMapPickerOverAnUnchangedNetworkIsCurrentEvenWhenANearbyTrailAnchorsItsNode() {
+        // The spur ends 12.8 m from the main trail's south end, so the graph anchors that end of main to the spur's node.
+        val spur = branch("spur:1", "[-89.01,40.4]", "[-89.00015,40.4]")
+        val main = branch("main:1", "[-89.0,40.4]", "[-89.0,40.42]")
+        val bridge = loaded(network(spur, main), trust = false)
+        val picked = call(bridge, buildJsonObject {
+            put("op", "mapPoint"); put("point", Json.encodeToJsonElement(MapPoint(40.41, -89.0))); put("proposed", false); put("now", now)
+        })
+        val point = Json.decodeFromJsonElement<MapPoint>(picked.getValue("point"))
+        val fresh = plan(bridge, from = point, to = MapPoint(40.42, -89.0))
+        assertEquals("current", status(fresh))
+        assertTrue(fresh["canNavigate"]!!.jsonPrimitive.boolean)
+        // Reopening it, and recalculating it, keeps agreeing with the graph that made it.
+        assertEquals("current", status(inspectSaved(bridge, fresh.getValue("route"))))
+        // The same route is stale once main is redrawn between the same ends.
+        val redrawn = loaded(network(spur, branch("main:1", "[-89.0,40.4]", "[-88.9995,40.41]", "[-89.0,40.42]")), trust = false)
+        assertEquals("stale", status(inspectSaved(redrawn, fresh.getValue("route"))))
+    }
+
     @Test fun aRouteWithoutFeatureIdentitiesIsUnverifiableUnlessTheDatasetIsAFixture() {
         val legacy = Json.encodeToJsonElement(TrailRoute(
             segments = listOf(TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(start, finish))),

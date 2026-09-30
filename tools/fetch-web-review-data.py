@@ -215,6 +215,8 @@ def normalize(manifest, source, generated_at):
             "licenseItemModified": item.get("modified"),
             "licensedSourceUrl": LICENSED_URL,
             "reviewManifestSha256": digest(manifest),
+            # The coded-value meanings the manifest pins by digest (licensedDomainsSha256): decoded labels are checked against them.
+            "domains": domain_values,
             "changes": "Reviewed subset selected; attributes decoded and normalized; source geometry retained.",
             "selectionSources": SELECTION_LAYERS,
             "disclaimer": "Source data is for display and reference. Current access and accuracy are not guaranteed.",

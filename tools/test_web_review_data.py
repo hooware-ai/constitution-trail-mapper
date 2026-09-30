@@ -102,6 +102,8 @@ class WebReviewDataTests(unittest.TestCase):
             self.assertEqual(item["provenance"]["attributesSha256"], extractor.digest(raw))
             self.assertEqual(item["provenance"]["geometrySha256"], extractor.digest(item["paths"]))
         self.assertEqual("CC BY 4.0", result["sources"]["license"])
+        # The decoding meanings travel with the extract and hash to the digest the manifest pins.
+        self.assertEqual(self.manifest["licensedDomainsSha256"], extractor.digest(result["sources"]["domains"]))
         self.assertEqual(extractor.LICENSE_URL, result["sources"]["licenseUrl"])
 
     def test_canonical_ids_keep_existing_closure_rules_addressable(self):

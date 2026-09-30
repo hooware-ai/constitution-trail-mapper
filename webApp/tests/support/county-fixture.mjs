@@ -111,6 +111,15 @@ export function scaledList(count = 254, vertices = 40, columns = 12) {
   return list;
 }
 
+/** The coded-value meanings the reviewed manifest pins by digest, in the extractor's shape (field -> code -> name). */
+export const DOMAINS = {
+  SURFTYPE: { 1: "Concrete", 2: "Asphalt" },
+  loc: { 1: "All Ages and Abilities", 4: "Strong and Fearless" },
+  facilitytype: { 3: "Separated Trail", 5: "Shared Roadway" },
+  activitytype: { 1: "Bicycle" },
+  systemname: { 7: "Constitution Trail" },
+};
+
 /** The raw source attributes the extractor hashes (tools/fetch-web-review-data.py ATTRIBUTE_FIELDS). */
 const rawAttributes = (id, name) => ({
   OBJECTID: Number(id.split(":")[1]),
@@ -152,6 +161,7 @@ export function makeCounty({
     license: "CC BY 4.0",
     licenseUrl: LICENSE_URL,
     licenseEvidenceUrl: "https://example.test/synthetic/item.json",
+    licensedDomainsSha256: canonicalSha256(DOMAINS),
     reviewedFeatureCount: entries.length,
     reviewedLayerCounts: layerCounts,
     features: entries,
@@ -176,6 +186,7 @@ export function makeCounty({
       licenseEvidenceUrl: "https://example.test/synthetic/item.json",
       licenseEvidenceSha256: hex("license-evidence"),
       licensedSourceUrl: SOURCE_URL,
+      domains: structuredClone(DOMAINS),
       changes:
         "Reviewed subset selected; attributes decoded and normalized; source geometry retained.",
       disclaimer:

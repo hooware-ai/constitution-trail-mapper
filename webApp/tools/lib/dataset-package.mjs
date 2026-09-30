@@ -137,17 +137,29 @@ export function authenticateEvidence(id, entry, pathsTree, attributesTree) {
   return raw;
 }
 
-/** The same code must always mean the same label; a swapped label would change how a trail is described. */
-export function labelConsistency() {
-  const seen = { facilityType: new Map(), comfort: new Map() };
-  return (id, kind, code, label) => {
-    const known = seen[kind];
-    if (known.has(code) && known.get(code) !== label)
-      refuse(
-        `${id} describes ${kind} code ${code} differently from other trails.`,
-      );
-    known.set(code, label);
-  };
+/** The coded-value domains the reviewed manifest pins by digest (licensedDomainsSha256). */
+export function authenticateDomains(domainsTree, manifest) {
+  if (
+    !domainsTree ||
+    typeof domainsTree !== "object" ||
+    Array.isArray(domainsTree)
+  )
+    refuse(
+      "The extract carries no source domain mapping; regenerate it with the current python tools/fetch-web-review-data.py.",
+    );
+  if (
+    !manifest.licensedDomainsSha256 ||
+    sha256Text(canonical(domainsTree)) !== manifest.licensedDomainsSha256
+  )
+    refuse(
+      "The domain mapping does not match the reviewed domains digest; the source's field meanings changed or the extract was altered.",
+    );
+  return toPlain(domainsTree);
+}
+
+/** A decoded label is the reviewed domain's name for the authenticated code, never a value learned from the extract. */
+export function labelFor(domains, field, code) {
+  return code == null ? null : (domains[field]?.[code] ?? null);
 }
 export { cleanName, codeText };
 
@@ -160,6 +172,7 @@ export function admit(inputText, manifest) {
   if (!input || typeof input !== "object")
     refuse("The licensed extract is not readable.");
   const sources = input.sources ?? {};
+  const domains = authenticateDomains(tree.sources?.domains, manifest);
   if (
     sources.license !== manifest.license ||
     sources.licenseUrl !== manifest.licenseUrl
@@ -191,7 +204,6 @@ export function admit(inputText, manifest) {
   const seen = new Set();
   const layerCounts = {};
   const features = [];
-  const consistent = labelConsistency();
   for (const [index, feature] of layer.features.entries()) {
     const id = feature?.id;
     if (typeof id !== "string") refuse("A feature has no identifier.");
@@ -238,13 +250,14 @@ export function admit(inputText, manifest) {
       refuse(
         `${id} is described differently from its authenticated source attributes.`,
       );
-    consistent(
-      id,
-      "facilityType",
-      feature.facilityTypeCode,
-      feature.facilityType,
-    );
-    consistent(id, "comfort", feature.comfortCode, feature.comfort);
+    if (
+      (feature.facilityType ?? null) !==
+        labelFor(domains, "facilitytype", codeText(raw.facilitytype)) ||
+      (feature.comfort ?? null) !== labelFor(domains, "loc", codeText(raw.loc))
+    )
+      refuse(
+        `${id} carries decoded labels that differ from the reviewed domain mapping.`,
+      );
     if (
       provenance.license !== manifest.license ||
       provenance.sourceUrl !== manifest.licensedSourceUrl
@@ -283,14 +296,14 @@ export function admit(inputText, manifest) {
     )
   )
     refuse("The reviewed feature counts per layer changed.");
-  return features;
+  return { features, domainsText: canonical(tree.sources.domains) };
 }
 
 /**
  * The runtime network as text: what the router reads plus the raw evidence the hashes cover. Geometry and attributes are
  * spliced in exactly as the extractor wrote them, so anyone can recompute the reviewed digests from the shipped file.
  */
-export function toNetworkText(features) {
+export function toNetworkText(features, domainsText) {
   const ordered = [...features].sort((a, b) => {
     const [la, oa] = a.id.split(":").map(Number);
     const [lb, ob] = b.id.split(":").map(Number);
@@ -303,7 +316,7 @@ export function toNetworkText(features) {
     `"provenance":{"geometrySha256":${JSON.stringify(feature.provenance.geometrySha256)},` +
     `"attributesSha256":${JSON.stringify(feature.provenance.attributesSha256)},"attributes":${feature.attributesText}}}`;
   return (
-    `{"schema":${JSON.stringify(NETWORK_SCHEMA)},"layers":[{"id":8,"name":"Reviewed licensed McGIS trails",` +
+    `{"schema":${JSON.stringify(NETWORK_SCHEMA)},"domains":${domainsText},"layers":[{"id":8,"name":"Reviewed licensed McGIS trails",` +
     `"featureCount":${ordered.length},"features":[${ordered.map(one).join(",")}]}]}`
   );
 }
@@ -325,9 +338,9 @@ export async function buildPackage({
   manifestBytes,
   approval,
 }) {
-  const features = admit(inputText, manifest);
+  const { features, domainsText } = admit(inputText, manifest);
   const input = JSON.parse(inputText);
-  const body = Buffer.from(toNetworkText(features), "utf8");
+  const body = Buffer.from(toNetworkText(features, domainsText), "utf8");
   const contentSha = sha256(body);
   const file = `trails.${contentSha.slice(0, 12)}.json`;
   const layerCounts = {};
@@ -456,7 +469,7 @@ export function checkPackage(record, body, manifestBytes) {
     refuse("The packaged trails are not exactly the reviewed set.");
   for (const id of ids)
     if (excluded.has(id)) refuse(`${id} is excluded but present.`);
-  const consistent = labelConsistency();
+  const domains = authenticateDomains(tree.domains, manifest);
   const treeFeatures = tree.layers.flatMap((layer) => layer.features);
   for (const [index, feature] of features.entries()) {
     const entry = entries.get(feature.id);
@@ -479,13 +492,14 @@ export function checkPackage(record, body, manifestBytes) {
       refuse(
         `${feature.id} is named differently from its authenticated source attributes.`,
       );
-    consistent(
-      feature.id,
-      "facilityType",
-      codeText(raw.facilitytype),
-      feature.facilityType,
-    );
-    consistent(feature.id, "comfort", codeText(raw.loc), feature.comfort);
+    if (
+      (feature.facilityType ?? null) !==
+        labelFor(domains, "facilitytype", codeText(raw.facilitytype)) ||
+      (feature.comfort ?? null) !== labelFor(domains, "loc", codeText(raw.loc))
+    )
+      refuse(
+        `${feature.id} carries decoded labels that differ from the reviewed domain mapping.`,
+      );
   }
   if (record.content.featureCount !== features.length)
     refuse("The recorded feature count is wrong.");

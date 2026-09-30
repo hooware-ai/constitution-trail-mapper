@@ -76,7 +76,13 @@ const midpoint = (feature) => {
   return line[Math.floor(line.length / 2)];
 };
 
-const plan = (from, to, extra = {}) =>
+const made = [];
+const plan = (from, to, extra = {}) => {
+  const result = planOnce(from, to, extra);
+  if (result.route && result.ok !== false && !result.error) made.push(result);
+  return result;
+};
+const planOnce = (from, to, extra = {}) =>
   call({
     op: "plan",
     start: from,
@@ -398,6 +404,33 @@ for (const closure of closures) {
   });
 }
 
+// Every route this run made (point-to-point, loops, cases) must be current when reopened, and recalculating a
+// current route must also give a current route.
+const everyRoute = {
+  checked: 0,
+  current: 0,
+  notCurrent: [],
+  recalculatedCurrent: 0,
+  recalculated: 0,
+};
+for (const result of made) {
+  const reopened = inspect(result.route);
+  everyRoute.checked++;
+  if (reopened.network?.status === "current") everyRoute.current++;
+  else
+    everyRoute.notCurrent.push({
+      status: reopened.network?.status,
+      issues: reopened.network?.issues?.slice(0, 2),
+    });
+}
+for (const result of made.slice(0, 6)) {
+  const again = call({ op: "recalculate", route: result.route, now: NOW });
+  if (again.route && !again.error) {
+    everyRoute.recalculated++;
+    if (again.network?.status === "current") everyRoute.recalculatedCurrent++;
+  }
+}
+
 const report = {
   dataset: {
     id: record.id,
@@ -422,6 +455,7 @@ const report = {
   },
   routerAgreement: { checked: routes.length, disagreements },
   revalidation,
+  everyRouteMade: everyRoute,
   cases,
   closures: { knownClosures: closures.length, cases: closureCases },
   analysisMs: Date.now() - started,

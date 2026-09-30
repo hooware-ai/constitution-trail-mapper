@@ -10,8 +10,11 @@ export class AdmissionError extends Error {}
 export function admittedFeatures(manifest: any): Map<string, any>;
 export function excludedIds(manifest: any): Set<string>;
 export const ATTRIBUTE_FIELDS: string[];
-export function admit(inputText: string, manifest: any): any[];
-export function toNetworkText(features: any[]): string;
+export function admit(
+  inputText: string,
+  manifest: any,
+): { features: any[]; domainsText: string };
+export function toNetworkText(features: any[], domainsText: string): string;
 export function readApprovalRecord(file?: string): Promise<any>;
 export function buildPackage(args: {
   inputText: string;

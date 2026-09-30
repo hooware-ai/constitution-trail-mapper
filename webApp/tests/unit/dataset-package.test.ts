@@ -177,11 +177,36 @@ const drift: Array<
     /described differently from its authenticated source attributes/,
   ],
   [
-    "a facility label swapped between trails",
+    "one facility label changed",
     (c) => {
       c.input.layers[0].features[2].facilityType = "Shared Roadway";
     },
-    /differently from other trails/,
+    /decoded labels that differ from the reviewed domain mapping/,
+  ],
+  [
+    "a code's label changed consistently on every trail that uses it",
+    (c) => {
+      // Raw attributes, geometry, digests and roles stay intact; only the decoded meaning of the code moves.
+      for (const feature of c.input.layers[0].features)
+        feature.comfort = "Strong and Fearless";
+    },
+    /decoded labels that differ from the reviewed domain mapping/,
+  ],
+  [
+    "a domain mapping rewritten to agree with rewritten labels",
+    (c) => {
+      c.input.sources.domains.loc["1"] = "Strong and Fearless";
+      for (const feature of c.input.layers[0].features)
+        feature.comfort = "Strong and Fearless";
+    },
+    /does not match the reviewed domains digest/,
+  ],
+  [
+    "an extract with no domain mapping",
+    (c) => {
+      delete c.input.sources.domains;
+    },
+    /carries no source domain mapping/,
   ],
   [
     "different routing roles",
@@ -479,6 +504,25 @@ test("the shipped network is authenticated against the reviewed evidence, not ag
         files.manifest,
       ),
       /different routing roles/,
+    );
+    await assert.rejects(
+      verifyPackageDir(
+        await forge((n) => {
+          for (const f of features(n)) f.comfort = "Strong and Fearless";
+        }, "labels"),
+        files.manifest,
+      ),
+      /decoded labels that differ from the reviewed domain mapping/,
+    );
+    await assert.rejects(
+      verifyPackageDir(
+        await forge((n) => {
+          n.domains.loc["1"] = "Strong and Fearless";
+          for (const f of features(n)) f.comfort = "Strong and Fearless";
+        }, "domains"),
+        files.manifest,
+      ),
+      /does not match the reviewed domains digest/,
     );
     await assert.rejects(
       verifyPackageDir(
