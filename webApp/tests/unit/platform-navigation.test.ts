@@ -25,7 +25,13 @@ const record: RouteRecord = {
   createdAt: NOW,
   usedAt: NOW,
   route: {},
-  draft: {},
+  draft: {
+    mode: "point",
+    start: null,
+    destination: null,
+    miles: 5,
+    proposed: false,
+  },
 };
 const flush = async () => {
   for (let index = 0; index < 5; index++) await Promise.resolve();

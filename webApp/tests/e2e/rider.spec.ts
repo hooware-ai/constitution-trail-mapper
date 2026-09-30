@@ -551,3 +551,36 @@ test("missing local data fails visibly and can retry without silently using fixt
     page.getByRole("button", { name: /Go somewhere/ }),
   ).not.toBeVisible();
 });
+
+test("a structurally invalid stored route is set aside without blanking the app", async ({
+  page,
+}) => {
+  const failures: string[] = [];
+  page.on("pageerror", (e) => failures.push(e.message));
+  await plan(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Saved · View" }),
+  ).toBeVisible();
+  // Add one recent record whose draft is null next to the valid saved route.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.library.v1"),
+    )!;
+    const library = JSON.parse(localStorage.getItem(key)!);
+    library.recent = [{ ...library.saved[0], key: "bad", draft: null }];
+    localStorage.setItem(key, JSON.stringify(library));
+  });
+  await page.goto("/");
+  const notice = page.getByText("could not be read and were set aside");
+  await expect(notice).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Delete unreadable data" }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Route controls" }),
+  ).toBeFocused();
+  expect(failures).toEqual([]);
+});

@@ -109,6 +109,9 @@ export function App() {
     [popup, setPopup] = useState<Popup>(null);
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
+    [unreadableSaved, setUnreadableSaved] = useState<
+      false | "aside" | "pending"
+    >(false),
     [busy, setBusy] = useState(false),
     [checking, setChecking] = useState(false),
     [online, setOnline] = useState(navigator.onLine),
@@ -148,6 +151,13 @@ export function App() {
     undo?: () => void,
   ) {
     setLibrary(result.state);
+    setUnreadableSaved(
+      result.pendingUnreadable
+        ? "pending"
+        : storeRef.current?.hasQuarantine()
+          ? "aside"
+          : false,
+    );
     if (result.ok) {
       setStorageError("");
       if (message) success(message, undo);
@@ -947,6 +957,25 @@ export function App() {
           {storageError && (
             <div className="warning" role="alert">
               {storageError}
+            </div>
+          )}
+          {unreadableSaved && (
+            <div className="warning" role="status">
+              {unreadableSaved === "pending"
+                ? "Some saved items in this browser could not be read and there is no room to set them aside. Your other routes and places are unaffected."
+                : "Some saved items in this browser could not be read and were set aside. Your other routes and places are unaffected."}{" "}
+              <button
+                onClick={() => {
+                  const ok = applyStore(
+                    storeRef.current!.discardUnreadable(),
+                    "Unreadable data deleted",
+                  );
+                  // The button disappears; keep keyboard and screen-reader focus in the panel.
+                  if (ok) panelRef.current?.focus();
+                }}
+              >
+                Delete unreadable data
+              </button>
             </div>
           )}
           {nav.storageError && (

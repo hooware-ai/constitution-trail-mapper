@@ -4,6 +4,8 @@ import {
   LocalRouteStore,
   ActiveRideStore,
   LIBRARY_KEY,
+  QUARANTINE_KEY,
+  ACTIVE_RIDE_KEY,
   RECENT_MAX_AGE_MS,
   stableRouteKey,
   type RouteRecord,
@@ -13,11 +15,16 @@ import { privateRouteShare, routeGeoJson } from "../../src/platform/sharing";
 class MemoryStorage implements StoragePort {
   values = new Map<string, string>();
   fail = false;
+  /** Total stored characters allowed across all keys (browser-like quota); unlimited by default. */
+  limit = Infinity;
   getItem(key: string) {
     return this.values.get(key) ?? null;
   }
   setItem(key: string, value: string) {
-    if (this.fail)
+    const others = [...this.values]
+      .filter(([existing]) => existing !== key)
+      .reduce((sum, [name, text]) => sum + name.length + text.length, 0);
+    if (this.fail || others + key.length + value.length > this.limit)
       throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
     this.values.set(key, value);
   }
@@ -38,7 +45,11 @@ const record = (key = "one", usedAt = NOW): RouteRecord => ({
     ],
   },
   draft: {
+    mode: "point",
+    start: { label: "Private home", latitude: 40, longitude: -89 },
     destination: { label: "Private work", latitude: 40.02, longitude: -89 },
+    miles: 5,
+    proposed: false,
   },
 });
 test("successful routes deduplicate, saving moves an item, opening and deleting saved never resurrect it", () => {
@@ -253,4 +264,303 @@ test("exact GeoJSON preserves disconnected source paths without inventing connec
     [-89, 40.02],
   );
   assert.deepEqual(result.features[1].geometry.coordinates[0], [-88, 41]);
+});
+
+const seed = (
+  storage: MemoryStorage,
+  library: Partial<Record<"saved" | "recent" | "places", unknown[]>>,
+) =>
+  storage.values.set(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 1,
+      saved: [],
+      recent: [],
+      places: [],
+      ...library,
+    }),
+  );
+test("a record with a null or malformed draft never reaches the app and does not hide valid records", () => {
+  for (const draft of [
+    null,
+    "x",
+    [],
+    {},
+    { mode: "walk" },
+    { mode: "point" },
+  ]) {
+    const storage = new MemoryStorage();
+    seed(storage, {
+      recent: [{ ...record("bad"), draft }, record("good")],
+    });
+    const result = new LocalRouteStore(storage, () => NOW).read();
+    assert.equal(result.ok, true);
+    assert.deepEqual(
+      result.state.recent.map((item) => item.key),
+      ["good"],
+    );
+    assert.equal(result.quarantined, 1);
+  }
+});
+test("invalid saved, recent and place records are quarantined while valid ones survive", () => {
+  const storage = new MemoryStorage();
+  seed(storage, {
+    saved: [record("saved-ok"), { ...record("saved-bad"), route: null }],
+    recent: [{ ...record("recent-bad"), draft: null }, record("recent-ok")],
+    places: [
+      { key: "p", label: "Park", latitude: 40, longitude: -89, createdAt: NOW },
+      {
+        key: "q",
+        label: "Nowhere",
+        latitude: 400,
+        longitude: -89,
+        createdAt: NOW,
+      },
+    ],
+  });
+  const store = new LocalRouteStore(storage, () => NOW);
+  const result = store.read();
+  assert.equal(result.quarantined, 3);
+  assert.deepEqual(
+    result.state.saved.map((item) => item.key),
+    ["saved-ok"],
+  );
+  assert.deepEqual(
+    result.state.recent.map((item) => item.key),
+    ["recent-ok"],
+  );
+  assert.deepEqual(
+    result.state.places.map((item) => item.key),
+    ["p"],
+  );
+  // Only the rejected records are kept, and they stay until the rider deletes them.
+  assert.equal(store.hasQuarantine(), true);
+  const kept = JSON.parse(storage.values.get(QUARANTINE_KEY)!);
+  assert.deepEqual(
+    kept.map((entry: any) => [entry.kind, entry.record.key]),
+    [
+      ["saved", "saved-bad"],
+      ["recent", "recent-bad"],
+      ["places", "q"],
+    ],
+  );
+  // The library was rewritten, so a later read is clean and later writes work.
+  assert.equal(store.read().quarantined, undefined);
+  assert.equal(store.save(record("new")).ok, true);
+  assert.equal(store.hasQuarantine(), true);
+  assert.equal(store.discardUnreadable().ok, true);
+  assert.equal(store.hasQuarantine(), false);
+  assert.equal(store.read().state.saved.length, 2);
+});
+test("a failed quarantine write preserves the original library and still shows valid records", () => {
+  const storage = new MemoryStorage();
+  seed(storage, {
+    recent: [{ ...record("bad"), draft: null }, record("good")],
+  });
+  const original = storage.values.get(LIBRARY_KEY);
+  storage.fail = true;
+  const result = new LocalRouteStore(storage, () => NOW).read();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "quota");
+  assert.equal(result.pendingUnreadable, 1);
+  assert.deepEqual(
+    result.state.recent.map((item) => item.key),
+    ["good"],
+  );
+  assert.equal(storage.values.get(LIBRARY_KEY), original);
+});
+test("a non-array collection is still corrupt and preserved", () => {
+  const storage = new MemoryStorage();
+  storage.values.set(
+    LIBRARY_KEY,
+    JSON.stringify({ version: 1, saved: {}, recent: [], places: [] }),
+  );
+  assert.equal(new LocalRouteStore(storage, () => NOW).read().error, "corrupt");
+});
+test("an active ride with a malformed record is reported corrupt instead of restored", () => {
+  const storage = new MemoryStorage();
+  storage.values.set(
+    ACTIVE_RIDE_KEY,
+    JSON.stringify({
+      version: 1,
+      record: { ...record(), draft: null },
+      routeProgressMeters: 1,
+      creditedDistanceMeters: 1,
+      updatedAt: NOW,
+    }),
+  );
+  const result = new ActiveRideStore(storage).read();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "corrupt");
+  assert.equal(result.state, null);
+});
+
+test("a place with a non-string address is unreadable instead of crashing the place list", () => {
+  const storage = new MemoryStorage();
+  const place = (key: string, address?: unknown) => ({
+    key,
+    label: "Park",
+    latitude: 40,
+    longitude: -89,
+    createdAt: NOW,
+    address,
+  });
+  seed(storage, {
+    places: [place("ok", "1 Main St"), place("bad", { bad: "record" })],
+    recent: [
+      {
+        ...record("bad-endpoint"),
+        draft: {
+          ...(record().draft as any),
+          destination: { label: "x", latitude: 40, longitude: -89, address: 5 },
+        },
+      },
+    ],
+  });
+  const result = new LocalRouteStore(storage, () => NOW).read();
+  assert.deepEqual(
+    result.state.places.map((item) => item.key),
+    ["ok"],
+  );
+  assert.equal(result.state.recent.length, 0);
+  assert.equal(result.quarantined, 2);
+});
+test("setting aside unreadable records never needs a second copy of the library, so a nearly full store still recovers", () => {
+  const storage = new MemoryStorage();
+  const many = Array.from({ length: 12 }, (_, index) =>
+    record("saved-" + index),
+  );
+  seed(storage, {
+    saved: many,
+    recent: [{ ...record("bad"), draft: null }],
+  });
+  const libraryBytes =
+    LIBRARY_KEY.length + storage.values.get(LIBRARY_KEY)!.length;
+  // Room for the library plus only a small amount extra: a full-library snapshot would not fit.
+  storage.limit = libraryBytes + 600;
+  const store = new LocalRouteStore(storage, () => NOW);
+  const result = store.read();
+  assert.equal(result.ok, true);
+  assert.equal(result.quarantined, 1);
+  assert.equal(result.state.saved.length, 12);
+  // Deleting a route (freeing space) works even though unreadable data is present.
+  assert.equal(store.deleteSaved("saved-0").ok, true);
+  assert.equal(store.hasQuarantine(), true);
+});
+test("unreadable data is retained across repeated corruption until the rider deletes it", () => {
+  const storage = new MemoryStorage();
+  const store = new LocalRouteStore(storage, () => NOW);
+  for (const key of ["a", "b", "c", "d"]) {
+    seed(storage, { recent: [{ ...record(key), draft: null }] });
+    assert.equal(store.read().quarantined, 1);
+  }
+  assert.equal(JSON.parse(storage.values.get(QUARANTINE_KEY)!).length, 4);
+  // Re-reading the same rejected record does not duplicate it.
+  seed(storage, { recent: [{ ...record("d"), draft: null }] });
+  store.read();
+  assert.equal(JSON.parse(storage.values.get(QUARANTINE_KEY)!).length, 4);
+  assert.equal(store.discardUnreadable().ok, true);
+  assert.equal(store.hasQuarantine(), false);
+});
+test("discarding after a partial failure reports success only once nothing unreadable remains", () => {
+  const storage = new MemoryStorage();
+  seed(storage, {
+    recent: [{ ...record("bad"), draft: null }, record("good")],
+  });
+  const store = new LocalRouteStore(storage, () => NOW);
+  // Quarantine fits, but rewriting the library without the bad record does not.
+  const realSet = storage.setItem.bind(storage);
+  storage.setItem = (key: string, value: string) => {
+    if (key === LIBRARY_KEY)
+      throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
+    realSet(key, value);
+  };
+  const first = store.read();
+  assert.equal(first.ok, false);
+  assert.equal(first.quarantined, 1);
+  assert.equal(store.hasQuarantine(), true);
+  // Storage is still failing for the library: discarding must not claim success.
+  const failed = store.discardUnreadable();
+  assert.equal(failed.ok, false);
+  assert.equal(failed.pendingUnreadable, 1);
+  // Storage recovers: now the discard truly leaves nothing unreadable behind.
+  storage.setItem = realSet;
+  const done = store.discardUnreadable();
+  assert.equal(done.ok, true);
+  assert.equal(store.hasQuarantine(), false);
+  const after = store.read();
+  assert.equal(after.quarantined, undefined);
+  assert.equal(store.hasQuarantine(), false);
+  assert.deepEqual(
+    after.state.recent.map((item) => item.key),
+    ["good"],
+  );
+});
+test("a change that cannot set unreadable data aside is rolled back instead of silently dropping it", () => {
+  const storage = new MemoryStorage();
+  seed(storage, {
+    saved: [record("keep")],
+    recent: [{ ...record("bad"), draft: null }],
+  });
+  const original = storage.values.get(LIBRARY_KEY)!;
+  const store = new LocalRouteStore(storage, () => NOW);
+  const realSet = storage.setItem.bind(storage);
+  storage.setItem = (key: string, value: string) => {
+    if (key === QUARANTINE_KEY)
+      throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
+    realSet(key, value);
+  };
+  const result = store.deleteSaved("keep");
+  assert.equal(result.ok, false);
+  assert.equal(result.pendingUnreadable, 1);
+  assert.equal(storage.values.get(LIBRARY_KEY), original);
+});
+
+test("a quota-failed change keeps reporting unreadable data still in the library", () => {
+  const storage = new MemoryStorage();
+  storage.values.set(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 1,
+      saved: [null],
+      recent: [],
+      places: [
+        {
+          key: "p",
+          label: "Park",
+          latitude: 40,
+          longitude: -89,
+          createdAt: NOW,
+        },
+      ],
+    }),
+  );
+  const store = new LocalRouteStore(storage, () => NOW);
+  // No room for the quarantine copy or a larger library.
+  storage.limit = storage.values.get(LIBRARY_KEY)!.length + LIBRARY_KEY.length;
+  const read = store.read();
+  assert.equal(read.pendingUnreadable, 1);
+  const failed = store.savePlace({
+    key: "q",
+    label: "A much longer place label that cannot fit",
+    latitude: 40,
+    longitude: -89,
+    createdAt: NOW,
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.error, "quota");
+  assert.equal(failed.pendingUnreadable, 1);
+  // The rider can still discard it, which frees room.
+  assert.equal(store.discardUnreadable().ok, true);
+  assert.equal(store.read().pendingUnreadable, undefined);
+});
+test("a change that already set the unreadable data aside does not claim it is pending", () => {
+  const storage = new MemoryStorage();
+  seed(storage, { recent: [{ ...record("bad"), draft: null }] });
+  const store = new LocalRouteStore(storage, () => NOW);
+  assert.equal(store.read().quarantined, 1);
+  storage.fail = true;
+  const failed = store.save(record("new"));
+  assert.equal(failed.ok, false);
+  assert.equal(failed.pendingUnreadable, undefined);
 });
