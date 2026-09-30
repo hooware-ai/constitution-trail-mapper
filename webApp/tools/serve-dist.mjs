@@ -41,7 +41,21 @@ async function resolveFile(urlPath) {
 
 const server = createServer(async (request, response) => {
   const urlPath = request.url ?? "/";
-  let file = await resolveFile(urlPath);
+  let file;
+  try {
+    file = await resolveFile(urlPath);
+  } catch (error) {
+    // A malformed percent-escape (for example "/%") is a bad request, never a reason to stop the server.
+    if (error instanceof URIError) {
+      response.writeHead(400, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      response.end("Bad request");
+      return;
+    }
+    throw error;
+  }
   let status = 200;
   // Unknown *navigations* get the app shell; a missing asset must be a real 404, never HTML.
   const wantsHtml = (request.headers.accept ?? "").includes("text/html");

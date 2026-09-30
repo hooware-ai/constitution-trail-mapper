@@ -13,7 +13,7 @@ import { createServer } from "node:net";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gradleCommand, repoRoot, webRoot } from "./lib/core.mjs";
+import { gradleInvocation, repoRoot, webRoot } from "./lib/core.mjs";
 
 const args = new Set(process.argv.slice(2));
 const windows = process.platform === "win32";
@@ -29,7 +29,7 @@ function run(label, command, commandArgs, options = {}) {
   const result = spawnSync(command, commandArgs, {
     cwd: options.cwd ?? webRoot,
     stdio: "inherit",
-    shell: windows,
+    shell: options.shell ?? windows,
     env: { ...process.env, ...options.env },
   });
   const seconds = Math.round((Date.now() - started) / 1000);
@@ -86,7 +86,9 @@ function requireTools() {
     );
   const git = spawnSync(
     "git",
-    ["status", "--porcelain", "--untracked-files=no"],
+    // Ignored build output is fine; tracked changes and untracked, non-ignored files are not (a stray Kotlin or
+    // config file would be built into the artifact but absent from the recorded commit).
+    ["status", "--porcelain", "--untracked-files=all"],
     {
       cwd: repoRoot,
       encoding: "utf8",
@@ -95,7 +97,7 @@ function requireTools() {
   );
   if (git.stdout.trim() && !args.has("--allow-dirty"))
     throw new Error(
-      "Tracked files have uncommitted changes, so the artifact cannot be tied to a commit. Commit them, or pass --allow-dirty for a local build that is recorded as non-releasable.",
+      "Uncommitted changes or untracked, non-ignored files exist, so the artifact cannot be tied to a commit. Commit or remove them, or pass --allow-dirty for a local build that is recorded as non-releasable.",
     );
 }
 
@@ -106,15 +108,17 @@ try {
   finish(2);
 }
 
-const gradle = gradleCommand();
+const gradle = gradleInvocation([
+  ":webBridge:jvmTest",
+  ":webBridge:jsNodeTest",
+  "--console=plain",
+]);
 if (!args.has("--skip-install"))
   run("Locked dependency install (npm ci)", "npm", ["ci"]);
-run(
-  "Kotlin bridge tests (JVM + JS)",
-  gradle,
-  [":webBridge:jvmTest", ":webBridge:jsNodeTest", "--console=plain"],
-  { cwd: repoRoot },
-);
+run("Kotlin bridge tests (JVM + JS)", gradle.command, gradle.args, {
+  cwd: repoRoot,
+  shell: gradle.shell,
+});
 run("Kotlin core build + manifest", "node", ["tools/build-core.mjs"]);
 run("Type check", "npx", ["tsc", "--noEmit"]);
 run("Unit tests", "npm", ["test"]);

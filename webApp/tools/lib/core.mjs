@@ -30,13 +30,23 @@ export const coreOutputDir = join(
   "productionLibrary",
 );
 export const coreEntry = join(coreOutputDir, "TrailMapper-webBridge.mjs");
-/** The Gradle wrapper as a command string that survives spaces in the checkout path (shell mode on Windows). */
-export function gradleCommand() {
-  const wrapper = join(
-    repoRoot,
-    process.platform === "win32" ? "gradlew.bat" : "gradlew",
-  );
-  return process.platform === "win32" ? `"${wrapper}"` : wrapper;
+/**
+ * How to run the Gradle wrapper. On Windows the .bat goes through the shell with a quoted path (checkout paths
+ * contain spaces). Elsewhere the script is run by `sh` explicitly, so a wrapper committed without its executable
+ * bit (as this repository's is) still works on Linux.
+ */
+export function gradleInvocation(args) {
+  if (process.platform === "win32")
+    return {
+      command: `"${join(repoRoot, "gradlew.bat")}"`,
+      args,
+      shell: true,
+    };
+  return {
+    command: "sh",
+    args: [join(repoRoot, "gradlew"), ...args],
+    shell: false,
+  };
 }
 export const coreManifestPath = join(
   repoRoot,
@@ -52,11 +62,19 @@ const INPUT_FILES = [
   "settings.gradle.kts",
   "gradle.properties",
   "gradle/libs.versions.toml",
+  // The wrapper scripts, the wrapper jar that downloads Gradle, and the Kotlin/JS dependency lock all decide what
+  // the build produces.
+  "gradlew",
+  "gradlew.bat",
   "gradle/wrapper/gradle-wrapper.properties",
+  "gradle/wrapper/gradle-wrapper.jar",
+  "kotlin-js-store/package-lock.json",
   "sharedLogic/build.gradle.kts",
   "webBridge/build.gradle.kts",
 ];
-const TEXT = /\.(kt|kts|properties|toml|json|txt|md|xml)$/i;
+// Text files are hashed with normalised line endings (git may check the wrapper scripts out with CRLF on Windows).
+const TEXT =
+  /(\.(kt|kts|properties|toml|json|txt|md|xml|bat)|(^|[/\\])gradlew)$/i;
 
 async function walk(dir) {
   let entries;
@@ -140,19 +158,32 @@ export async function coreOutputs(dir = coreOutputDir) {
   };
 }
 
-export async function removeCoreOutputs() {
-  await rm(join(repoRoot, "webBridge", "build", "dist"), {
+export async function removeCoreOutputs(paths = {}) {
+  await rm(paths.distRoot ?? join(repoRoot, "webBridge", "build", "dist"), {
     recursive: true,
     force: true,
   });
-  await rm(coreManifestPath, { force: true });
+  await rm(paths.manifestPath ?? coreManifestPath, { force: true });
 }
 
-export async function writeCoreManifest(extra = {}, paths = {}) {
+/**
+ * Records the manifest for the output on disk. `expectedInputsSha256` is the input hash captured BEFORE the build
+ * started: if the sources changed while the compiler ran, the output cannot be attributed to either version, so
+ * nothing is recorded.
+ */
+export async function writeCoreManifest(
+  extra = {},
+  paths = {},
+  expectedInputsSha256,
+) {
   const outputDir = paths.outputDir ?? coreOutputDir;
   const manifestPath = paths.manifestPath ?? coreManifestPath;
   const root = paths.root ?? repoRoot;
   const inputs = await coreInputs(root);
+  if (expectedInputsSha256 && inputs.hash !== expectedInputsSha256)
+    throw new Error(
+      "The Kotlin sources or build files changed while the core was building, so the output cannot be tied to either version. Discarded; run the build again.",
+    );
   const outputs = await coreOutputs(outputDir);
   if (
     !outputs.files.some((file) =>

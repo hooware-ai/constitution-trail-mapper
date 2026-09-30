@@ -138,7 +138,7 @@ test("the fixture dataset is never publishable and a file scan does not approve 
     approved: true,
     id: "county",
     version: "2026-10",
-    content: { sha256: "b".repeat(64) },
+    content: { sha256: "b".repeat(64), distPath: "assets/data.json" },
     sourceManifestSha256: "c".repeat(64),
     licenseEvidence: ["https://example.test/license"],
     attribution: "Trail data: example",

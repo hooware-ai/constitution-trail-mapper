@@ -15,12 +15,12 @@ The exact policy lives in `webApp/hosting/headers.mjs`; `tools/serve-dist.mjs` s
 | `Content-Security-Policy` | `default-src 'self'`; scripts and styles from `'self'` only (inline style *attributes* allowed for React/Leaflet); `img-src 'self' data: blob: https://tile.openstreetmap.org`; `connect-src 'self'` plus, later, the auth/sync origins decided under #31-#33; `worker-src 'self' blob:`; `object-src 'none'`; `base-uri 'none'`; `form-action 'self'`; `frame-ancestors 'none'`; add `upgrade-insecure-requests` on HTTPS |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` - **not** `no-referrer`: the OpenStreetMap tile policy requires a valid Referer |
 | `X-Content-Type-Options` | `nosniff` |
-| `Permissions-Policy` | `geolocation=(self)`, everything else off |
+| `Permissions-Policy` | `geolocation=(self)`; camera, microphone, payment, usb, bluetooth and serial explicitly disabled (other features keep the browser default) |
 | `Cross-Origin-Opener-Policy` | `same-origin-allow-popups` (a stricter value would break popup sign-in in #32) |
 | `Cross-Origin-Resource-Policy` | `same-origin` |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` on the HTTPS origin only (never send it over HTTP); preload only after the domain decision below |
 
-If the chosen host cannot set one of these, that is a finding to resolve before use, not a reason to drop it.
+If the chosen host cannot set one of these, that is a finding to resolve before use, not a reason to drop it. This set is sufficient for the fixture-scope app and is **not** an authentication certification: the real auth, frame and connect origins are added under #31-#33 when they are known, without speculative broadening.
 
 ## HTTPS, assets and caching
 

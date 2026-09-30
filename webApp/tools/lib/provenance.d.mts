@@ -3,7 +3,7 @@ export const datasetFile: string;
 export const APPROVED_DATASET_FIELDS: string[];
 export interface SourceState {
   commit: string | null;
-  branch: string | null;
+  branch?: string | null;
   dirty: boolean | null;
 }
 export interface DatasetIdentity {
@@ -13,17 +13,30 @@ export interface DatasetIdentity {
   version?: string;
   [extra: string]: unknown;
 }
-export function sourceState(): SourceState;
-export function loadDataset(): Promise<DatasetIdentity>;
+export interface ProvenancePaths {
+  distDir?: string;
+  datasetFile?: string;
+  webRoot?: string;
+  core?: import("./core.mjs").CorePaths;
+}
+export function sourceState(root?: string): SourceState;
+export function loadDataset(paths?: ProvenancePaths): Promise<DatasetIdentity>;
 export function publicReleaseBlockers(
   dataset: DatasetIdentity,
-  source?: { commit: string | null; dirty: boolean | null },
+  source?: SourceState,
+  distFiles?: Array<{ path: string; sha256: string }>,
 ): string[];
 export function artifactFiles(
   dir?: string,
 ): Promise<Array<{ path: string; sha256: string; bytes: number }>>;
 export function writeProvenance(options?: {
   allowDirty?: boolean;
+  paths?: ProvenancePaths;
+  source?: SourceState;
 }): Promise<any>;
-export function verifyProvenance(): Promise<any>;
+export function verifyProvenance(options?: {
+  requirePublic?: boolean;
+  paths?: ProvenancePaths;
+  source?: SourceState;
+}): Promise<any>;
 export function isDirectory(path: string): Promise<boolean>;

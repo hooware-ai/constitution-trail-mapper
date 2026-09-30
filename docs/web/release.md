@@ -38,11 +38,15 @@ It runs, in order, and stops at the first failure:
 The web bundle imports a generated Kotlin library that is not tracked in Git. Protection is layered:
 
 - the core build removes previous output before it starts, so a failed build cannot leave an old library behind;
-- the manifest hashes *inputs* (both Kotlin modules' sources and the shared Gradle configuration, with line endings normalised so Windows and Linux agree) and *outputs*;
+- the manifest hashes *inputs* (both Kotlin modules' sources, the shared Gradle configuration, the wrapper scripts and jar and the Kotlin/JS dependency lock; text with line endings normalised so Windows and Linux agree) and *outputs*, and the input hash is captured **before** the compiler runs and compared **after**: if a source changed during the build, the output and manifest are discarded;
 - `vite build` and `npm run build` verify both before bundling: changed Kotlin/Gradle source, a missing manifest, or a copied/edited output all stop the build with an instruction;
 - provenance records the input and output hashes and `audit-dist` re-verifies them, so an artifact cannot claim a core it was not built with.
 
 Unit tests (`tests/unit/core-provenance.test.ts`) prove each of these rejections, including the source-change case, on a temporary repository.
+
+## What "clean" means
+
+The recorded commit must describe what was built: tracked changes **and untracked, non-ignored files** (a stray Kotlin or config file the commit does not contain) make the tree dirty and the artifact non-releasable. Ignored build output (`build/`, `dist/`, `node_modules/`) does not.
 
 ## Provenance (`dist/provenance.json`)
 
@@ -61,11 +65,13 @@ The file is served as-is, so a deployed site can be matched to the commit, core 
 
 `webApp/release/dataset.json` declares which dataset the artifact ships. Today it is the synthetic fixture (`kind: "fixture"`, `approved: false`), so **`publicRelease.allowed` is false** and `--public` fails.
 
-A file scan passing is never approval. A real dataset can only become releasable when its record carries **all** of: `id`, `version`, `content.sha256` (hash of the shipped data), `sourceManifestSha256` (the reviewed-subset manifest), `licenseEvidence`, `attribution`, `approvedBy` and `approvedOn`, on a clean commit. Marking a fixture approved does not work. Which sources may be combined (county subset, proposed segments, OSM-derived graph) and who approves it are #47 decisions; this slice defines the seam, not the answer.
+`tools/audit-dist.mjs` never trusts what `provenance.json` says about itself: it recomputes the file hashes, the core hashes, the dataset identity and the **public-release verdict** from the evidence and rejects any difference (a hand-edited `allowed: true`, or an approval flag added to an unchanged fixture, is refused). With `--public` the artifact must also be eligible *now*: the current clean commit equals the recorded one, and an approved dataset's content must be a file in the artifact with the declared hash (`content.distPath`).
+
+A file scan passing is never approval. A real dataset can only become releasable when its record carries **all** of: `id`, `version`, `content.sha256` and `content.distPath` (the shipped data file and its hash), `sourceManifestSha256` (the reviewed-subset manifest), `licenseEvidence`, `attribution`, `approvedBy` and `approvedOn`, on a clean commit. Marking a fixture approved does not work. Which sources may be combined (county subset, proposed segments, OSM-derived graph) and who approves it are #47 decisions; this slice defines the seam, not the answer.
 
 ## CI
 
-`.github/workflows/web-release-check.yml` runs the same check on pull requests and pushes that touch the web, bridge, shared-logic or Gradle files: JDK 21, Node 24, a locked install, `npm run release:check`, and a negative check that a production build without the core manifest fails. It uploads `dist/` and `dist-report/` (14 days) labelled fixture-only. It has read-only permissions, no secrets, no deploy step and no cloud access. **The workflow file has not been executed on GitHub by the author of this change**: its steps were exercised locally through the same entry point, and a first hosted run is part of review.
+`.github/workflows/web-release-check.yml` runs the same check on pull requests and pushes that touch the web, bridge, shared-logic or Gradle files: JDK 21, Node 24, a locked install, `npm run release:check`, and a negative check that a production build without the core manifest fails. It uploads `dist/` and `dist-report/` (14 days) labelled fixture-only. It has read-only permissions, no secrets, no deploy step and no cloud access. Its first hosted run failed because the wrapper script is committed without its executable bit; the check now runs the wrapper through `sh` and the tracked mode is fixed. See the pull request for the latest hosted result.
 
 ## What this does not certify
 

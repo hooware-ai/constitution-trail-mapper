@@ -22,13 +22,15 @@ for (const file of files) {
         relative(process.cwd(), full).split(sep).join("/"),
     );
 }
-const provenance = await verifyProvenance();
-if (publicMode && !provenance.publicRelease.allowed)
+// Everything below is recomputed from the files and the dataset record; provenance.json is never taken at its word.
+let provenance;
+try {
+  provenance = await verifyProvenance({ requirePublic: publicMode });
+} catch (error) {
   throw new Error(
-    "Public release blocked: " +
-      provenance.publicRelease.blockers.join("; ") +
-      ".",
+    publicMode ? "Public release blocked. " + error.message : error.message,
   );
+}
 console.log(
   `Distribution audit passed: ${files.length} files, no local review assets or credential patterns, provenance verified. ` +
     (provenance.publicRelease.allowed
