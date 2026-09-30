@@ -2235,3 +2235,136 @@ test("an export made days after the route was opened identifies its status as ca
   expect(context.statusAgeSeconds).toBeGreaterThan(2 * 24 * 3600 - 120);
   expect(context.statusCheckedAt).not.toBe(context.exportedAt);
 });
+
+// Interactions between the separately reviewed fixes.
+test("an unreadable-data notice and a dialog storage failure coexist and both survive cancelling", async ({
+  page,
+}) => {
+  await seedSavedRoute(page, "Interplay test", [
+    { type: "Trail", from: 0, to: 600 },
+    { type: "Trail", from: 600, to: 1200 },
+  ]);
+  await page.addInitScript(() => {
+    const key = "trail-mapper.fixture:trail-mapper.web.library.v1";
+    const library = JSON.parse(localStorage.getItem(key)!);
+    if (library.recent.length) return;
+    library.recent = [{ ...library.saved[0], key: "broken", draft: null }];
+    localStorage.setItem(key, JSON.stringify(library));
+  });
+  await page.goto("/");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Saved", exact: true })
+    .click();
+  const notice = page.getByText("could not be read and were set aside");
+  await expect(notice).toBeVisible();
+  await page.getByRole("button", { name: /^Rename Interplay test/ }).click();
+  const rename = page.getByRole("dialog", { name: "Rename" });
+  await rename
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("Renamed");
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("full", "QuotaExceededError");
+    };
+  });
+  await rename.getByRole("button", { name: "Save name" }).click();
+  await expect(
+    rename.getByRole("alert").filter({ hasText: "Browser storage is full" }),
+  ).toBeVisible();
+  await rename.getByRole("button", { name: "Cancel" }).click();
+  await expect(rename).toHaveCount(0);
+  // The unreadable-data notice is still offered behind the closed dialog.
+  await expect(notice).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Delete unreadable data" }),
+  ).toBeVisible();
+});
+test("a restored planner draft survives the map picker, browser Back and both Cancel buttons", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await choose(page, "Destination", "Review trailhead · South");
+  await page.waitForTimeout(600);
+  await page.reload();
+  const start = page.getByRole("button", { name: /^Start:/ });
+  await expect(start).toContainText("Review trailhead · East");
+  const openPicker = async () => {
+    await page.getByRole("button", { name: /^Start:/ }).click();
+    await page
+      .getByRole("button", { name: "Pick on map", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Use map center" }),
+    ).toBeVisible();
+  };
+  await openPicker();
+  await page.goBack();
+  await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+    "Review trailhead · East",
+  );
+  await openPicker();
+  await page.locator("button.back").click();
+  await expect(
+    page.getByRole("button", { name: /^Destination:/ }),
+  ).toContainText("Review trailhead · South");
+  await openPicker();
+  await page
+    .getByRole("button", { name: "Cancel map selection", exact: true })
+    .click();
+  await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+    "Review trailhead · East",
+  );
+  await expect(
+    page.getByRole("button", { name: /^Destination:/ }),
+  ).toContainText("Review trailhead · South");
+  await expect(
+    page.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeEnabled();
+});
+test("reopening a route refreshes the status time an export reports", async ({
+  page,
+}) => {
+  const opened = new Date("2026-09-20T12:00:00Z");
+  await page.clock.install({ time: opened });
+  await seedSavedRoute(page, "Refresh test", [
+    { type: "Trail", from: 0, to: 600 },
+    { type: "Trail", from: 600, to: 1200 },
+  ]);
+  const open = async () => {
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Saved", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: /Refresh test/ })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Route preview", exact: true }),
+    ).toBeVisible();
+  };
+  await page.goto("/");
+  await open();
+  await page.clock.fastForward(24 * 3600 * 1000);
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await open();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  await dialog
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: /Download full route GeoJSON/ }).click(),
+  ]);
+  const { readFile } = await import("node:fs/promises");
+  const file = JSON.parse(await readFile((await download.path())!, "utf8"));
+  // The second opening re-evaluated the route a day later, so the reported check time moved with it.
+  expect(new Date(file.routeContext.statusCheckedAt).getTime()).toBeGreaterThan(
+    opened.getTime() + 23 * 3600 * 1000,
+  );
+  expect(file.routeContext.statusAgeSeconds).toBeLessThan(120);
+});
