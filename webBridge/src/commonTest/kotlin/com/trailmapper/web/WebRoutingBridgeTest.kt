@@ -532,6 +532,110 @@ class WebRoutingBridgeTest {
         assertEquals(1500.0, result["progress"]!!.jsonPrimitive.double, 5.0)
     }
 
+    private fun savedRouteFrom(bridge: WebRoutingBridge): JsonElement = plan(bridge).getValue("route")
+    private fun inspectSaved(bridge: WebRoutingBridge, route: JsonElement): JsonObject =
+        call(bridge, buildJsonObject { put("op", "inspect"); put("route", route); put("now", now) })
+    private fun networkIssueCodes(result: JsonObject): List<String> =
+        result["network"]!!.jsonObject["issues"]!!.jsonArray.map { it.jsonObject["code"]!!.jsonPrimitive.content }
+
+    @Test fun aSavedRouteIsCurrentWhileTheNetworkIsUnchanged() {
+        val bridge = loaded(trust = false)
+        val saved = savedRouteFrom(bridge)
+        val result = inspectSaved(bridge, saved)
+        assertEquals("current", result["network"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+        assertTrue(result["network"]!!.jsonObject["checkedEdges"]!!.jsonPrimitive.int > 0)
+        assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun existingToProposedInvalidatesNavigationEvenThoughTheSerializedRouteSaysExisting() {
+        val saved = savedRouteFrom(loaded(trust = false))
+        // Same identifier and geometry, now Proposed: the serialized edges still say Existing.
+        val reloaded = loaded(fixture.replace("Existing", "Proposed"), trust = false)
+        val result = inspectSaved(reloaded, saved)
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertEquals("stale", result["network"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+        assertTrue("status-changed" in networkIssueCodes(result))
+        assertTrue(result["warnings"]!!.jsonArray.any { "no longer matches the current trail data" in it.jsonPrimitive.content })
+        // The route is preserved for review: its geometry is still returned.
+        assertTrue(result["segments"]!!.jsonArray.isNotEmpty())
+    }
+
+    @Test fun aRemovedFeatureInvalidatesTheSavedRoute() {
+        val saved = savedRouteFrom(loaded(trust = false))
+        val result = inspectSaved(loaded(fixture.replace("test:1", "test:2"), trust = false), saved)
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertEquals(listOf("removed"), networkIssueCodes(result))
+    }
+
+    @Test fun changedGeometryInvalidatesTheSavedRoute() {
+        val saved = savedRouteFrom(loaded(trust = false))
+        val result = inspectSaved(loaded(fixture.replace("[-89.0,40.42]", "[-89.01,40.42]"), trust = false), saved)
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue("geometry-changed" in networkIssueCodes(result))
+    }
+
+    @Test fun aFeatureNoLongerEligibleForTheRoutesChoicesInvalidatesIt() {
+        val saved = savedRouteFrom(loaded(trust = false))
+        // The trail keeps its id and geometry but is no longer a branch/connector/roadway role the route may use.
+        val result = inspectSaved(loaded(fixture.replace("TrailBranches", "ProposedTrails"), trust = false), saved)
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue("not-eligible" in networkIssueCodes(result))
+    }
+
+    @Test fun aRouteWithoutFeatureIdentitiesIsUnverifiableUnlessTheDatasetIsAFixture() {
+        val legacy = Json.encodeToJsonElement(TrailRoute(
+            segments = listOf(TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(start, finish))),
+            totalDistanceMeters = 3000.0, ordinaryAccessDistanceMeters = 0.0, totalCost = 1.0,
+        ))
+        val strict = inspectSaved(loaded(trust = false), legacy)
+        assertFalse(strict["canNavigate"]!!.jsonPrimitive.boolean)
+        assertEquals("unverifiable", strict["network"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+        assertEquals(listOf("legacy-route"), networkIssueCodes(strict))
+        val trusted = inspectSaved(loaded(trust = true), legacy)
+        assertTrue(trusted["canNavigate"]!!.jsonPrimitive.boolean)
+        assertEquals("trusted", trusted["network"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun snapshotRefusesAStaleRouteSoNavigationCannotResume() {
+        val saved = savedRouteFrom(loaded(trust = false))
+        val reloaded = loaded(fixture.replace("Existing", "Proposed"), trust = false)
+        val result = call(reloaded, buildJsonObject {
+            put("op", "snapshot"); put("route", saved); put("point", Json.encodeToJsonElement(start))
+            put("progress", 0.0); put("accuracy", 5.0); put("timestamp", now); put("now", now); put("resume", true)
+        })
+        assertFalse(result["ok"]!!.jsonPrimitive.boolean)
+        assertTrue(result["error"]!!.jsonPrimitive.content.contains("cannot start navigation"))
+    }
+
+    @Test fun proposedStaysOptInAfterRevalidation() {
+        val proposedFixture = fixture.replace("Existing", "Proposed").replace("TrailBranches", "ProposedTrails")
+        val bridge = loaded(proposedFixture, trust = false)
+        val optedIn = plan(bridge, proposed = true)
+        val result = inspectSaved(bridge, optedIn.getValue("route"))
+        // Consistent with the loaded network, but proposed data is still preview-only.
+        assertEquals("current", result["network"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(result["proposed"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun datasetIdentityIsEchoedAndDuplicateIdentifiersAreRejected() {
+        val bridge = WebRoutingBridge()
+        val identity = buildJsonObject { put("id", "county-candidate"); put("version", "1"); put("contentSha256", "abc") }
+        val ok = call(bridge, buildJsonObject {
+            put("op", "initialize"); put("trails", fixture); put("now", now); put("dataset", identity)
+        })
+        assertEquals(identity, ok["dataset"])
+        val duplicate = """{"layers":[{"features":[{"id":"test:1","name":"Test Trail","status":"Existing","routeRoles":["TrailBranches"],"facilityType":"Off-Road Trail","paths":[[[-89.0,40.4],[-89.0,40.42]]]},{"id":"test:1","name":"Test Trail","status":"Existing","routeRoles":["TrailBranches"],"facilityType":"Off-Road Trail","paths":[[[-89.0,40.4],[-89.0,40.42]]]}]}]}"""
+        val failed = call(bridge, buildJsonObject { put("op", "initialize"); put("trails", duplicate); put("now", now) })
+        assertFalse(failed["ok"]!!.jsonPrimitive.boolean)
+        assertTrue(failed["error"]!!.jsonPrimitive.content.contains("duplicate"))
+        // A failed replacement never leaves the previous network active.
+        val plan = call(bridge, buildJsonObject {
+            put("op", "plan"); put("start", Json.encodeToJsonElement(start)); put("destination", Json.encodeToJsonElement(finish)); put("now", now)
+        })
+        assertFalse(plan["ok"]!!.jsonPrimitive.boolean)
+    }
+
     private fun inspect(route: TrailRoute): JsonObject = call(loaded(), buildJsonObject {
         put("op", "inspect"); put("route", Json.encodeToJsonElement(route)); put("now", now)
     })
@@ -541,8 +645,9 @@ class WebRoutingBridgeTest {
             put("op", "mapPoint"); put("point", Json.encodeToJsonElement(point)); put("proposed", proposed); put("now", at)
         })
 
-    private fun loaded(source: String = fixture): WebRoutingBridge = WebRoutingBridge().also { bridge ->
-        val result = call(bridge, buildJsonObject { put("op", "initialize"); put("trails", source); put("now", now) })
+    /** [trust] mirrors the fixture-only worker setting: hand-built routes without feature identities are accepted. */
+    private fun loaded(source: String = fixture, trust: Boolean = true): WebRoutingBridge = WebRoutingBridge().also { bridge ->
+        val result = call(bridge, buildJsonObject { put("op", "initialize"); put("trails", source); put("now", now); put("trustSerializedRoutes", trust) })
         assertTrue(result["ok"]!!.jsonPrimitive.boolean)
         assertTrue(result["updates"]!!.jsonArray.isNotEmpty())
     }

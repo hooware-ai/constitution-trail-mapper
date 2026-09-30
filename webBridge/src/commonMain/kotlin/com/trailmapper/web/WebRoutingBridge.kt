@@ -15,6 +15,12 @@ class WebRoutingBridge {
     private var features: List<TrailNetworkFeature>? = null
     private var roads: List<AccessNetworkFeature>? = null
     private val endpointLocalRoadIds = mutableSetOf<String>()
+    /** Identity of the loaded dataset as declared by the caller; echoed back, never interpreted. */
+    private var datasetIdentity: JsonElement = JsonNull
+    /** Fixture-only: accept serialized routes that carry no feature identities (hand-built test geometry). */
+    private var trustSerializedRoutes = false
+    private var featureIndex: Map<String, TrailNetworkFeature> = emptyMap()
+    private val revalidationCache = mutableMapOf<Int, NetworkCheck>()
 
     fun dispatch(requestJson: String): String = try {
         val request = json.parseToJsonElement(requestJson).jsonObject
@@ -43,13 +49,22 @@ class WebRoutingBridge {
         features = null
         roads = null
         endpointLocalRoadIds.clear()
+        datasetIdentity = JsonNull
+        trustSerializedRoutes = false
+        featureIndex = emptyMap()
+        revalidationCache.clear()
         val loaded = NormalizedTrailNetworkJsonSijko.features(request.string("trails"))
         require(loaded.isNotEmpty()) { "The trail dataset contains no features." }
         loaded.flatMap { it.paths }.flatten().forEach(::validatePoint)
         val loadedRoads = request["access"]?.jsonPrimitive?.contentOrNull?.let(::accessFeatures)
+        require(loaded.map { it.id }.toSet().size == loaded.size) { "The trail dataset contains duplicate feature identifiers." }
         features = loaded
         roads = loadedRoads
+        featureIndex = loaded.associateBy { it.id }
+        datasetIdentity = request["dataset"] ?: JsonNull
+        trustSerializedRoutes = request.boolean("trustSerializedRoutes")
         return buildJsonObject {
+            put("dataset", datasetIdentity)
             put("featureCount", loaded.size)
             put("accessFeatureCount", loadedRoads?.size ?: 0)
             put("features", JsonArray(loaded.map { feature -> buildJsonObject {
@@ -125,6 +140,10 @@ class WebRoutingBridge {
         val proposed = route.edges.any { it.status == TrailFeatureStatus.Proposed } ||
             route.segments.any { TrailNetworkRole.ProposedTrails in it.routeRoles }
         val warnings = advisories.map { "${it.title}: ${it.message}" }.toMutableList()
+        // The serialized route carries the eligibility it was planned with; only the loaded network is current.
+        val network = revalidate(route)
+        val networkCurrent = network.status == "current" || network.status == "trusted"
+        if (!networkCurrent) warnings += network.message()
         val target = route.requestedDistanceMeters
         val targetMatched = target == null || kotlin.math.abs(route.totalDistanceMeters - target) <= ExerciseRouteTargetSijko.toleranceMeters(target)
         if (route.kind == TrailRouteKind.ExerciseLoop && !targetMatched) {
@@ -159,7 +178,8 @@ class WebRoutingBridge {
             // closure/warning status is only as fresh as this evaluation.
             put("proposed", proposed)
             put("evaluatedAt", now)
-            put("canNavigate", blocking.isEmpty() && !estimated && !proposed && route.segments.any { it.points.size >= 2 })
+            put("network", network.toJson())
+            put("canNavigate", networkCurrent && blocking.isEmpty() && !estimated && !proposed && route.segments.any { it.points.size >= 2 })
         }
     }
 
@@ -379,6 +399,97 @@ class WebRoutingBridge {
     /** The matcher subtracts its 60 m backtrack tolerance, so add it back to exclude anything behind the occurrence. */
     private fun pinnedFloor(along: Double) = along + TRAVERSAL_BACKTRACK_METERS - 0.1
 
+    private class NetworkIssue(val code: String, val featureId: String?, val detail: String)
+
+    /** status: current (verified), trusted (fixture-only, not verified), stale (differs) or unverifiable. */
+    private class NetworkCheck(val status: String, val checkedEdges: Int, val issues: List<NetworkIssue>) {
+        fun message(): String = when (status) {
+            "unverifiable" -> "This saved route cannot be checked against the current trail data. Recalculate it before riding."
+            else -> "This saved route no longer matches the current trail data (" +
+                issues.map { it.detail }.distinct().take(3).joinToString("; ") +
+                "). Recalculate it before riding."
+        }
+        fun toJson(): JsonObject = buildJsonObject {
+            put("status", status)
+            put("checkedEdges", checkedEdges)
+            put("issues", JsonArray(issues.take(20).map { issue -> buildJsonObject {
+                put("code", issue.code)
+                put("featureId", issue.featureId)
+                put("detail", issue.detail)
+            } }))
+            put("issueCount", issues.size)
+        }
+    }
+
+    /**
+     * Checks a serialized route against the network that is loaded now: every edge must still name a feature that
+     * exists, has the same status, is eligible under the route's layer choices, and still lies on the same geometry.
+     * A route that cannot be checked (no feature identities) is not trusted unless the dataset is the fixture.
+     */
+    private fun revalidate(route: TrailRoute): NetworkCheck {
+        if (features == null) return NetworkCheck("unverifiable", 0, listOf(NetworkIssue("no-network", null, "no trail data is loaded")))
+        if (route.edges.isEmpty())
+            return if (trustSerializedRoutes) NetworkCheck("trusted", 0, emptyList())
+            else NetworkCheck("unverifiable", 0, listOf(NetworkIssue("legacy-route", null, "the saved route has no feature identities to check")))
+        val key = route.edges.fold(17) { hash, edge ->
+            (hash * 31 + edge.id) * 31 + (edge.sourceFeatureId?.hashCode() ?: 0) + edge.status.ordinal + edge.routeSegments.sumOf { it.points.size }
+        } * 31 + (route.routeLayers?.hashCode() ?: 0)
+        revalidationCache[key]?.let { return it }
+        val layers = route.routeLayers ?: RouteLayerDefaultsSijko.defaultSelection()
+        val issues = mutableListOf<NetworkIssue>()
+        val seen = mutableSetOf<String>()
+        for (edge in route.edges) {
+            val id = edge.sourceFeatureId
+            if (edge.accessRoadClass != null) {
+                // Access roads come from a separate dataset; without it a route that used them cannot be honoured.
+                val known = roads?.any { it.id == id } ?: false
+                if (!known && seen.add("access:$id")) issues += NetworkIssue("access-unavailable", id, "a road connection is not in the current data")
+                continue
+            }
+            if (id == null) {
+                if (seen.add("unidentified:${edge.id}")) issues += NetworkIssue("unidentified", null, "an edge names no trail feature")
+                continue
+            }
+            val feature = featureIndex[id]
+            if (feature == null) {
+                if (seen.add("removed:$id")) issues += NetworkIssue("removed", id, "trail $id is no longer in the data")
+                continue
+            }
+            if (feature.status != edge.status && seen.add("status:$id"))
+                issues += NetworkIssue("status-changed", id, "trail $id is now ${feature.status.name.lowercase()}")
+            if (TrailFeatureFilterSijko.enabledFeatures(listOf(feature), layers).isEmpty() && seen.add("eligible:$id"))
+                issues += NetworkIssue("not-eligible", id, "trail $id is not available under this route's choices")
+            // Snap connectors include the hop to their node, which is deliberately off the feature's own path.
+            if (edge.connectorOfEdgeId == null && seen.add("geometry-checked:${edge.id}") && !edgeLiesOn(edge, feature) && seen.add("geometry:$id"))
+                issues += NetworkIssue("geometry-changed", id, "trail $id has different geometry")
+        }
+        val result = NetworkCheck(if (issues.isEmpty()) "current" else "stale", route.edges.size, issues)
+        revalidationCache[key] = result
+        return result
+    }
+
+    private fun edgeLiesOn(edge: TrailGraphEdge, feature: TrailNetworkFeature): Boolean {
+        val lines = edge.routeSegments.filter { it.isRouted }.map { it.points }.filter { it.isNotEmpty() }
+        if (lines.isEmpty()) return true
+        // Vertices alone are not enough: a leg between two vertices can leave the trail while both ends stay on it.
+        val samples = lines.flatMap { line ->
+            if (line.size == 1) line else line.windowed(size = 2, step = 1).flatMap { (a, b) ->
+                val steps = (TrailDistanceSijko.metersBetween(a, b) / GEOMETRY_SAMPLE_METERS).toInt().coerceIn(1, 400)
+                (0..steps).map { i ->
+                    val t = i.toDouble() / steps
+                    MapPoint(a.latitude + (b.latitude - a.latitude) * t, a.longitude + (b.longitude - a.longitude) * t)
+                }
+            }
+        }
+        return samples.all { point ->
+            feature.paths.any { path ->
+                path.windowed(size = 2, step = 1).any { (a, b) ->
+                    TrailDistanceSijko.projectToSegment(point = point, segmentStart = a, segmentEnd = b).distanceMeters <= GEOMETRY_TOLERANCE_METERS
+                }
+            }
+        }
+    }
+
     private class Occurrence(val along: Double, val distance: Double, val point: MapPoint)
 
     /** Every place along the route within on-route distance of [point], using the snapshot's leg arithmetic. */
@@ -480,3 +591,5 @@ private const val TRAVERSAL_FORWARD_BIAS_METERS = 5.0
 private const val TRAVERSAL_PHYSICAL_TOLERANCE_METERS = 5.0
 private const val TRAVERSAL_DEFAULT_ACCURACY_METERS = 25.0
 private const val TRAVERSAL_MAX_ACCURACY_METERS = 50.0
+private const val GEOMETRY_TOLERANCE_METERS = 2.0
+private const val GEOMETRY_SAMPLE_METERS = 25.0
