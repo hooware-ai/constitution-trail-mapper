@@ -5,14 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build && node tools/audit-dist.mjs",
-    "preview": "vite preview --host 127.0.0.1",
+    "build": "node tools/verify-core.mjs && tsc --noEmit && vite build && node tools/write-provenance.mjs && node tools/audit-dist.mjs",
+    "preview": "node tools/serve-dist.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/unit/*.test.ts",
     "test:e2e": "playwright test",
     "build:core": "node tools/build-core.mjs",
     "format": "prettier --write src tests tools *.ts *.json index.html",
-    "format:check": "prettier --check src tests tools *.ts *.json index.html"
+    "format:check": "prettier --check src tests tools *.ts *.json index.html",
+    "verify:core": "node tools/verify-core.mjs",
+    "audit:dist": "node tools/audit-dist.mjs",
+    "test:dist": "playwright test -c playwright.dist.config.ts",
+    "release:check": "node tools/release.mjs",
+    "preview:vite": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
     "leaflet": "1.9.4",

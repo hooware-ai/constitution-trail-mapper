@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
-// The server is started on a port this run owns and is never reused: an occupied port fails the run instead of
-// silently testing another checkout's build. `npm run release:check` picks a free port; manual runs default to 4173.
-const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
+// Smoke tests against the BUILT artifact served with the production header set (not the Vite dev server).
+const port = Number(process.env.TRAIL_TEST_PORT ?? 4174);
 export default defineConfig({
-  testDir: "tests/e2e",
+  testDir: "tests/dist",
   fullyParallel: false,
   workers: 1,
   timeout: 45000,
@@ -13,7 +12,7 @@ export default defineConfig({
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
   ],
   webServer: {
-    command: "npm run dev",
+    command: `node tools/serve-dist.mjs --port ${port}`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
   },

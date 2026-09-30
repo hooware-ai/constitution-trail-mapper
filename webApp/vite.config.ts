@@ -1,16 +1,20 @@
 import { defineConfig } from "vite";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { verifyCoreManifest } from "./tools/lib/core.mjs";
+
+// Automated runs own their port (TRAIL_TEST_PORT) and fail if it is taken instead of reusing another server.
+const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
 
 // Review data is a loopback-only dev endpoint. It is NEVER a public asset or build input.
 export default defineConfig({
   server: {
     host: "127.0.0.1",
-    port: 4173,
+    port,
     strictPort: true,
     fs: { allow: [".."] },
   },
-  preview: { host: "127.0.0.1", port: 4173, strictPort: true },
+  preview: { host: "127.0.0.1", port, strictPort: true },
   resolve: {
     alias: {
       "@trail-core": resolve(
@@ -20,6 +24,14 @@ export default defineConfig({
   },
   worker: { format: "es" },
   plugins: [
+    {
+      // A production bundle must never silently contain a Kotlin core that does not match the current sources.
+      name: "verify-kotlin-core",
+      apply: "build",
+      async buildStart() {
+        await verifyCoreManifest();
+      },
+    },
     {
       name: "private-local-review-data",
       configureServer(server) {
