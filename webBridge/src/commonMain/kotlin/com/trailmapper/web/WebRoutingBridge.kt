@@ -155,6 +155,10 @@ class WebRoutingBridge {
             put("warnings", strings(warnings))
             put("closures", JsonArray(blocking.map(::advisoryJson)))
             put("key", "${route.kind.name}:${json.encodeToString(route.segments).hashCode()}")
+            // Route-level facts the segments alone cannot carry: a Proposed edge need not carry the role, and
+            // closure/warning status is only as fresh as this evaluation.
+            put("proposed", proposed)
+            put("evaluatedAt", now)
             put("canNavigate", blocking.isEmpty() && !estimated && !proposed && route.segments.any { it.points.size >= 2 })
         }
     }

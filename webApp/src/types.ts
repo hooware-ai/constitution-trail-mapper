@@ -57,6 +57,10 @@ export type RouteResult = {
   closures: Closure[];
   key: string;
   canNavigate: boolean;
+  /** The route uses proposed infrastructure, whether or not a segment carries the role. */
+  proposed?: boolean;
+  /** When the closure/warning status in this result was evaluated (epoch milliseconds). */
+  evaluatedAt?: number;
   requestedDistance?: number;
   summary?: string;
   targetMatched?: boolean;

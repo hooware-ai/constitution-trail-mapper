@@ -78,7 +78,12 @@ class WebRoutingBridgeTest {
         assertFalse(optedIn["canNavigate"]!!.jsonPrimitive.boolean)
         assertTrue(optedIn["warnings"]!!.jsonArray.any { "proposed" in it.jsonPrimitive.content })
         val proposedWithBranchRole = loaded(fixture.replace("Existing", "Proposed"))
-        assertFalse(plan(proposedWithBranchRole, proposed = true)["canNavigate"]!!.jsonPrimitive.boolean)
+        val statusOnly = plan(proposedWithBranchRole, proposed = true)
+        assertFalse(statusOnly["canNavigate"]!!.jsonPrimitive.boolean)
+        // The route-level flag survives even though no segment carries the ProposedTrails role.
+        assertTrue(statusOnly["proposed"]!!.jsonPrimitive.boolean)
+        assertEquals(now, statusOnly["evaluatedAt"]!!.jsonPrimitive.long)
+        assertFalse(plan(loaded())["proposed"]!!.jsonPrimitive.boolean)
     }
 
     @Test fun estimatedAccessCanBePreviewedButCannotStartNavigation() {
