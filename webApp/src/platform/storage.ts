@@ -17,6 +17,14 @@ export interface RouteRecord {
   usedAt: number;
   route: unknown;
   draft: unknown;
+  /** The data the route was planned on. Absent on routes saved before datasets were identified. */
+  dataset?: RouteDataset;
+}
+export interface RouteDataset {
+  kind: string;
+  id: string;
+  version: string;
+  contentSha256: string;
 }
 export interface PlaceRecord extends Endpoint {
   key: string;
@@ -74,7 +82,13 @@ function isRoute(value: unknown): value is RouteRecord {
     value.createdAt >= 0 &&
     value.usedAt >= 0 &&
     object(value.route) &&
-    isDraft(value.draft)
+    isDraft(value.draft) &&
+    (value.dataset === undefined ||
+      (object(value.dataset) &&
+        text(value.dataset.kind) &&
+        text(value.dataset.id) &&
+        text(value.dataset.version) &&
+        text(value.dataset.contentSha256)))
   );
 }
 function isPlace(value: unknown): value is PlaceRecord {

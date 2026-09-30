@@ -2,8 +2,10 @@ export const NETWORK_SCHEMA: string;
 export const RECORD_SCHEMA: string;
 export const packageDir: string;
 export const manifestFile: string;
+export const committedManifestFile: string;
 export const licensedInputFile: string;
 export const approvalRecordFile: string;
+export const committedApprovalFile: string;
 export class AdmissionError extends Error {}
 export function admittedFeatures(manifest: any): Map<string, any>;
 export function excludedIds(manifest: any): Set<string>;
@@ -30,3 +32,8 @@ export function verifyPackageDir(
   dir?: string,
   manifestPath?: string,
 ): Promise<{ record: any; body: Buffer; network: any }>;
+export function checkPackage(
+  record: any,
+  body: Uint8Array,
+  manifestBytes: Uint8Array,
+): any;

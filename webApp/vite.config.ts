@@ -2,12 +2,34 @@ import { defineConfig } from "vite";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { verifyCoreManifest } from "./tools/lib/core.mjs";
+import { verifyPackageDir } from "./tools/lib/dataset-package.mjs";
+import { distDir } from "./tools/lib/provenance.mjs";
 
 // Automated runs own their port (TRAIL_TEST_PORT) and fail if it is taken instead of reusing another server.
 const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
 
+// Which dataset a build carries is decided here and nowhere at runtime: a county build has no fixture path.
+const datasetKind = process.env.TRAIL_DATASET ?? "fixture";
+if (datasetKind !== "fixture" && datasetKind !== "county")
+  throw new Error(
+    `TRAIL_DATASET must be "fixture" or "county" (got "${datasetKind}").`,
+  );
+const channel = process.env.TRAIL_CHANNEL ?? "review";
+if (channel !== "review" && channel !== "public")
+  throw new Error(
+    `TRAIL_CHANNEL must be "review" or "public" (got "${channel}").`,
+  );
+const countyPackage = resolve(
+  process.env.TRAIL_COUNTY_DIR ?? "generated/county",
+);
+
 // Review data is a loopback-only dev endpoint. It is NEVER a public asset or build input.
 export default defineConfig({
+  define: {
+    __TRAIL_DATASET__: JSON.stringify(datasetKind),
+    __TRAIL_CHANNEL__: JSON.stringify(channel),
+  },
+  build: { outDir: distDir, emptyOutDir: true },
   server: {
     host: "127.0.0.1",
     port,
@@ -30,6 +52,33 @@ export default defineConfig({
       apply: "build",
       async buildStart() {
         await verifyCoreManifest();
+      },
+    },
+    {
+      // Emits the verified county package next to the app. The private extract is never a build input: only the
+      // hash-checked package produced by tools/package-dataset.mjs, and only when this is a county build.
+      name: "county-dataset-assets",
+      apply: "build",
+      async generateBundle() {
+        if (datasetKind !== "county") return;
+        let verified;
+        try {
+          verified = await verifyPackageDir(countyPackage);
+        } catch (error) {
+          throw new Error(
+            `County build needs a verified dataset package: ${(error as Error).message} Run \`npm run package:dataset\` first.`,
+          );
+        }
+        this.emitFile({
+          type: "asset",
+          fileName: "data/dataset.json",
+          source: JSON.stringify(verified.record, null, 2) + "\n",
+        });
+        this.emitFile({
+          type: "asset",
+          fileName: `data/${verified.record.content.file}`,
+          source: verified.body,
+        });
       },
     },
     {

@@ -54,6 +54,10 @@ export function securityHeaders({ https = false, extraConnect = [] } = {}) {
 /** Hashed build assets never change under their name; everything that names them must revalidate. */
 export function cacheControlFor(path) {
   if (path.startsWith("/assets/")) return "public, max-age=31536000, immutable";
+  // The network file is named by its content hash; the record that points at it must always be revalidated so a
+  // new dataset (or a rollback) is picked up on the next load.
+  if (/^\/data\/trails\.[0-9a-f]{12}\.json$/.test(path))
+    return "public, max-age=31536000, immutable";
   return "no-cache";
 }
 

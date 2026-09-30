@@ -4,10 +4,21 @@
 // the shipped files and the current source state; a provenance.json that says otherwise is rejected as inconsistent.
 import { execFileSync } from "node:child_process";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { repoRoot, sha256, webRoot, verifyCoreManifest } from "./core.mjs";
+import {
+  approvalRecordFile,
+  checkPackage,
+  committedApprovalFile,
+  committedManifestFile,
+  manifestFile,
+  readApprovalRecord,
+} from "./dataset-package.mjs";
 
-export const distDir = join(webRoot, "dist");
+// TRAIL_DIST_DIR lets a test build a second artifact (for example a county build) without touching dist/.
+export const distDir = process.env.TRAIL_DIST_DIR
+  ? resolve(process.env.TRAIL_DIST_DIR)
+  : join(webRoot, "dist");
 export const datasetFile = join(webRoot, "release", "dataset.json");
 const posix = (path) => path.split(sep).join("/");
 
@@ -53,7 +64,94 @@ const get = (object, path) =>
     .split(".")
     .reduce((value, key) => (value == null ? value : value[key]), object);
 
+// A leftover of the synthetic fixture network: it must never be inside a county artifact.
+const FIXTURE_MARKER = "fixture-h-0-0";
+
+async function exists(path) {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The dataset a county artifact carries, judged from the shipped files and the COMMITTED approval record. Whatever the
+ * shipped dataset.json claims about approval is compared with the committed record and any difference is a blocker.
+ */
+async function loadCountyDataset(dir, paths) {
+  const record = JSON.parse(
+    await readFile(join(dir, "data", "dataset.json"), "utf8"),
+  );
+  const approval = await readApprovalRecord(
+    paths.approvalFile ?? approvalRecordFile,
+  );
+  const manifestPath = paths.manifestFile ?? manifestFile;
+  const manifestBytes = await readFile(manifestPath);
+  const inconsistencies = [];
+  let body = null;
+  try {
+    body = await readFile(join(dir, "data", record.content.file));
+    checkPackage(record, body, manifestBytes);
+  } catch (error) {
+    inconsistencies.push(`dataset content check failed: ${error.message}`);
+  }
+  const approvalPath = paths.approvalFile ?? approvalRecordFile;
+  if (
+    manifestPath !== committedManifestFile ||
+    approvalPath !== committedApprovalFile
+  )
+    inconsistencies.push(
+      "dataset was packaged from a manifest or approval record other than the committed ones",
+    );
+  for (const [name, shipped, committed] of [
+    ["id", record.id, approval.id],
+    ["approved", record.approval?.approved, approval.approved === true],
+    ["approvedBy", record.approval?.approvedBy, approval.approvedBy ?? null],
+    ["approvedOn", record.approval?.approvedOn, approval.approvedOn ?? null],
+    ["attribution", record.source?.attribution, approval.attribution],
+  ])
+    if (shipped !== committed)
+      inconsistencies.push(
+        `shipped dataset ${name} differs from the committed approval record`,
+      );
+  for (const file of await artifactFiles(dir))
+    if (
+      /\.(js|json|html|css)$/.test(file.path) &&
+      (await readFile(join(dir, ...file.path.split("/")), "utf8")).includes(
+        FIXTURE_MARKER,
+      )
+    )
+      inconsistencies.push(`fixture network data found in ${file.path}`);
+  return {
+    schema: 1,
+    kind: "county",
+    id: approval.id,
+    version: record.version,
+    approved: approval.approved === true,
+    approvedBy: approval.approvedBy ?? null,
+    approvedOn: approval.approvedOn ?? null,
+    license: record.source?.license ?? null,
+    attribution: approval.attribution,
+    licenseEvidence: record.source?.licenseEvidenceUrl ?? null,
+    sourceManifestSha256: record.source?.manifestSha256 ?? null,
+    reviewedOn: record.source?.reviewedOn ?? null,
+    extractedAtUtc: record.source?.extractedAtUtc ?? null,
+    content: {
+      distPath: `data/${record.content?.file}`,
+      sha256: body ? sha256(body) : null,
+      bytes: body ? body.length : null,
+    },
+    blockers: [...(approval.blockers ?? [])],
+    inconsistencies,
+  };
+}
+
 export async function loadDataset(paths = {}) {
+  const dir = paths.distDir ?? distDir;
+  if (await exists(join(dir, "data", "dataset.json")))
+    return loadCountyDataset(dir, paths);
   const dataset = JSON.parse(
     await readFile(paths.datasetFile ?? datasetFile, "utf8"),
   );
@@ -88,6 +186,9 @@ export function publicReleaseBlockers(dataset, source, distFiles) {
     if (dataset.approved === true)
       blockers.push("a fixture dataset cannot be marked approved");
   }
+  for (const problem of dataset.inconsistencies ?? []) blockers.push(problem);
+  for (const reason of dataset.blockers ?? [])
+    blockers.push(`dataset: ${reason}`);
   if (dataset.approved !== true)
     blockers.push("dataset is not marked approved");
   if (dataset.kind !== "fixture" && dataset.approved === true) {
@@ -146,6 +247,9 @@ const datasetSummary = (dataset) => ({
   approved: dataset.approved === true,
   contentSha256: dataset.content?.sha256 ?? null,
   license: dataset.license ?? null,
+  sourceManifestSha256: dataset.sourceManifestSha256 ?? null,
+  reviewedOn: dataset.reviewedOn ?? null,
+  extractedAtUtc: dataset.extractedAtUtc ?? null,
 });
 
 /** `paths` and `source` are injectable for tests; production callers use the defaults. */

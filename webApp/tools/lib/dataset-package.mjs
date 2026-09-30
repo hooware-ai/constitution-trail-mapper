@@ -12,28 +12,38 @@ import {
   rm,
   readdir,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { sha256, repoRoot, webRoot } from "./core.mjs";
 
 export const NETWORK_SCHEMA = "trail-mapper.network/1";
 export const RECORD_SCHEMA = "trail-mapper.dataset/1";
-export const packageDir = join(webRoot, "generated", "county");
-export const manifestFile = join(
+export const packageDir = process.env.TRAIL_COUNTY_DIR
+  ? resolve(process.env.TRAIL_COUNTY_DIR)
+  : join(webRoot, "generated", "county");
+// TRAIL_COUNTY_MANIFEST is a test hook so the synthetic package can be built and served; the release audit refuses
+// to treat a package made from anything other than the committed manifest as the real county candidate.
+export const committedManifestFile = join(
   repoRoot,
   "data",
   "web-reviewed-trails.manifest.json",
 );
+export const manifestFile = process.env.TRAIL_COUNTY_MANIFEST
+  ? resolve(process.env.TRAIL_COUNTY_MANIFEST)
+  : committedManifestFile;
 export const licensedInputFile = join(
   repoRoot,
   "data",
   "generated",
   "web-licensed-trails.normalized.json",
 );
-export const approvalRecordFile = join(
+export const committedApprovalFile = join(
   webRoot,
   "release",
   "dataset.county.json",
 );
+export const approvalRecordFile = process.env.TRAIL_COUNTY_APPROVAL
+  ? resolve(process.env.TRAIL_COUNTY_APPROVAL)
+  : committedApprovalFile;
 
 export class AdmissionError extends Error {
   constructor(message) {
@@ -335,17 +345,14 @@ export async function packageFromFiles({
   return built;
 }
 
-/** Re-verifies a package on disk (used before it is bundled and again by the release audit). */
-export async function verifyPackageDir(
-  dir = packageDir,
-  manifestPath = manifestFile,
-) {
-  const record = JSON.parse(await readFile(join(dir, "dataset.json"), "utf8"));
-  const manifestBytes = await readFile(manifestPath);
+/**
+ * Checks a dataset record and its network bytes against the reviewed manifest: hash, exact ID set, excluded IDs
+ * absent, per-feature evidence, counts. Shared by the build step and the release audit of the built artifact.
+ */
+export function checkPackage(record, body, manifestBytes) {
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (record.schema !== RECORD_SCHEMA || record.kind !== "county")
     refuse("The dataset record is not a county record of this version.");
-  const body = await readFile(join(dir, record.content.file));
   if (
     sha256(body) !== record.content.sha256 ||
     body.length !== record.content.bytes
@@ -377,6 +384,18 @@ export async function verifyPackageDir(
   }
   if (record.content.featureCount !== features.length)
     refuse("The recorded feature count is wrong.");
+  return network;
+}
+
+/** Re-verifies a package on disk (used before it is bundled and again by the release audit). */
+export async function verifyPackageDir(
+  dir = packageDir,
+  manifestPath = manifestFile,
+) {
+  const record = JSON.parse(await readFile(join(dir, "dataset.json"), "utf8"));
+  const manifestBytes = await readFile(manifestPath);
+  const body = await readFile(join(dir, record.content.file));
+  const network = checkPackage(record, body, manifestBytes);
   const listing = await readdir(dir);
   const stray = listing.filter(
     (name) => name !== "dataset.json" && name !== record.content.file,

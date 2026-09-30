@@ -66,11 +66,55 @@ const LIST = [
 const LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/";
 const SOURCE_URL = "https://example.test/synthetic/MapServer/8";
 
+/**
+ * A lattice of `count` synthetic trail features (about `vertices` vertices each) with shared, connected junctions, for
+ * sizing the loading path at roughly county scale. Self-authored, wiggled so vertices are not collinear.
+ */
+export function scaledList(count = 254, vertices = 40, columns = 12) {
+  const list = [];
+  const at = (column, row) => [-89.03 + column * 0.006, 40.45 + row * 0.005];
+  const rows = Math.ceil(count / (2 * columns)) + 2;
+  const edges = [];
+  for (let row = 0; row < rows; row++)
+    for (let column = 0; column < columns; column++) {
+      if (column + 1 < columns)
+        edges.push([at(column, row), at(column + 1, row), "h"]);
+      if (row + 1 < rows)
+        edges.push([at(column, row), at(column, row + 1), "v"]);
+    }
+  for (let index = 0; index < count; index++) {
+    const [from, to] = edges[index];
+    const path = [];
+    for (let step = 0; step <= vertices; step++) {
+      const t = step / vertices;
+      const wiggle =
+        Math.sin(t * Math.PI * 6) * 0.00004 * Math.sin(t * Math.PI);
+      path.push([
+        from[0] +
+          (to[0] - from[0]) * t +
+          (edges[index][2] === "v" ? wiggle : 0),
+        from[1] +
+          (to[1] - from[1]) * t +
+          (edges[index][2] === "h" ? wiggle : 0),
+      ]);
+    }
+    const layer = index % 4 === 0 ? 16 : 54;
+    list.push([
+      `${layer}:${20000 + index}`,
+      `Synthetic lattice trail ${index}`,
+      [layer === 16 ? "ParkConnectors" : "TrailBranches"],
+      [path],
+    ]);
+  }
+  return list;
+}
+
 export function makeCounty({
   reviewedOn = "2026-01-01",
   excluded = [9999],
+  list = LIST,
 } = {}) {
-  const entries = LIST.map(([id, , roles]) => {
+  const entries = list.map(([id, , roles]) => {
     const [layer, objectId] = id.split(":").map(Number);
     return {
       selectionLayerId: layer,
@@ -126,8 +170,8 @@ export function makeCounty({
       {
         id: 8,
         name: "Reviewed licensed synthetic trails",
-        featureCount: LIST.length,
-        features: LIST.map(([id, name, roles, paths]) => ({
+        featureCount: list.length,
+        features: list.map(([id, name, roles, paths]) => ({
           id,
           sourceLayerId: 8,
           objectId: Number(id.split(":")[1]),

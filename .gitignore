@@ -40,3 +40,5 @@ webApp/playwright-report/
 webApp/output/
 
 webApp/dist-report/
+webApp/generated/
+webApp/dist-county-*/

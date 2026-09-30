@@ -1,3 +1,4 @@
+import type { DatasetIdentity, DatasetRecord } from "./dataset";
 export type Point = { latitude: number; longitude: number };
 export type Endpoint = Point & { label: string; address?: string };
 export type Draft = {
@@ -61,11 +62,30 @@ export type RouteResult = {
   proposed?: boolean;
   /** When the closure/warning status in this result was evaluated (epoch milliseconds). */
   evaluatedAt?: number;
+  /** How the route compares with the trail data loaded now (the router recomputes this on every inspection). */
+  network?: NetworkCheck;
   requestedDistance?: number;
   summary?: string;
   targetMatched?: boolean;
   retracedDistance?: number;
 };
+export type NetworkIssue = {
+  code: string;
+  featureId: string | null;
+  detail: string;
+};
+/** current: verified against the loaded data. trusted: fixture only. stale/unverifiable: cannot be ridden as is. */
+export type NetworkCheck = {
+  status: "current" | "trusted" | "stale" | "unverifiable";
+  checkedEdges: number;
+  issues: NetworkIssue[];
+  issueCount: number;
+};
+export const routeNeedsRecalculation = (result: {
+  network?: NetworkCheck;
+}): boolean =>
+  result.network?.status === "stale" ||
+  result.network?.status === "unverifiable";
 export type Update = {
   id: string;
   title: string;
@@ -79,8 +99,11 @@ export type Network = {
   closures: Closure[];
   updates: Update[];
   freshnessMessage: string;
-  mode: "fixture" | "local";
+  mode: "fixture" | "local" | "county";
   label: string;
+  /** Identity the router echoed for the loaded data; null for private local review files. */
+  dataset?: DatasetIdentity | null;
+  datasetRecord?: DatasetRecord | null;
 };
 export const emptyDraft = (): Draft => ({
   mode: "point",

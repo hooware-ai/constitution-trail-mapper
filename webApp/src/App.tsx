@@ -6,6 +6,7 @@ import {
   type PopContext,
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
+import { DataSources } from "./DataSources";
 import { AccessConnections } from "./AccessConnections";
 import {
   type DialogNotice,
@@ -19,6 +20,7 @@ import {
 import {
   emptyDraft,
   miles,
+  routeNeedsRecalculation,
   type Draft,
   type Endpoint,
   type Network,
@@ -76,6 +78,17 @@ const emptyNavigation: NavigationState = {
   routeProgressMeters: 0,
   creditedDistanceMeters: 0,
   wakeLock: "unsupported",
+};
+// Which data this build plans on decides which saved routes it can see: fixture, local review and county never mix.
+const STORAGE_NAMESPACE = __TRAIL_DATASET__ === "county" ? "county" : "fixture";
+/** Sentences for the rider when a route no longer matches the loaded trail data. */
+const staleRouteMessage = (result: RouteResult) => {
+  const details = [
+    ...new Set((result.network?.issues ?? []).map((issue) => issue.detail)),
+  ].slice(0, 3);
+  return result.network?.status === "unverifiable"
+    ? "This route cannot be checked against the current trail data, so it cannot be ridden as it is."
+    : `The trail data has changed since this route was planned${details.length ? ` (${details.join("; ")})` : ""}.`;
 };
 const storageFor = (mode: string): StoragePort => ({
   getItem: (key) => localStorage.getItem("trail-mapper." + mode + ":" + key),
@@ -270,7 +283,7 @@ export function App() {
     setBootError("");
     setNetwork(null);
     setSessionReady(false);
-    const storage = storageFor(local ? "local" : "fixture"),
+    const storage = storageFor(local ? "local" : STORAGE_NAMESPACE),
       store = new LocalRouteStore(storage),
       active = new ActiveRideStore(storage);
     storeRef.current = store;
@@ -361,7 +374,9 @@ export function App() {
               restoreScreen("navigation");
             } else
               setError(
-                "Your previous ride needs review before navigation can resume.",
+                routeNeedsRecalculation(inspected)
+                  ? `${staleRouteMessage(inspected)} Your previous ride was not resumed: recalculate to plan a new route.`
+                  : "Your previous ride needs review before navigation can resume.",
               );
           } catch (e) {
             if (!disposed && token === operation.current)
@@ -665,6 +680,16 @@ export function App() {
       usedAt: Date.now(),
       route: result.route,
       draft: source,
+      ...(network?.dataset
+        ? {
+            dataset: {
+              kind: network.dataset.kind,
+              id: network.dataset.id,
+              version: network.dataset.version,
+              contentSha256: network.dataset.contentSha256,
+            },
+          }
+        : {}),
     };
   }
   async function plan() {
@@ -744,7 +769,9 @@ export function App() {
       setPreview(inspected);
       if (!inspected.canNavigate) {
         setError(
-          "Review the closure or access warning and recalculate before navigating.",
+          routeNeedsRecalculation(inspected)
+            ? `${staleRouteMessage(inspected)} Recalculate before navigating.`
+            : "Review the closure or access warning and recalculate before navigating.",
         );
         return;
       }
@@ -968,6 +995,19 @@ export function App() {
           dataset: {
             label: network?.label ?? "Unknown dataset",
             mode: network?.mode ?? "unknown",
+            ...(network?.datasetRecord
+              ? {
+                  id: network.datasetRecord.id,
+                  version: network.datasetRecord.version,
+                  contentSha256: network.datasetRecord.content.sha256,
+                  license: network.datasetRecord.source.license,
+                  licenseUrl: network.datasetRecord.source.licenseUrl,
+                  changes: network.datasetRecord.source.changes,
+                  reviewedOn: network.datasetRecord.source.reviewedOn,
+                  extractedAtUtc: network.datasetRecord.source.extractedAtUtc,
+                  approved: network.datasetRecord.approval.approved,
+                }
+              : {}),
           },
           exportedAt: new Date().toISOString(),
           proposedRoute: !!preview.proposed,
@@ -994,7 +1034,9 @@ export function App() {
         attribution:
           network?.mode === "fixture"
             ? "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure. Map attribution: OpenStreetMap contributors."
-            : "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.",
+            : network?.datasetRecord
+              ? `${network.datasetRecord.source.attribution} Changes: ${network.datasetRecord.source.changes} Generated route; not an official county map.`
+              : "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.",
       });
       const url = URL.createObjectURL(
         new Blob([JSON.stringify(geojson, null, 2)], {
@@ -1056,6 +1098,15 @@ export function App() {
     }
     go("plan");
   };
+  // Only the synthetic network offers review places and a fixed map view; before load, the build decides.
+  const fixtureData = network
+      ? network.mode === "fixture"
+      : __TRAIL_DATASET__ === "fixture" && !local,
+    stale = preview ? routeNeedsRecalculation(preview) : false,
+    olderData =
+      !!selected?.dataset &&
+      !!network?.dataset &&
+      selected.dataset.contentSha256 !== network.dataset.contentSha256;
   const shownRecent = library.recent.slice(0, 3),
     share = privateRouteShare(location.href, preview?.distance);
   return (
@@ -1085,11 +1136,17 @@ export function App() {
         <span className="local-badge">On this browser · no account</span>
       </header>
       <div className="review-banner" role="status">
-        {network?.mode === "local"
-          ? "Local data review · current closures and access still need your attention."
-          : local
-            ? "Loading local trail data…"
-            : "Synthetic review network — do not ride these paths."}
+        {network?.mode === "county"
+          ? network.datasetRecord?.approval.approved
+            ? "Existing reviewed trails only · check posted signs and closures before you ride."
+            : "Review candidate · county trail data that is not approved for public release."
+          : network?.mode === "local"
+            ? "Local data review · current closures and access still need your attention."
+            : local
+              ? "Loading local trail data…"
+              : __TRAIL_DATASET__ === "county"
+                ? "Loading trail data…"
+                : "Synthetic review network — do not ride these paths."}
       </div>
       {!online && (
         <div className="offline-banner" role="status">
@@ -1107,7 +1164,8 @@ export function App() {
           onPick={chooseMap}
           position={nav.fix ?? undefined}
           closures={network?.closures ?? []}
-          fixture={network?.mode !== "local"}
+          fixture={fixtureData}
+          county={network?.mode === "county"}
         />
         <section
           className="panel"
@@ -1138,6 +1196,10 @@ export function App() {
             <div className="error" role="alert">
               <h1>Trails could not load</h1>
               <p>{bootError}</p>
+              <p className="caption">
+                Your saved routes and places are still on this device. Nothing
+                else is shown in place of the trail data.
+              </p>
               <button onClick={() => setBootAttempt((value) => value + 1)}>
                 Retry loading
               </button>
@@ -1438,11 +1500,41 @@ export function App() {
                     gaps={preview.accessGaps ?? []}
                     onShow={(id) => setGapFocus({ id })}
                   />
-                  {preview.warnings.map((warning, index) => (
-                    <p className="warning" key={index}>
-                      {warning}
+                  {stale && (
+                    <div className="error stale-route" role="alert">
+                      <h3>This route needs recalculating</h3>
+                      <p>{staleRouteMessage(preview)}</p>
+                      <p>
+                        Your saved route is kept as it was. Navigation is off
+                        until you recalculate it on the current data or choose
+                        another route.
+                      </p>
+                      <button
+                        className="primary"
+                        disabled={checking}
+                        onClick={() => void recalculate()}
+                      >
+                        Recalculate on current data
+                      </button>
+                    </div>
+                  )}
+                  {olderData && !stale && (
+                    <p className="caption">
+                      Planned on an earlier version of the trail data (
+                      {selected!.dataset!.version}). It still matches the data
+                      loaded now.
                     </p>
-                  ))}
+                  )}
+                  {preview.warnings
+                    .filter(
+                      (warning) =>
+                        !(stale && warning.startsWith("This saved route ")),
+                    )
+                    .map((warning, index) => (
+                      <p className="warning" key={index}>
+                        {warning}
+                      </p>
+                    ))}
                   {preview.closures.length > 0 && (
                     <div className="closure-list">
                       {preview.closures.map((closure) => (
@@ -1473,9 +1565,11 @@ export function App() {
                   </button>
                   {!preview.canNavigate && (
                     <p className="caption">
-                      {preview.accessGaps?.length
-                        ? "Navigation needs a continuously mapped route. The connections listed above are still unverified."
-                        : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
+                      {stale
+                        ? "Navigation is unavailable until this route is recalculated on the current trail data."
+                        : preview.accessGaps?.length
+                          ? "Navigation needs a continuously mapped route. The connections listed above are still unverified."
+                          : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
                     </p>
                   )}
                   <div className="actions preview-actions">
@@ -1826,6 +1920,7 @@ export function App() {
                   ? "This synthetic network exists only to review the browser experience."
                   : "Street basemap tiles are optional and require internet. Trail geometry is supplied by the locally loaded dataset."}
               </p>
+              <DataSources network={network} />
               <button className="primary wide" onClick={() => begin("point")}>
                 Plan a ride
               </button>
@@ -1851,6 +1946,7 @@ export function App() {
                   add offline maps or background location.
                 </p>
               </section>
+              <DataSources network={network} />
               <div className="updates-list">
                 {network.updates.map((update) => (
                   <article key={update.id}>
@@ -1894,7 +1990,7 @@ export function App() {
           field={field}
           start={field === "destination" ? draft.start : null}
           saved={library.places}
-          fixture={network?.mode !== "local"}
+          fixture={fixtureData}
           onChoose={choose}
           onMap={() => {
             setPickField(field);

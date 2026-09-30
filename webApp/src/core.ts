@@ -52,7 +52,12 @@ export class RoutingClient {
         data.result.ok === false ||
         (data.result.route === null && data.result.error)
       )
-        p.reject(new Error(data.result.error ?? "No safe route was found."));
+        p.reject(
+          Object.assign(
+            new Error(data.result.error ?? "No safe route was found."),
+            data.result.code ? { code: data.result.code as string } : {},
+          ),
+        );
       else p.resolve(data.result);
     };
     worker.onerror = () => {
