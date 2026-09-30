@@ -2,6 +2,7 @@
 // loopback, refuses to start if the port is taken (never reuses another tree's server) and is not a hosting choice.
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
+import { brotliCompressSync, gzipSync } from "node:zlib";
 import { extname, join, normalize, sep } from "node:path";
 import {
   cacheControlFor,
@@ -55,8 +56,27 @@ const server = createServer(async (request, response) => {
     response.end("Not found");
     return;
   }
-  const body = await readFile(file);
+  let body = await readFile(file);
+  const headers = {};
+  // A real host compresses text assets; doing the same keeps size and timing measurements representative.
+  const accepts = String(request.headers["accept-encoding"] ?? "")
+    .split(",")
+    .map((token) => token.trim().split(";")[0]);
+  const compressible = /\.(html|js|mjs|css|json|svg|webmanifest|map)$/.test(
+    file,
+  );
+  if (compressible && body.length > 512) {
+    if (accepts.includes("br")) {
+      body = brotliCompressSync(body);
+      headers["Content-Encoding"] = "br";
+    } else if (accepts.includes("gzip")) {
+      body = gzipSync(body);
+      headers["Content-Encoding"] = "gzip";
+    }
+    headers["Vary"] = "Accept-Encoding";
+  }
   response.writeHead(status, {
+    ...headers,
     "Content-Type": mimeTypes[extname(file)] ?? "application/octet-stream",
     "Cache-Control": cacheControlFor(
       "/" +

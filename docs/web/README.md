@@ -26,6 +26,8 @@ A local-data error fails visibly; it never silently routes on fixtures. Syntheti
 
 ## Build and checks
 
+The reproducible clean-source path is `cd webApp && npm run release:check`; see [release.md](release.md) for what it runs, its provenance record and the stale-core protection, and [hosting-runbook.md](hosting-runbook.md) for header, caching, rollback and the still-open hosting choices. The manual commands below still work; `npm run build` now verifies the Kotlin core manifest first.
+
     ./gradlew :sharedLogic:jvmTest :sharedLogic:jsNodeTest :webBridge:jvmTest :webBridge:jsNodeTest :shared:testAndroidHostTest
     ./gradlew :androidApp:assembleDebug :androidApp:lintDebug
     cd webApp

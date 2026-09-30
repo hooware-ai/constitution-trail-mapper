@@ -17,7 +17,8 @@
     "audit:dist": "node tools/audit-dist.mjs",
     "test:dist": "playwright test -c playwright.dist.config.ts",
     "release:check": "node tools/release.mjs",
-    "preview:vite": "vite preview --host 127.0.0.1"
+    "preview:vite": "vite preview --host 127.0.0.1",
+    "measure:dist": "node tools/measure-dist.mjs"
   },
   "dependencies": {
     "leaflet": "1.9.4",
