@@ -527,37 +527,38 @@ class WebRoutingBridge {
             }
         }
 
+        /**
+         * True when the whole drawn line lies along one of the feature's derived polylines. Checked continuously, not by
+         * sampling: a straight leg lies within tolerance of a reference segment everywhere exactly when both of its ends
+         * do (distance to a segment is convex), so each leg must be covered by a single reference segment. A leg that
+         * spans a bend of the reference, however short, is not, and a line whose vertices differ from the derived ones
+         * is conservatively treated as changed (recalculating always works).
+         */
         fun derives(featureId: String, line: List<MapPoint>): Boolean {
             val references = byFeature[featureId] ?: return false
-            val samples = sample(line)
             val margin = 0.0001
-            val south = samples.minOf { it.latitude } - margin
-            val north = samples.maxOf { it.latitude } + margin
-            val west = samples.minOf { it.longitude } - margin
-            val east = samples.maxOf { it.longitude } + margin
+            val south = line.minOf { it.latitude } - margin
+            val north = line.maxOf { it.latitude } + margin
+            val west = line.minOf { it.longitude } - margin
+            val east = line.maxOf { it.longitude } + margin
             return references.any { ref ->
-                ref.south <= north && ref.north >= south && ref.west <= east && ref.east >= west &&
-                    samples.all { point -> lies(point, ref.points) }
+                ref.south <= north && ref.north >= south && ref.west <= east && ref.east >= west && covers(ref.points, line)
             }
         }
 
-        private fun lies(point: MapPoint, polyline: List<MapPoint>): Boolean {
-            if (polyline.size == 1) return TrailDistanceSijko.metersBetween(point, polyline[0]) <= DERIVED_GEOMETRY_METERS
-            for (i in 0 until polyline.size - 1) {
-                if (TrailDistanceSijko.projectToSegment(point = point, segmentStart = polyline[i], segmentEnd = polyline[i + 1]).distanceMeters <= DERIVED_GEOMETRY_METERS) return true
+        private fun covers(polyline: List<MapPoint>, line: List<MapPoint>): Boolean {
+            if (polyline.size == 1) return line.all { TrailDistanceSijko.metersBetween(it, polyline[0]) <= DERIVED_GEOMETRY_METERS }
+            if (line.size == 1) return near(line[0], polyline)
+            return line.windowed(size = 2, step = 1).all { (a, b) ->
+                (0 until polyline.size - 1).any { i -> within(a, polyline[i], polyline[i + 1]) && within(b, polyline[i], polyline[i + 1]) }
             }
-            return false
         }
 
-        // Vertices alone are not enough: a leg between two vertices can leave the trail while both ends stay on it.
-        private fun sample(line: List<MapPoint>): List<MapPoint> =
-            if (line.size == 1) line else line.windowed(size = 2, step = 1).flatMap { (a, b) ->
-                val steps = (TrailDistanceSijko.metersBetween(a, b) / GEOMETRY_SAMPLE_METERS).toInt().coerceIn(1, 400)
-                (0..steps).map { i ->
-                    val t = i.toDouble() / steps
-                    MapPoint(a.latitude + (b.latitude - a.latitude) * t, a.longitude + (b.longitude - a.longitude) * t)
-                }
-            }
+        private fun near(point: MapPoint, polyline: List<MapPoint>): Boolean =
+            (0 until polyline.size - 1).any { i -> within(point, polyline[i], polyline[i + 1]) }
+
+        private fun within(point: MapPoint, start: MapPoint, end: MapPoint): Boolean =
+            TrailDistanceSijko.projectToSegment(point = point, segmentStart = start, segmentEnd = end).distanceMeters <= DERIVED_GEOMETRY_METERS
     }
 
     private class Occurrence(val along: Double, val distance: Double, val point: MapPoint)
@@ -662,5 +663,4 @@ private const val TRAVERSAL_PHYSICAL_TOLERANCE_METERS = 5.0
 private const val TRAVERSAL_DEFAULT_ACCURACY_METERS = 25.0
 private const val TRAVERSAL_MAX_ACCURACY_METERS = 50.0
 private const val DERIVED_GEOMETRY_METERS = 0.5
-private const val GEOMETRY_SAMPLE_METERS = 25.0
 private const val REVALIDATION_CACHE_LIMIT = 64

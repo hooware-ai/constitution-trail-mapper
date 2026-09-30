@@ -638,6 +638,43 @@ class WebRoutingBridgeTest {
         assertTrue("geometry-changed" in networkIssueCodes(result))
     }
 
+    private fun savedAndRedrawn(straight: List<String>, redrawn: List<String>): Triple<JsonElement, JsonObject, WebRoutingBridge> {
+        val ends = { points: List<String> -> points.first().removeSurrounding("[", "]").split(",").map { it.toDouble() } to points.last().removeSurrounding("[", "]").split(",").map { it.toDouble() } }
+        val (from, to) = ends(straight)
+        val original = loaded(network(branch("short:1", *straight.toTypedArray())), trust = false)
+        val saved = plan(original, from = MapPoint(from[1], from[0]), to = MapPoint(to[1], to[0])).getValue("route")
+        assertEquals("current", status(inspectSaved(original, saved)))
+        val changed = loaded(network(branch("short:1", *redrawn.toTypedArray())), trust = false)
+        return Triple(saved, inspectSaved(changed, saved), changed)
+    }
+
+    @Test fun aShortTrailRedrawnIntoADoglegWithTheSameEndsIsStaleAndFreshPlanningFollowsTheDogleg() {
+        // 24 m straight; redrawn through a point 8 m off the old line (its midpoint is about 6.6 m from the new geometry).
+        val straight = listOf("[-89.0,40.4]", "[-88.99971689581487,40.4]")
+        val dogleg = listOf("[-89.0,40.4]", "[-88.99985844790744,40.400071864893995]", "[-88.99971689581487,40.4]")
+        val (saved, result, changed) = savedAndRedrawn(straight, dogleg)
+        assertEquals("stale", status(result))
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue("geometry-changed" in networkIssueCodes(result))
+        // A route planned on the dogleg follows it, and is current: the check accepts what the graph derives.
+        val fresh = plan(changed, from = MapPoint(40.4, -89.0), to = MapPoint(40.4, -88.99971689581487))
+        assertEquals("current", status(fresh))
+        assertEquals("current", status(inspectSaved(changed, fresh.getValue("route"))))
+        assertEquals("stale", status(inspectSaved(changed, saved)))
+    }
+
+    @Test fun aChangeBetweenWhereASamplingCheckWouldLookIsStillStale() {
+        // One 100 m run whose only interior vertices sit within a snap of its start: the old line and the redrawn one agree
+        // at every 25 m position (0, 25, 50, 75, 100) and differ only in a 6 m bump between 5 m and 12 m from the start.
+        val straight = listOf("[-89.0,40.4]", "[-88.9988194,40.4]")
+        val bump = listOf("[-89.0,40.4]", "[-88.99994097,40.4]", "[-88.99989966,40.40005428]", "[-88.99985833,40.4]", "[-88.9988194,40.4]")
+        val (_, result, changed) = savedAndRedrawn(straight, bump)
+        assertEquals("stale", status(result))
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        val fresh = plan(changed, from = MapPoint(40.4, -89.0), to = MapPoint(40.4, -88.9988194))
+        assertEquals("current", status(inspectSaved(changed, fresh.getValue("route"))))
+    }
+
     @Test fun aRouteFromTheMapPickerOverAnUnchangedNetworkIsCurrentEvenWhenANearbyTrailAnchorsItsNode() {
         // The spur ends 12.8 m from the main trail's south end, so the graph anchors that end of main to the spur's node.
         val spur = branch("spur:1", "[-89.01,40.4]", "[-89.00015,40.4]")
