@@ -832,3 +832,71 @@ test("a reroute that resolves after location was lost is not adopted", async ({
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reroute" })).toHaveCount(0);
 });
+
+test("rejoining the loop keeps the ride's observed distance, and it survives a reload", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const ride = () =>
+    page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.active-ride.v1"),
+      );
+      return key ? JSON.parse(localStorage.getItem(key)!) : null;
+    });
+  await acceptedFix(page, 40.51, -88.95);
+  const path = ((await ride()).record.route.segments as any[]).flatMap((s) =>
+    (s.points as { latitude: number; longitude: number }[]).map((p) => [
+      p.latitude,
+      p.longitude,
+    ]),
+  );
+  // Ride along the route so real, observed distance accumulates.
+  const stepEvery = Math.max(1, Math.floor(path.length / 60));
+  for (
+    let index = stepEvery;
+    index <= Math.floor(path.length * 0.15);
+    index += stepEvery
+  ) {
+    await page.clock.fastForward(1000);
+    await acceptedFix(page, path[index][0], path[index][1]);
+  }
+  const before = (await ride()).creditedDistanceMeters as number;
+  expect(before).toBeGreaterThan(100);
+  // Leave the route far enough to confirm off route, then rejoin.
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.491, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.492, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.493, -88.99);
+  await page
+    .getByRole("button", { name: "Rejoin the loop", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const after = await ride();
+  expect(after.routeProgressMeters).toBe(0);
+  expect(after.creditedDistanceMeters).toBeCloseTo(before, 3);
+  // The total is restored with the ride after a reload.
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  expect((await ride()).creditedDistanceMeters).toBeCloseTo(before, 3);
+});

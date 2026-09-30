@@ -662,3 +662,51 @@ test("waiting for evaluations gives up after the timeout instead of hanging", as
   await flush();
   assert.equal(await controller.whenEvaluationsSettled(10), false);
 });
+
+test("replacing the route keeps the ride's observed distance, resets route progress, persists and survives reload", async () => {
+  const f = fixture();
+  f.controller.start(record);
+  await f.fix(100);
+  f.advance(5000);
+  await f.fix(300);
+  assert.equal(f.controller.state.creditedDistanceMeters, 200);
+  f.controller.replaceRoute({ ...record, key: "replacement" });
+  assert.equal(f.controller.state.record?.key, "replacement");
+  assert.equal(f.controller.state.routeProgressMeters, 0);
+  assert.equal(f.controller.state.creditedDistanceMeters, 200);
+  const stored = new ActiveRideStore(f.storage).read().state;
+  assert.equal(stored?.record.key, "replacement");
+  assert.equal(stored?.creditedDistanceMeters, 200);
+  // Repeated replacements, with observed movement in between, keep accumulating the same ride's total.
+  f.advance(1000);
+  await f.fix(50);
+  f.advance(5000);
+  await f.fix(80);
+  assert.equal(f.controller.state.creditedDistanceMeters, 230);
+  f.controller.replaceRoute({ ...record, key: "second" });
+  assert.equal(f.controller.state.creditedDistanceMeters, 230);
+  // Reload restores route and the total.
+  const reloaded = fixture();
+  const persisted = new ActiveRideStore(f.storage).read().state!;
+  reloaded.controller.start(
+    persisted.record,
+    persisted.routeProgressMeters,
+    persisted.creditedDistanceMeters,
+  );
+  assert.equal(reloaded.controller.state.creditedDistanceMeters, 230);
+});
+test("hidden intervals and unobserved movement add no distance across a route replacement, and a new ride starts from zero", async () => {
+  const f = fixture();
+  f.controller.start(record);
+  await f.fix(100);
+  f.advance(5000);
+  await f.fix(150);
+  f.controller.replaceRoute({ ...record, key: "replacement" });
+  f.controller.setVisible(false);
+  f.advance(60_000);
+  f.controller.setVisible(true);
+  await f.fix(900);
+  assert.equal(f.controller.state.creditedDistanceMeters, 50);
+  f.controller.start({ ...record, key: "new-ride" });
+  assert.equal(f.controller.state.creditedDistanceMeters, 0);
+});
