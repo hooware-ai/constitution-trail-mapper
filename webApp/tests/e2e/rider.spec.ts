@@ -1294,3 +1294,87 @@ test("riding east around an ordinary corner advances progress, guidance and obse
   }
   await expect(page.getByText("We can't tell where you are")).toHaveCount(0);
 });
+
+for (const cancel of ["upper", "lower"] as const) {
+  test(`${cancel} Cancel map selection returns to the planner with the point draft intact`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Go somewhere/ }).click();
+    await choose(page, "Start", "Review trailhead · East");
+    await choose(page, "Destination", "Review trailhead · South");
+    const proposed = page.getByRole("checkbox", {
+      name: /Include proposed trails/,
+    });
+    await proposed.check();
+    for (const field of ["Start", "Destination"] as const) {
+      await page
+        .getByRole("button", { name: new RegExp("^" + field + ":") })
+        .click();
+      await page
+        .getByRole("button", { name: "Pick on map", exact: true })
+        .click();
+      await expect(
+        page.getByRole("button", { name: "Use map center" }),
+      ).toBeVisible();
+      // Move the map so an unconfirmed pick would differ if it were applied.
+      await page
+        .getByRole("region", { name: /Interactive map/ })
+        .press("ArrowLeft");
+      if (cancel === "upper") await page.locator("button.back").click();
+      else
+        await page
+          .getByRole("button", { name: "Cancel map selection", exact: true })
+          .click();
+      await expect(
+        page.getByRole("button", { name: "Find route", exact: true }),
+      ).toBeVisible();
+      // Focus lands on the planner heading rather than being lost with the picker.
+      await expect(page.locator("#route-controls h1")).toBeFocused();
+      await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+        "Review trailhead · East",
+      );
+      await expect(
+        page.getByRole("button", { name: /^Destination:/ }),
+      ).toContainText("Review trailhead · South");
+      await expect(proposed).toBeChecked();
+    }
+    // The draft also survives a reload.
+    await page.reload();
+    await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+      "Review trailhead · East",
+    );
+    await expect(
+      page.getByRole("button", { name: /^Destination:/ }),
+    ).toContainText("Review trailhead · South");
+  });
+  test(`${cancel} Cancel map selection returns to the loop planner with distance intact`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+    await choose(page, "Start", "Review trailhead · East");
+    await page.getByRole("button", { name: "5 mi", exact: true }).click();
+    await page.getByRole("button", { name: /^Start:/ }).click();
+    await page
+      .getByRole("button", { name: "Pick on map", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Use map center" }),
+    ).toBeVisible();
+    if (cancel === "upper") await page.locator("button.back").click();
+    else
+      await page
+        .getByRole("button", { name: "Cancel map selection", exact: true })
+        .click();
+    await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+      "Review trailhead · East",
+    );
+    await expect(
+      page.getByRole("button", { name: "5 mi", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByRole("button", { name: "Make loop", exact: true }),
+    ).toBeEnabled();
+  });
+}
