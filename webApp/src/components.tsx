@@ -2,14 +2,21 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Draft, Endpoint, Point } from "./types";
 import { places, searchPlaces } from "./search";
 import type { PlaceRecord, RouteRecord } from "./platform/storage";
+export interface DialogNotice {
+  kind: "error" | "success";
+  message: string;
+}
 export function Modal({
   title,
   children,
   onClose,
+  notice,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  /** Feedback for the action just taken; the page behind a modal dialog is inert, so it must live here. */
+  notice?: DialogNotice | null;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     close = useRef(onClose),
@@ -66,6 +73,19 @@ export function Modal({
         >
           ×
         </button>
+      </div>
+      {/* Both regions always exist so a message added later is announced. */}
+      <div
+        role="alert"
+        className={notice?.kind === "error" ? "warning" : undefined}
+      >
+        {notice?.kind === "error" ? notice.message : null}
+      </div>
+      <div
+        role="status"
+        className={notice?.kind === "success" ? "success-note" : undefined}
+      >
+        {notice?.kind === "success" ? notice.message : null}
       </div>
       {children}
     </dialog>

@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { RoutingClient } from "./core";
+import { RoutingClient, ROUTING_UNAVAILABLE_MESSAGE } from "./core";
+import {
+  BrowserHistorySync,
+  resolvePop,
+  type PopContext,
+} from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { AccessConnections } from "./AccessConnections";
 import {
+  type DialogNotice,
   EndpointField,
   Legend,
   Modal,
@@ -33,13 +39,13 @@ import {
   ForegroundNavigationController,
   bindNavigationLifecycle,
   browserLocationPort,
-  usableFix,
   type NavigationState,
 } from "./platform/navigation";
 import { acquirePlannerLocation } from "./platform/plannerLocation";
 import { ForegroundWakeLock } from "./platform/wakeLock";
 import { BrowserSessionStore, type BrowserSession } from "./platform/session";
 import {
+  EXPORT_METADATA_NOTE,
   privateRouteShare,
   routeGeoJson,
   type Coordinate,
@@ -78,6 +84,12 @@ const storageFor = (mode: string): StoragePort => ({
   removeItem: (key) =>
     localStorage.removeItem("trail-mapper." + mode + ":" + key),
 });
+const storageIssueMessage = (error: StoreResult<unknown>["error"]) =>
+  error === "quota"
+    ? "Browser storage is full. This change was not saved."
+    : error === "corrupt" || error === "unsupported-version"
+      ? "Saved browser data could not be read. It has been preserved."
+      : "Browser storage is unavailable. This change was not saved.";
 const errorText = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -106,9 +118,38 @@ export function App() {
     [library, setLibrary] = useState<RouteLibrary>(EMPTY_LIBRARY);
   const [field, setField] = useState<"start" | "destination" | null>(null),
     [pickField, setPickField] = useState<"start" | "destination">("start"),
-    [popup, setPopup] = useState<Popup>(null);
+    [popup, setPopup] = useState<Popup>(null),
+    [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
+  const popupOpen = useRef(false),
+    dialogEpoch = useRef(0),
+    shownPopup = useRef<Popup>(null),
+    shareAttempt = useRef(0),
+    announceFrame = useRef(0);
+  popupOpen.current = popup !== null;
+  // Every open or close is a new dialog session; late results from an earlier one are ignored.
+  if (shownPopup.current !== popup) {
+    shownPopup.current = popup;
+    dialogEpoch.current++;
+  }
+  // Feedback belongs to one dialog session: never carried into the next one.
+  useEffect(() => {
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
+  }, [popup]);
+  /** Clear, then set on the next frame, so repeating the same message is still a change assistive tech announces. */
+  function announce(notice: DialogNotice, epoch = dialogEpoch.current) {
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
+    announceFrame.current = requestAnimationFrame(() => {
+      if (epoch === dialogEpoch.current) setDialogNotice(notice);
+    });
+  }
   const [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
+    [unreadableSaved, setUnreadableSaved] = useState<
+      false | "aside" | "pending"
+    >(false),
+    [routingDown, setRoutingDown] = useState(false),
     [busy, setBusy] = useState(false),
     [checking, setChecking] = useState(false),
     [online, setOnline] = useState(navigator.onLine),
@@ -148,18 +189,60 @@ export function App() {
     undo?: () => void,
   ) {
     setLibrary(result.state);
+    setUnreadableSaved(
+      result.pendingUnreadable
+        ? "pending"
+        : storeRef.current?.hasQuarantine()
+          ? "aside"
+          : false,
+    );
     if (result.ok) {
       setStorageError("");
       if (message) success(message, undo);
-    } else
-      setStorageError(
-        result.error === "quota"
-          ? "Browser storage is full. This change was not saved."
-          : result.error === "corrupt" || result.error === "unsupported-version"
-            ? "Saved browser data could not be read. It has been preserved."
-            : "Browser storage is unavailable. This change was not saved.",
-      );
+    } else {
+      const message = storageIssueMessage(result.error);
+      setStorageError(message);
+      // A dialog left open by the failed change shows the reason where it can be seen and heard.
+      if (popupOpen.current) announce({ kind: "error", message });
+    }
     return result.ok;
+  }
+  async function restartRouting() {
+    const client = clientRef.current;
+    if (!client) return;
+    // Own the operation from the click, so leaving or opening another route while the worker boots
+    // abandons this continuation instead of letting it apply results to newer work.
+    const token = ++operation.current;
+    const retained =
+      screen === "preview" && selected && !preview && !nav.record;
+    const route = retained ? selected.route : null;
+    setError("");
+    try {
+      await client.recover();
+      if (clientRef.current !== client || token !== operation.current) return;
+      success("Route planning restarted");
+      // A Saved/Recent or restored route whose inspection was interrupted keeps its geometry: inspect it again.
+      if (route) {
+        setChecking(true);
+        try {
+          const inspected = routeOkay(
+            await client.call<RouteResult>({
+              op: "inspect",
+              route,
+              now: Date.now(),
+            }),
+          );
+          if (token === operation.current) setPreview(inspected);
+        } catch (e) {
+          if (token === operation.current) setError(errorText(e));
+        } finally {
+          if (token === operation.current) setChecking(false);
+        }
+      }
+    } catch (e) {
+      if (clientRef.current === client && token === operation.current)
+        setError(errorText(e));
+    }
   }
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -177,6 +260,13 @@ export function App() {
       unsubscribe: undefined | (() => void);
     const client = new RoutingClient();
     clientRef.current = client;
+    setRoutingDown(false);
+    client.onUnavailableChange = (down) => {
+      if (disposed) return;
+      setRoutingDown(down);
+      // Existing turn guidance must not outlive the worker that produced it.
+      if (down) controllerRef.current?.routingUnavailable();
+    };
     setBootError("");
     setNetwork(null);
     setSessionReady(false);
@@ -249,7 +339,7 @@ export function App() {
           const ride = restored.state;
           setSelected(ride.record);
           setDraft(ride.record.draft as Draft);
-          setScreen("preview");
+          restoreScreen("preview");
           setChecking(true);
           try {
             const inspected = routeOkay(
@@ -268,7 +358,7 @@ export function App() {
                 ride.routeProgressMeters,
                 ride.creditedDistanceMeters,
               );
-              setScreen("navigation");
+              restoreScreen("navigation");
             } else
               setError(
                 "Your previous ride needs review before navigation can resume.",
@@ -285,7 +375,7 @@ export function App() {
           setSelected(restoredSession.selected);
           setOrigin(restoredSession.origin);
           setSavedTab(restoredSession.savedTab);
-          setScreen(restoredSession.screen);
+          restoreScreen(restoredSession.screen);
           if (
             restoredSession.screen === "preview" &&
             restoredSession.selected
@@ -328,6 +418,93 @@ export function App() {
       if (clientRef.current === client) clientRef.current = null;
     };
   }, [local, bootAttempt]);
+  const overlayOpen = popup !== null || field !== null;
+  const historyRef = useRef<BrowserHistorySync | null>(null),
+    popContext = useRef<PopContext>({
+      screen,
+      overlayOpen,
+      navigating: false,
+      hasPreview: false,
+    }),
+    goRef = useRef<(next: Screen) => void>(() => {}),
+    fromPop = useRef(false),
+    restoring = useRef(false),
+    closingByPop = useRef(false),
+    lastSynced = useRef<{ screen: string; overlay: boolean } | null>(null);
+  popContext.current = {
+    screen,
+    overlayOpen,
+    navigating: screen === "navigation",
+    hasPreview: !!(selected && preview),
+  };
+  goRef.current = go;
+  /** Screens brought back from the previous visit relabel the current history entry instead of adding one. */
+  function restoreScreen(next: Screen) {
+    if (next !== popContext.current.screen) restoring.current = true;
+    setScreen(next);
+  }
+  // Browser Back/Forward: history entries hold only a screen name, never route or place data.
+  useEffect(() => {
+    // Record navigation from the first moment the UI is usable, not after restoration finishes.
+    const sync: BrowserHistorySync = new BrowserHistorySync(
+      window.history,
+      (target, direction) => {
+        const action = resolvePop(popContext.current, target, direction);
+        if (action.type === "close-overlay") {
+          closingByPop.current = true;
+          setPopup(null);
+          setField(null);
+        } else if (action.type === "keep-navigating") {
+          sync.push("navigation");
+          setToast({
+            message:
+              "Your ride is still active. Use Stop navigation to end it.",
+          });
+        } else if (action.type === "stay") {
+          sync.replace(popContext.current.screen);
+        } else if (action.screen !== popContext.current.screen) {
+          fromPop.current = true;
+          goRef.current(action.screen as Screen);
+        }
+      },
+    );
+    sync.start(popContext.current.screen);
+    historyRef.current = sync;
+    // An overlay that was already open when history started has no entry yet: give it one, so closing it
+    // pops an entry that exists instead of leaving the app.
+    if (popContext.current.overlayOpen)
+      sync.push(popContext.current.screen, true);
+    lastSynced.current = {
+      screen: popContext.current.screen,
+      overlay: popContext.current.overlayOpen,
+    };
+    const onPop = (event: PopStateEvent) => sync.handlePop(event.state);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      historyRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const sync = historyRef.current,
+      last = lastSynced.current;
+    if (!sync || !last) return;
+    if (last.overlay && !overlayOpen) {
+      if (closingByPop.current) closingByPop.current = false;
+      else sync.popOverlay();
+    }
+    if (last.screen !== screen) {
+      if (fromPop.current) {
+        fromPop.current = false;
+        sync.replace(screen);
+      } else if (restoring.current) {
+        restoring.current = false;
+        sync.replace(screen);
+      } else sync.push(screen);
+    }
+    if (!last.overlay && overlayOpen) sync.push(screen, true);
+    lastSynced.current = { screen, overlay: overlayOpen };
+  }, [screen, overlayOpen]);
   useEffect(() => {
     if (!sessionReady || !sessionRef.current) return;
     const savedScreen: BrowserSession["screen"] =
@@ -622,13 +799,10 @@ export function App() {
     }
   }
   async function reroute(mode: "rejoin" | "return" | "destination") {
-    if (
-      !selected ||
-      !nav.fix ||
-      !usableFix(nav.fix, Date.now()) ||
-      !clientRef.current
-    )
-      return;
+    const controller = controllerRef.current;
+    // One captured snapshot supplies both the worker payload and the later applicability check.
+    const request = controller?.rerouteRequest();
+    if (!controller || !request || !clientRef.current) return;
     const token = ++operation.current;
     setBusy(true);
     setError("");
@@ -636,14 +810,27 @@ export function App() {
       const result = routeOkay(
         await clientRef.current.call<RouteResult>({
           op: "reroute",
-          route: selected.route,
-          point: { latitude: nav.fix.latitude, longitude: nav.fix.longitude },
-          progress: nav.routeProgressMeters,
+          route: request.record.route,
+          point: {
+            latitude: request.fix.latitude,
+            longitude: request.fix.longitude,
+          },
+          progress: request.progress,
           mode,
           now: Date.now(),
         }),
       );
       if (token !== operation.current) return;
+      // A newer fix may have queued behind this reroute: wait for it so the current position is known.
+      const settled = await controller.whenEvaluationsSettled();
+      if (token !== operation.current) return;
+      // Guidance may have been discarded or the rider may have moved while the worker computed.
+      if (!settled || controller.rerouteStaleReason(request)) {
+        setError(
+          "Your position changed while the new route was being found, so your current route was kept. Choose a reroute again if you still need one.",
+        );
+        return;
+      }
       if (!result.canNavigate)
         throw new Error(
           result.warnings.join(" ") ||
@@ -651,13 +838,13 @@ export function App() {
         );
       const record = makeRecord(
         result,
-        draft,
-        mode === "return" ? "Returning to start" : selected.title,
+        request.record.draft as Draft,
+        mode === "return" ? "Returning to start" : request.record.title,
       );
       setPreview(result);
       setSelected(record);
       snapshotState.current = undefined;
-      controllerRef.current?.start(record);
+      controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));
     } catch (e) {
       if (token === operation.current) setError(errorText(e));
@@ -725,18 +912,32 @@ export function App() {
     );
   }
   async function shareSummary() {
+    // This attempt belongs to the dialog session and the request that started it.
+    const epoch = dialogEpoch.current,
+      attempt = ++shareAttempt.current,
+      current = () =>
+        epoch === dialogEpoch.current && attempt === shareAttempt.current;
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
     const summary = privateRouteShare(location.href, preview?.distance);
     try {
       if (canShare) await navigator.share(summary);
-      else {
+      else
         await navigator.clipboard.writeText(summary.text + "\n" + summary.url);
-        success("Private summary copied");
-      }
+      if (!current()) return;
+      if (!canShare) success("Private summary copied");
       setPopup(null);
     } catch (e) {
+      if (!current()) return;
+      // Cancelling the system share sheet is the rider's choice, not a failure.
       if (!(e instanceof DOMException && e.name === "AbortError"))
-        setError(
-          "Sharing is unavailable. Select and copy the summary shown here.",
+        announce(
+          {
+            kind: "error",
+            message:
+              "Sharing is unavailable. Select and copy the summary shown here, then try again if you like.",
+          },
+          epoch,
         );
     }
   }
@@ -754,8 +955,39 @@ export function App() {
           return offset;
         })
         .filter((index) => index > 0 && index < coordinates.length);
+      const point = (p: { longitude: number; latitude: number }) =>
+        [p.longitude, p.latitude] as Coordinate;
       const geojson = routeGeoJson(selected, coordinates, {
         segmentBreaks,
+        segments: preview.segments.map((segment) => ({
+          type: segment.type,
+          roles: [...(segment.routeRoles ?? segment.roles ?? [])],
+        })),
+        context: {
+          kind: preview.kind,
+          dataset: {
+            label: network?.label ?? "Unknown dataset",
+            mode: network?.mode ?? "unknown",
+          },
+          exportedAt: new Date().toISOString(),
+          proposedRoute: !!preview.proposed,
+          statusCheckedAt:
+            typeof preview.evaluatedAt === "number"
+              ? new Date(preview.evaluatedAt).toISOString()
+              : null,
+          warnings: preview.warnings,
+          closures: preview.closures.map((closure) => ({
+            title: closure.title,
+            message: closure.message,
+            sourceUrl: closure.sourceUrl,
+          })),
+          gaps: (preview.accessGaps ?? []).map((gap) => ({
+            id: gap.id,
+            distanceMeters: gap.distanceMeters,
+            from: point(gap.from),
+            to: point(gap.to),
+          })),
+        },
         action: "download",
         includeExactEndpoints: exactExport,
         fullRouteApproved: exactExport,
@@ -774,13 +1006,14 @@ export function App() {
       link.download = "trail-mapper-route.geojson";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      success(
-        exactExport
-          ? "Full route downloaded with your endpoint approval"
-          : "Route downloaded with endpoint areas removed",
-      );
+      announce({
+        kind: "success",
+        message: exactExport
+          ? "Full route downloaded with your endpoint approval."
+          : "Route downloaded with endpoint areas removed.",
+      });
     } catch (e) {
-      setError(errorText(e));
+      announce({ kind: "error", message: errorText(e) });
     }
   }
   useEffect(() => {
@@ -812,7 +1045,8 @@ export function App() {
       stopNavigation();
       return;
     }
-    if (screen === "searching") {
+    // Leaving the map picker (search or picker) returns to the planner with its draft untouched.
+    if (screen === "searching" || screen === "map-picker") {
       go("planner");
       return;
     }
@@ -826,7 +1060,15 @@ export function App() {
     share = privateRouteShare(location.href, preview?.distance);
   return (
     <div className={"app " + screen}>
-      <a className="skip-link" href="#route-controls">
+      <a
+        className="skip-link"
+        href="#route-controls"
+        onClick={(event) => {
+          // A fragment jump would add an entry the history model does not manage: move focus instead.
+          event.preventDefault();
+          panelRef.current?.focus();
+        }}
+      >
         Skip to route controls
       </a>
       <header className="app-header">
@@ -904,7 +1146,15 @@ export function App() {
               )}
             </div>
           )}
-          {error && (
+          {routingDown && network && (
+            <div className="error" role="alert">
+              <p>{ROUTING_UNAVAILABLE_MESSAGE}</p>
+              <button onClick={() => void restartRouting()}>
+                Restart route planning
+              </button>
+            </div>
+          )}
+          {error && !(routingDown && error === ROUTING_UNAVAILABLE_MESSAGE) && (
             <div className="error" role="alert">
               <p>{error}</p>
               <button onClick={() => setError("")}>Dismiss</button>
@@ -947,6 +1197,25 @@ export function App() {
           {storageError && (
             <div className="warning" role="alert">
               {storageError}
+            </div>
+          )}
+          {unreadableSaved && (
+            <div className="warning" role="status">
+              {unreadableSaved === "pending"
+                ? "Some saved items in this browser could not be read and there is no room to set them aside. Your other routes and places are unaffected."
+                : "Some saved items in this browser could not be read and were set aside. Your other routes and places are unaffected."}{" "}
+              <button
+                onClick={() => {
+                  const ok = applyStore(
+                    storeRef.current!.discardUnreadable(),
+                    "Unreadable data deleted",
+                  );
+                  // The button disappears; keep keyboard and screen-reader focus in the panel.
+                  if (ok) panelRef.current?.focus();
+                }}
+              >
+                Delete unreadable data
+              </button>
             </div>
           )}
           {nav.storageError && (
@@ -1653,7 +1922,11 @@ export function App() {
         </Modal>
       )}
       {popup === "share" && (
-        <Modal title="Share route" onClose={() => setPopup(null)}>
+        <Modal
+          title="Share route"
+          notice={dialogNotice}
+          onClose={() => setPopup(null)}
+        >
           <h3>Private summary</h3>
           <p>
             Exact start and destination, route coordinates and your recent
@@ -1687,6 +1960,14 @@ export function App() {
               </small>
             </span>
           </label>
+          <p className="caption">{EXPORT_METADATA_NOTE}</p>
+          {typeof preview?.evaluatedAt === "number" && (
+            <p className="caption">
+              Route warnings and closures were last checked{" "}
+              {new Date(preview.evaluatedAt).toLocaleString()}. Reopen the route
+              to refresh them before exporting.
+            </p>
+          )}
           <button className="wide" onClick={downloadGeoJson}>
             {exactExport
               ? "Download full route GeoJSON"
@@ -1697,6 +1978,7 @@ export function App() {
       {popup === "clear" && (
         <Modal
           title={`Clear ${library.recent.length} recent routes?`}
+          notice={dialogNotice}
           onClose={() => setPopup(null)}
         >
           <p>Saved routes and places are not affected.</p>
@@ -1720,7 +2002,11 @@ export function App() {
         </Modal>
       )}
       {popup === "rename" && (
-        <Modal title="Rename" onClose={() => setPopup(null)}>
+        <Modal
+          title="Rename"
+          notice={dialogNotice}
+          onClose={() => setPopup(null)}
+        >
           <form
             onSubmit={(event) => {
               event.preventDefault();
