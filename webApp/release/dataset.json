@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "kind": "fixture",
+  "id": "synthetic-review-network",
+  "version": "1",
+  "approved": false,
+  "content": { "path": "src/data/review-network.json" },
+  "license": "CC0-1.0",
+  "attribution": "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure.",
+  "notes": "Self-authored network for reviewing the browser experience. Never for a real ride; never approved for public release."
+}

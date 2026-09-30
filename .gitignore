@@ -38,3 +38,5 @@ webApp/dist/
 webApp/test-results/
 webApp/playwright-report/
 webApp/output/
+
+webApp/dist-report/

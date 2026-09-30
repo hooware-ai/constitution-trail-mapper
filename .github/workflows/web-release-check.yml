@@ -1,0 +1,97 @@
+name: Web release check
+
+# Builds the Kotlin core from this checkout, then runs the one clean-source release check
+# (locked install, bridge/unit/type/build checks, artifact audit + provenance, browser suite,
+# built-artifact smoke tests). It never deploys and holds no credentials or cloud access.
+# Fixture-only: the artifact it uploads is labelled not publishable (see docs/web/release.md).
+
+on:
+  pull_request:
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-release-check.yml"
+  push:
+    branches: [main, "codex/web-app"]
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-release-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The provenance manifest records the exact commit.
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: webApp/package-lock.json
+
+      # Gradle still configures the Android modules, so it needs an SDK location. The hosted image ships one.
+      - name: Point Gradle at the preinstalled Android SDK
+        run: echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Locked install and browser with its system dependencies
+        working-directory: webApp
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Release check (core build, tests, artifact, provenance, browser suites)
+        working-directory: webApp
+        run: npm run release:check -- --skip-install
+        env:
+          CI: "true"
+
+      - name: Reject a stale or missing Kotlin core (negative check)
+        working-directory: webApp
+        run: |
+          rm -rf ../webBridge/build/trail-core.manifest.json
+          if npx vite build; then
+            echo "A production build succeeded without a Kotlin core manifest" >&2
+            exit 1
+          fi
+
+      - name: Upload the artifact and its provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist-fixture-only
+          path: |
+            webApp/dist
+            webApp/dist-report
+          retention-days: 14
+          if-no-files-found: warn
