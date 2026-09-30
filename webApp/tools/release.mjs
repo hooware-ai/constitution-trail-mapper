@@ -70,15 +70,19 @@ function requireTools() {
     throw new Error(
       `Node 22.12 or newer is required (found ${process.version}).`,
     );
-  const java = spawnSync("java", ["-version"], {
+  // Gradle's wrapper uses JAVA_HOME when it is set and the java on PATH otherwise: check the one it will use.
+  const javaBin = process.env.JAVA_HOME
+    ? join(process.env.JAVA_HOME, "bin", "java")
+    : "java";
+  const java = spawnSync(javaBin, ["-version"], {
     encoding: "utf8",
-    shell: windows,
+    shell: windows && javaBin === "java",
   });
   const text = `${java.stderr ?? ""}${java.stdout ?? ""}`;
   const match = /version "(\d+)/.exec(text);
   if (!match || Number(match[1]) < 21)
     throw new Error(
-      `JDK 21 or newer must be first on PATH for the Gradle build (found: ${text.split("\n")[0] || "no java"}).`,
+      `JDK 21 or newer is required for the Gradle build: set JAVA_HOME or put it first on PATH (found: ${text.split("\n")[0] || "no java"}).`,
     );
   const git = spawnSync(
     "git",
