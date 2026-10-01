@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { DataSources } from "./DataSources";
 import { Modal, SafeLink, type DialogNotice } from "./components";
 import { places } from "./search";
@@ -36,6 +37,29 @@ export function HelpDialog({
   const mode = network?.mode;
   const heading = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
+  // Feedback belongs to one visit to one view: every view change starts a new session and late results are dropped.
+  const session = useRef(0);
+  const frame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  /**
+   * Clear, then set on the next frame, so a repeated identical message is still a change that assistive technology
+   * announces (as the app's other dialogs do). Ignored if the view has changed since `owner` was captured.
+   */
+  function announce(next: DialogNotice, owner: number) {
+    if (owner !== session.current) return;
+    cancelAnimationFrame(frame.current);
+    // Render the empty state now: updates made outside an event can be merged, which would hide the repeat.
+    flushSync(() => setNotice(null));
+    frame.current = requestAnimationFrame(() => {
+      if (owner === session.current) setNotice(next);
+    });
+  }
+  function switchView(next: "help" | "report") {
+    session.current++;
+    cancelAnimationFrame(frame.current);
+    setNotice(null);
+    setView(next);
+  }
   // Switching views moves focus to the new view's heading so keyboard and screen-reader users land on it.
   useEffect(() => {
     if (first.current) {
@@ -291,12 +315,7 @@ export function HelpDialog({
               only its version, never your location, routes, place names or
               history.
             </p>
-            <button
-              onClick={() => {
-                setNotice(null);
-                setView("report");
-              }}
-            >
+            <button onClick={() => switchView("report")}>
               Write a problem report
             </button>
           </section>
@@ -306,11 +325,9 @@ export function HelpDialog({
           network={network}
           build={build}
           heading={heading}
-          setNotice={setNotice}
-          back={() => {
-            setNotice(null);
-            setView("help");
-          }}
+          owner={session.current}
+          announce={announce}
+          back={() => switchView("help")}
         />
       )}
     </Modal>
@@ -321,33 +338,56 @@ function ReportView({
   network,
   build,
   heading,
-  setNotice,
+  owner,
+  announce,
   back,
 }: {
   network: Network | null;
   build: BuildInfo;
   heading: React.RefObject<HTMLHeadingElement | null>;
-  setNotice: (notice: DialogNotice | null) => void;
+  /** The Help session this report belongs to; feedback for any other session is dropped. */
+  owner: number;
+  announce: (notice: DialogNotice, owner: number) => void;
   back: () => void;
 }) {
   const [text, setText] = useState(() => reportTemplate({ build, network }));
   const [browser, setBrowser] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const details = `${navigator.userAgent} · window ${window.innerWidth}×${window.innerHeight}`;
+  // A copy result only counts while this report is still on screen and only for the latest attempt: a slow clipboard
+  // promise from an earlier attempt, or from a report the rider left, must not speak for the one in front of them.
+  const alive = useRef(true);
+  const attempts = useRef(0);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   async function copy() {
+    const attempt = ++attempts.current;
+    const current = () => alive.current && attempt === attempts.current;
     try {
       await navigator.clipboard.writeText(text);
-      setNotice({
-        kind: "success",
-        message: "Report copied. Paste it where you send your report.",
-      });
+      if (!current()) return;
+      announce(
+        {
+          kind: "success",
+          message: "Report copied. Paste it where you send your report.",
+        },
+        owner,
+      );
     } catch {
+      if (!current()) return;
       area.current?.select();
-      setNotice({
-        kind: "error",
-        message:
-          "Your browser did not allow copying. The text is selected: copy it yourself.",
-      });
+      announce(
+        {
+          kind: "error",
+          message:
+            "Your browser did not allow copying. The text is selected: copy it yourself.",
+        },
+        owner,
+      );
     }
   }
   return (

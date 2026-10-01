@@ -382,3 +382,163 @@ test("Help and the report view have no automatically detectable accessibility vi
     [],
   );
 });
+
+// A clipboard whose promises the test settles by hand, to exercise slow and overlapping copy attempts.
+async function controllableClipboard(page: Page) {
+  await page.addInitScript(() => {
+    const copies: Array<{
+      text: string;
+      resolve: () => void;
+      reject: (e: Error) => void;
+    }> = [];
+    (window as any).__copies = copies;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (text: string) =>
+          new Promise<void>((resolve, reject) =>
+            copies.push({ text, resolve, reject }),
+          ),
+      },
+    });
+  });
+}
+const settle = (page: Page, index: number, how: "resolve" | "reject") =>
+  page.evaluate(
+    ([i, h]) => {
+      const copy = (window as any).__copies[i as number];
+      return h === "resolve"
+        ? copy.resolve()
+        : copy.reject(new Error("denied"));
+    },
+    [index, how] as const,
+  );
+const pendingCopies = (page: Page) =>
+  page.evaluate(() => (window as any).__copies.length as number);
+async function openReport(page: Page) {
+  // From the page, open Help first; from inside Help (after Back) the topics are already showing.
+  if (!(await helpDialog(page).isVisible())) await helpButton(page).click();
+  await helpDialog(page)
+    .getByRole("button", { name: "Write a problem report" })
+    .click();
+  return page.getByRole("dialog", { name: "Report a problem" });
+}
+const selectedLength = (report: ReturnType<Page["getByRole"]>) =>
+  report
+    .getByRole("textbox", { name: "Report text" })
+    .evaluate((el: HTMLTextAreaElement) => el.selectionEnd - el.selectionStart);
+
+test("a slow clipboard failure from a report the rider left cannot speak for the next report", async ({
+  page,
+}) => {
+  await controllableClipboard(page);
+  await page.goto("/");
+  let report = await openReport(page);
+  await report.getByRole("button", { name: "Copy report" }).click();
+  await expect.poll(() => pendingCopies(page)).toBe(1);
+  await report.getByRole("button", { name: /Back to help/ }).click();
+  report = await openReport(page);
+  await settle(page, 0, "reject");
+  await page.waitForTimeout(200);
+  await expect(report.getByRole("alert")).toHaveText("");
+  await expect(report.getByRole("status")).toHaveText("");
+  // And it did not select the new report's text on the old attempt's behalf.
+  expect(await selectedLength(report)).toBe(0);
+});
+
+test("a slow clipboard success from a report the rider left does not claim the next report was copied", async ({
+  page,
+}) => {
+  await controllableClipboard(page);
+  await page.goto("/");
+  let report = await openReport(page);
+  await report.getByRole("button", { name: "Copy report" }).click();
+  await expect.poll(() => pendingCopies(page)).toBe(1);
+  await report.getByRole("button", { name: /Back to help/ }).click();
+  report = await openReport(page);
+  await settle(page, 0, "resolve");
+  await page.waitForTimeout(200);
+  await expect(report.getByRole("status")).toHaveText("");
+  await expect(report.getByRole("alert")).toHaveText("");
+});
+
+test("overlapping copy attempts: only the latest one reports, whichever order they settle in", async ({
+  page,
+}) => {
+  await controllableClipboard(page);
+  await page.goto("/");
+  const report = await openReport(page);
+  const copy = report.getByRole("button", { name: "Copy report" });
+  await copy.click();
+  await copy.click();
+  await expect.poll(() => pendingCopies(page)).toBe(2);
+  // The older attempt failing, or succeeding, late says nothing and selects nothing.
+  await settle(page, 0, "reject");
+  await page.waitForTimeout(200);
+  await expect(report.getByRole("alert")).toHaveText("");
+  expect(await selectedLength(report)).toBe(0);
+  // The latest attempt decides.
+  await settle(page, 1, "resolve");
+  await expect(report.getByRole("status")).toContainText("Report copied");
+  // Older attempts settling afterwards still change nothing.
+  await copy.click();
+  await expect.poll(() => pendingCopies(page)).toBe(3);
+  await settle(page, 2, "reject");
+  await expect(report.getByRole("alert")).toContainText(
+    "did not allow copying",
+  );
+  await expect(report.getByRole("status")).toHaveText("");
+});
+
+test("normal copy and the fallback still work and are announced again when the same message repeats", async ({
+  page,
+}) => {
+  await controllableClipboard(page);
+  await page.goto("/");
+  const report = await openReport(page);
+  const copy = report.getByRole("button", { name: "Copy report" });
+  // Watch what a screen reader would see: the status text must go empty before it repeats.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as any).__statusSeen = seen;
+    const node = document.querySelector('dialog[open] [role="status"]')!;
+    new MutationObserver(() => seen.push(node.textContent ?? "")).observe(
+      node,
+      {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      },
+    );
+  });
+  await copy.click();
+  await expect.poll(() => pendingCopies(page)).toBe(1);
+  await settle(page, 0, "resolve");
+  await expect(report.getByRole("status")).toContainText("Report copied");
+  await copy.click();
+  await expect.poll(() => pendingCopies(page)).toBe(2);
+  await settle(page, 1, "resolve");
+  await expect
+    .poll(
+      async () =>
+        (
+          await page.evaluate(() => (window as any).__statusSeen as string[])
+        ).filter((text) => text.includes("Report copied")).length,
+    )
+    .toBe(2);
+  const seen = await page.evaluate(
+    () => (window as any).__statusSeen as string[],
+  );
+  // Between the two identical messages the region was emptied.
+  const first = seen.findIndex((text) => text.includes("Report copied"));
+  const second = seen.findIndex(
+    (text, i) => i > first && text.includes("Report copied"),
+  );
+  expect(seen.slice(first + 1, second)).toContain("");
+  // Failure: the message appears and the text is selected for the rider to copy by hand.
+  await copy.click();
+  await expect.poll(() => pendingCopies(page)).toBe(3);
+  await settle(page, 2, "reject");
+  await expect(report.getByRole("alert")).toContainText("The text is selected");
+  expect(await selectedLength(report)).toBeGreaterThan(50);
+});
