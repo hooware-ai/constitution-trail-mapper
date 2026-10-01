@@ -1,0 +1,168 @@
+rules_version = '2';
+
+// Trail Mapper saved library: default deny, per-UID private records. NOT DEPLOYED, and nothing here has been checked
+// against a real Firebase project: this file is verified only by the local emulator tests in tests/rules.
+//
+// The limits below mirror webApp/src/cloud/contract.ts (LIMITS). tests/unit/cloud-rules-agreement.test.ts fails if a
+// number here and a number there differ, and the emulator tests run every contract mutation against both.
+//
+// What a rule cannot do: it cannot loop, so it cannot validate each coordinate of a route's geometry. It bounds the
+// geometry's size, point count and declared bounding box, requires the rider's own start and destination to lie inside
+// that box, and leaves point-by-point validation to the TypeScript validators every client runs before writing.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- identity ----------------------------------------------------------------------------------------------
+    function signedIn() {
+      return request.auth != null && request.auth.uid is string && request.auth.uid.size() > 0;
+    }
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // ---- primitives --------------------------------------------------------------------------------------------
+    function isLat(v) { return v is number && v >= -90 && v <= 90; }
+    function isLon(v) { return v is number && v >= -180 && v <= 180; }
+    // Single-line text with no leading or trailing space, 1..max characters.
+    function isText(v, max) {
+      return v is string && v.size() >= 1 && v.size() <= max
+        && v.matches('^[^ \t\r\n\f]([^\r\n]*[^ \t\r\n\f])?$');
+    }
+    function isId(v) { return v is string && v.matches('^[A-Za-z0-9_-]{16,64}$'); }
+
+    // ---- shared structures -------------------------------------------------------------------------------------
+    function validEndpoint(e) {
+      return e is map
+        && e.keys().hasOnly(['label', 'latitude', 'longitude', 'address'])
+        && e.keys().hasAll(['label', 'latitude', 'longitude'])
+        && isText(e.label, 120)
+        && isLat(e.latitude) && isLon(e.longitude)
+        && (!('address' in e) || isText(e.address, 200));
+    }
+    function validDraft(d) {
+      return d is map
+        && d.keys().hasOnly(['mode', 'start', 'destination', 'miles', 'proposed'])
+        && d.keys().hasAll(['mode', 'start', 'destination', 'miles', 'proposed'])
+        && d.proposed is bool
+        && validEndpoint(d.start)
+        && (
+          (d.mode == 'point' && d.destination is map && validEndpoint(d.destination) && d.miles == null)
+          || (d.mode == 'loop' && d.destination == null && d.miles is number && d.miles >= 0.5 && d.miles <= 100)
+        );
+    }
+    function validBounds(b) {
+      return b is map
+        && b.keys().hasOnly(['south', 'north', 'west', 'east'])
+        && b.keys().hasAll(['south', 'north', 'west', 'east'])
+        && isLat(b.south) && isLat(b.north) && isLon(b.west) && isLon(b.east)
+        && b.south <= b.north && b.west <= b.east;
+    }
+    function insideBounds(p, b) {
+      return p.latitude >= b.south - 0.01 && p.latitude <= b.north + 0.01
+        && p.longitude >= b.west - 0.01 && p.longitude <= b.east + 0.01;
+    }
+    function validDataset(s) {
+      return s is map
+        && s.keys().hasOnly(['kind', 'id', 'version', 'contentSha256'])
+        && s.keys().hasAll(['kind', 'id', 'version', 'contentSha256'])
+        && s.kind in ['fixture', 'county']
+        && isText(s.id, 100) && isText(s.version, 100)
+        && s.contentSha256 is string && s.contentSha256.matches('^[0-9a-f]{64}$');
+    }
+
+    // ---- routes ------------------------------------------------------------------------------------------------
+    function validRoute(d, uid, routeId) {
+      return d.keys().hasOnly([
+          'schema', 'version', 'id', 'ownerUid', 'routeKey', 'title', 'kind', 'draft', 'lengthMeters', 'bounds',
+          'geometry', 'pointCount', 'dataset', 'createdAt', 'updatedAt', 'revision', 'engineCodec', 'engine'])
+        && d.keys().hasAll([
+          'schema', 'version', 'id', 'ownerUid', 'routeKey', 'title', 'kind', 'draft', 'lengthMeters', 'bounds',
+          'geometry', 'pointCount', 'dataset', 'createdAt', 'updatedAt', 'revision'])
+        && d.schema == 'trail-mapper.saved-route'
+        && d.version is int && d.version in [1]
+        && d.id == routeId && isId(d.id)
+        && d.ownerUid == uid
+        && d.routeKey is string && d.routeKey.matches('^route-[0-9a-f]{16}$')
+        && isText(d.title, 120)
+        && d.kind in ['Navigation', 'ExerciseLoop']
+        && validDraft(d.draft)
+        && ((d.kind == 'Navigation' && d.draft.mode == 'point') || (d.kind == 'ExerciseLoop' && d.draft.mode == 'loop'))
+        && d.lengthMeters is number && d.lengthMeters > 0 && d.lengthMeters <= 400000
+        && validBounds(d.bounds)
+        && insideBounds(d.draft.start, d.bounds)
+        && (d.draft.destination == null || insideBounds(d.draft.destination, d.bounds))
+        && d.geometry is string && d.geometry.size() >= 1 && d.geometry.size() <= 240000
+        && d.pointCount is int && d.pointCount >= 2 && d.pointCount <= 40000
+        && validDataset(d.dataset)
+        && (('engine' in d) == ('engineCodec' in d))
+        && (!('engine' in d) || (d.engine is bytes && d.engine.size() >= 1 && d.engine.size() <= 640000 && d.engineCodec == 'gzip-json/1'))
+        && d.revision is int
+        && d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+
+    match /users/{uid}/routes/{routeId} {
+      allow get: if isOwner(uid);
+      // Every list is bounded; a collection-group query matches no rule and is therefore denied.
+      allow list: if isOwner(uid) && request.query.limit != null && request.query.limit <= 200;
+      allow create: if isOwner(uid)
+        && validRoute(request.resource.data, uid, routeId)
+        && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      // A write names the revision it was made against: a stale writer fails instead of overwriting (see the doc).
+      allow update: if isOwner(uid)
+        && validRoute(request.resource.data, uid, routeId)
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.schema == resource.data.schema
+        && request.resource.data.version == resource.data.version
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if isOwner(uid);
+    }
+
+    // ---- places ------------------------------------------------------------------------------------------------
+    function validPlace(d, uid, placeId) {
+      return d.keys().hasOnly([
+          'schema', 'version', 'id', 'ownerUid', 'label', 'address', 'latitude', 'longitude',
+          'createdAt', 'updatedAt', 'revision'])
+        && d.keys().hasAll([
+          'schema', 'version', 'id', 'ownerUid', 'label', 'latitude', 'longitude', 'createdAt', 'updatedAt', 'revision'])
+        && d.schema == 'trail-mapper.saved-place'
+        && d.version is int && d.version in [1]
+        && d.id == placeId && isId(d.id)
+        && d.ownerUid == uid
+        && isText(d.label, 120)
+        && (!('address' in d) || isText(d.address, 200))
+        && isLat(d.latitude) && isLon(d.longitude)
+        && d.revision is int
+        && d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+
+    match /users/{uid}/places/{placeId} {
+      allow get: if isOwner(uid);
+      allow list: if isOwner(uid) && request.query.limit != null && request.query.limit <= 200;
+      allow create: if isOwner(uid)
+        && validPlace(request.resource.data, uid, placeId)
+        && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isOwner(uid)
+        && validPlace(request.resource.data, uid, placeId)
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.schema == resource.data.schema
+        && request.resource.data.version == resource.data.version
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if isOwner(uid);
+    }
+
+    // ---- everything else ---------------------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

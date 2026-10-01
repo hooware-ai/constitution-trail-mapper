@@ -36,3 +36,7 @@ Without that value, the Android app still builds and saved routes still work loc
 - Google sign-in is optional and stores the signed-in profile locally for the app shell.
 - Saved routes can be shared through the Android system share sheet.
 - True cross-device cloud sync should be added behind `SavedTrailRouteStore` after Firebase Authentication and Firestore security rules are finalized.
+
+## Web saved-library foundation (local only)
+
+The web app's saved-record contract, default-deny Firestore rules and local emulator tests are described in [web/cloud-library-contract.md](web/cloud-library-contract.md). Nothing there is deployed or has touched a real Firebase project; which project, database location, providers and authorized origins are actually configured remains **unverified**.

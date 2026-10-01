@@ -1,0 +1,30 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "routes",
+      "fieldPath": "geometry",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "routes",
+      "fieldPath": "engine",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "routes",
+      "fieldPath": "draft",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "routes",
+      "fieldPath": "bounds",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "routes",
+      "fieldPath": "dataset",
+      "indexes": []
+    }
+  ]
+}

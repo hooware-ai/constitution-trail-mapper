@@ -1,0 +1,13 @@
+{
+  "schema": "trail-mapper.saved-place",
+  "version": 1,
+  "id": "p_0123456789abcdef0123456789abcdef",
+  "ownerUid": "fixture-user-a",
+  "label": "Synthetic trailhead",
+  "latitude": 40.5,
+  "longitude": -88.99,
+  "address": "Synthetic address, not a real place",
+  "createdAt": "2026-10-01T12:00:00.000Z",
+  "updatedAt": "2026-10-01T12:00:00.000Z",
+  "revision": 1
+}

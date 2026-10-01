@@ -1,0 +1,40 @@
+{
+  "schema": "trail-mapper.saved-route",
+  "version": 1,
+  "id": "r_loop0123456789abcdef0123456789",
+  "ownerUid": "fixture-user-a",
+  "routeKey": "route-0123456789abcdef",
+  "title": "Synthetic west to north",
+  "kind": "ExerciseLoop",
+  "draft": {
+    "mode": "loop",
+    "start": {
+      "label": "Synthetic west end",
+      "latitude": 40.5,
+      "longitude": -88.99
+    },
+    "destination": null,
+    "miles": 3,
+    "proposed": false
+  },
+  "lengthMeters": 4321.5,
+  "bounds": {
+    "south": 40.4999999,
+    "north": 40.5205001,
+    "west": -88.99000009999999,
+    "east": -88.9694999
+  },
+  "geometry": "T:_sfncW~|dj`t@?_seK_seK?;a:_gmzcW~h~}_t@owHowH",
+  "pointCount": 5,
+  "dataset": {
+    "kind": "fixture",
+    "id": "synthetic-review-network",
+    "version": "1",
+    "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "engineCodec": "gzip-json/1",
+  "createdAt": "2026-10-01T12:00:00.000Z",
+  "updatedAt": "2026-10-01T12:00:00.000Z",
+  "revision": 1,
+  "engine": "H4sIAAAAAAAA/9WSPW8CMQyG/4vnFB0UCpetn1Il2oF2q26ILuaIGmIUO2pP6P57dR8MBVTmjrYf+X3kZA+fLljQ8PiNsXSMS6IdKBAS4x8ciwklvqBgZNDT68l4NFNA0bpgYn1blsh8TM0zBbwxEe2KjP0y9TGQDevviQX0WEGkJLg0dTcNyXsFjNUWgzDojz1IvUPQ8B6N86BgR+4w8UacJIugp1lr5ilUQ+NqsRjleaMuQ/NTaHKOKhQ4XrWuFrTEhIP5ijy2Or3gXTSh3CBD0a4d1PtL/eV+NvHUKzvjf5PPfrutjedjuaJF0FbYhzvbXX4daftKFp/7UuhQTBQwpVjiExpJsevBbKrzLBuDAhYjibtv41hcqGCIe/sP79YUTdH8AM7HbQj6AgAA"
+}

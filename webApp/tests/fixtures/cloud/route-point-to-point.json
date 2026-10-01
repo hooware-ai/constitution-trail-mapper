@@ -1,0 +1,45 @@
+{
+  "schema": "trail-mapper.saved-route",
+  "version": 1,
+  "id": "r_0123456789abcdef0123456789abcdef",
+  "ownerUid": "fixture-user-a",
+  "routeKey": "route-0123456789abcdef",
+  "title": "Synthetic west to north",
+  "kind": "Navigation",
+  "draft": {
+    "mode": "point",
+    "start": {
+      "label": "Synthetic west end",
+      "latitude": 40.5,
+      "longitude": -88.99
+    },
+    "destination": {
+      "label": "Synthetic north end",
+      "latitude": 40.52,
+      "longitude": -88.97,
+      "address": "Synthetic address"
+    },
+    "miles": null,
+    "proposed": false
+  },
+  "lengthMeters": 4321.5,
+  "bounds": {
+    "south": 40.4999999,
+    "north": 40.5205001,
+    "west": -88.99000009999999,
+    "east": -88.9694999
+  },
+  "geometry": "T:_sfncW~|dj`t@?_seK_seK?;a:_gmzcW~h~}_t@owHowH",
+  "pointCount": 5,
+  "dataset": {
+    "kind": "fixture",
+    "id": "synthetic-review-network",
+    "version": "1",
+    "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "engineCodec": "gzip-json/1",
+  "createdAt": "2026-10-01T12:00:00.000Z",
+  "updatedAt": "2026-10-01T12:00:00.000Z",
+  "revision": 1,
+  "engine": "H4sIAAAAAAAA/9WRTU/DMAyG/4vPYepGx9bc+JSQYIfBDfVgNV4XkSVT7ADV1P+OunYHtgnOHG0/8vvI3sG79QY0LPDD1ig2eFAgQdDdWRb0FT2TUGTQ+eVkPJoqCNFYj7G5ripiPqZmmQJeYySzDGg+sTkGsmH9bWABPVYQQxJ6wmY/9ck5BUz1hrww6LcdSLMl0PAa0TpQsA32MHEoVpIh0HnWmbng66FxMZ+PiqJVf0OzU2hyjioVWF52rga0xESD+TI46nR6wZuIvloTQ9mtHdT7S/3mfjbx1Cs7439VTH+6rdDxsVzZIWRq6sOt2V9+FcNmEQw99qWEQzFRwCHFih4IJcV9D6a5LrJsDApYUBKDhvsvy2J9DUPcy3/4W1u2ZfsNUtx6MPgCAAA="
+}
