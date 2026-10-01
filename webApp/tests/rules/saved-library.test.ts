@@ -525,3 +525,44 @@ test("payload bounds: a document at the limits is accepted and one byte over is 
     false,
   );
 });
+
+test("a route's kind and plan must pair up in the rules too, in both directions", async () => {
+  const alice = as(env, "alice");
+  const loopId = "r_loopkind0123456789abcdef01234";
+  const loop: any = structuredClone(
+    await validRouteRecord("alice", { kind: "ExerciseLoop", id: loopId }),
+  );
+  await assertSucceeds(
+    setDoc(doc(alice, routePath("alice", loopId)), routeDocument(loop)),
+  );
+  // Loop plan with the Navigation kind.
+  const flipped: any = structuredClone(loop);
+  flipped.kind = "Navigation";
+  flipped.id = "r_loopflipped012345678abcdef0";
+  await assertFails(
+    setDoc(doc(alice, routePath("alice", flipped.id)), routeDocument(flipped)),
+  );
+  // Point plan with the ExerciseLoop kind (also in the shared table).
+  const point: any = structuredClone(
+    await validRouteRecord("alice", { id: "r_pointflipped0123456789abcdef" }),
+  );
+  point.kind = "ExerciseLoop";
+  await assertFails(
+    setDoc(doc(alice, routePath("alice", point.id)), routeDocument(point)),
+  );
+  // An update cannot change a stored loop into a contradictory record either.
+  const created = (await getDoc(doc(alice, routePath("alice", loopId)))).data()!
+    .createdAt;
+  await assertFails(
+    setDoc(doc(alice, routePath("alice", loopId)), {
+      ...routeDocument({ ...loop, kind: "Navigation" }, 2),
+      createdAt: created,
+    }),
+  );
+  await assertSucceeds(
+    setDoc(doc(alice, routePath("alice", loopId)), {
+      ...routeDocument({ ...loop, title: "Still a loop" }, 2),
+      createdAt: created,
+    }),
+  );
+});

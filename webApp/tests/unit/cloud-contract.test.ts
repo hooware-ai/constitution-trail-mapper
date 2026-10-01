@@ -195,7 +195,7 @@ function walk(count: number, seed = 1) {
   }));
 }
 function bigRoute(segments: number, perSegment: number, edgesPerSegment = 0) {
-  const route: any = syntheticRoute();
+  const route: any = syntheticRoute("ExerciseLoop");
   route.segments = Array.from({ length: segments }, (_, i) => ({
     type: "Trail",
     points: walk(perSegment, i + 1),
@@ -264,7 +264,7 @@ test("a long route that fits is saved whole, and one that does not fails clearly
   assert.equal(built, "never built");
 
   // Too long to travel in one account record.
-  const tooLong: any = syntheticRoute();
+  const tooLong: any = syntheticRoute("ExerciseLoop");
   tooLong.totalDistanceMeters = LIMITS.lengthMetersMax + 1;
   assert.equal(
     await asyncCodeOf(() =>
@@ -317,7 +317,7 @@ test("only fixture and county data may be saved; local review data and malformed
           id: ROUTE_ID,
           ownerUid: "alice",
           local: {
-            ...local(syntheticRoute()),
+            ...local(syntheticRoute("ExerciseLoop")),
             draft: {
               mode: "loop",
               start: { label: "Start", latitude: 40.5, longitude: -88.99 },
@@ -353,5 +353,235 @@ test("a place builds and a bad place does not", () => {
       }),
     (e) =>
       e instanceof CloudRecordError && e.code === "coordinate-out-of-range",
+  );
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// the engine payload is validated as a structure, not trusted to be the right shape
+
+async function withEngine(
+  change: (engine: any) => void,
+  base?: Awaited<ReturnType<typeof validRouteRecord>>,
+) {
+  const record: any = structuredClone(base ?? (await validRouteRecord()));
+  const engine: any = await decodeEngine(
+    Uint8Array.from(Buffer.from(record.engine, "base64")),
+  );
+  change(engine);
+  record.engine = Buffer.from(await encodeEngine(engine)).toString("base64");
+  return record;
+}
+const engineCases: Array<[string, (engine: any) => void]> = [
+  ["a point with no latitude", (e) => delete e.segments[0].points[0].latitude],
+  [
+    "a latitude that is text",
+    (e) => (e.segments[0].points[0].latitude = "not a coordinate"),
+  ],
+  ["a latitude that is null", (e) => (e.segments[0].points[0].latitude = null)],
+  [
+    "a longitude that is an object",
+    (e) => (e.segments[0].points[1].longitude = {}),
+  ],
+  ["a latitude out of range", (e) => (e.segments[0].points[0].latitude = 123)],
+  ["a point that is a number", (e) => (e.segments[0].points[0] = 5)],
+  ["a point that is null", (e) => (e.segments[0].points[2] = null)],
+  ["points that are not a list", (e) => (e.segments[0].points = "x")],
+  [
+    "a segment with one point",
+    (e) => (e.segments[0].points = [e.segments[0].points[0]]),
+  ],
+  ["a segment that is null", (e) => (e.segments[1] = null)],
+  ["a segment type that does not exist", (e) => (e.segments[0].type = "Bike")],
+  ["an isRouted that is text", (e) => (e.segments[0].isRouted = "yes")],
+  ["no segments", (e) => (e.segments = [])],
+  ["segments that are not a list", (e) => (e.segments = {})],
+  ["no kind", (e) => delete e.kind],
+  ["a kind that does not exist", (e) => (e.kind = "Bike")],
+  ["a kind that disagrees with the record", (e) => (e.kind = "ExerciseLoop")],
+  ["a length that is text", (e) => (e.totalDistanceMeters = "far")],
+  [
+    "a length that disagrees with the record",
+    (e) => (e.totalDistanceMeters += 10),
+  ],
+  ["no length", (e) => delete e.totalDistanceMeters],
+];
+for (const [name, change] of engineCases)
+  test(`an engine payload with ${name} is refused with a clear error, never accepted`, async () => {
+    const record = await withEngine(change);
+    const code = await asyncCodeOf(() => engineMatchesRecord(record));
+    assert.notEqual(code, "ok");
+    assert.ok(!code.startsWith("other:"), code);
+  });
+test("an engine payload that is not an object is refused", async () => {
+  for (const value of [null, [], "text", 7]) {
+    const record: any = structuredClone(await validRouteRecord());
+    record.engine = Buffer.from(await encodeEngine(value)).toString("base64");
+    const code = await asyncCodeOf(() => engineMatchesRecord(record));
+    assert.ok(
+      code !== "ok" && !code.startsWith("other:"),
+      `${JSON.stringify(value)}: ${code}`,
+    );
+  }
+});
+test("an untouched engine payload still matches, so the checks above are not just refusing everything", async () => {
+  assert.equal(
+    await asyncCodeOf(async () =>
+      engineMatchesRecord(await withEngine(() => {})),
+    ),
+    "ok",
+  );
+});
+
+test("a route's kind and plan must pair up, in both directions, in the builder, the reader and the engine summary", async () => {
+  const point = await validRouteRecord();
+  const loop = await validRouteRecord("alice", {
+    kind: "ExerciseLoop",
+    id: "r_loopkind0123456789abcdef01234",
+  });
+  assert.equal(
+    codeOf(() => parseRouteRecord(point)),
+    "ok",
+  );
+  assert.equal(
+    codeOf(() => parseRouteRecord(loop)),
+    "ok",
+  );
+  // Flipping only the kind, either way.
+  assert.equal(
+    codeOf(() => parseRouteRecord({ ...point, kind: "ExerciseLoop" })),
+    "invalid-field",
+  );
+  assert.equal(
+    codeOf(() => parseRouteRecord({ ...loop, kind: "Navigation" })),
+    "invalid-field",
+  );
+  // The builder refuses a route whose engine kind and plan disagree.
+  const navigation = { ...local(syntheticRoute("Navigation")) };
+  const loopDraft = {
+    mode: "loop" as const,
+    start: { label: "Start", latitude: 40.5, longitude: -88.99 },
+    destination: null,
+    miles: 3,
+    proposed: false,
+  };
+  assert.equal(
+    await asyncCodeOf(() =>
+      buildRouteFields({
+        id: ROUTE_ID,
+        ownerUid: "alice",
+        local: { ...navigation, draft: loopDraft },
+      }),
+    ),
+    "invalid-field",
+  );
+  assert.equal(
+    await asyncCodeOf(() =>
+      buildRouteFields({
+        id: ROUTE_ID,
+        ownerUid: "alice",
+        local: {
+          ...local(syntheticRoute("ExerciseLoop")),
+          draft: {
+            mode: "point" as const,
+            start: { label: "Start", latitude: 40.5, longitude: -88.99 },
+            destination: { label: "End", latitude: 40.52, longitude: -88.97 },
+            miles: null,
+            proposed: false,
+          },
+        },
+      }),
+    ),
+    "invalid-field",
+  );
+  // A consistent record whose ENGINE says the other kind is refused when the engine is checked against it.
+  const altered = await withEngine(
+    (engine) => (engine.kind = "Navigation"),
+    loop,
+  );
+  assert.equal(
+    await asyncCodeOf(() => engineMatchesRecord(altered)),
+    "geometry-mismatch",
+  );
+  const alteredPoint = await withEngine(
+    (engine) => (engine.kind = "ExerciseLoop"),
+    point,
+  );
+  assert.equal(
+    await asyncCodeOf(() => engineMatchesRecord(alteredPoint)),
+    "geometry-mismatch",
+  );
+});
+
+test("timestamps must be real RFC 3339 instants and an update cannot precede its creation", async () => {
+  const record: any = structuredClone(await validRouteRecord());
+  for (const bad of [
+    "2026",
+    "1",
+    "",
+    "2026-10-01",
+    "2026-10-01T12:00:00",
+    "2026-13-01T00:00:00Z",
+    "2026-02-29T00:00:00Z",
+    "2026-10-01T24:00:00Z",
+    "2026-10-01T12:60:00Z",
+    "2026-10-01T12:00:00+24:00",
+    "yesterday",
+    5,
+    null,
+  ])
+    assert.equal(
+      codeOf(() => parseRouteRecord({ ...record, createdAt: bad })),
+      "invalid-field",
+      String(bad),
+    );
+  for (const good of [
+    "2028-02-29T23:59:59Z",
+    "2026-10-01T12:00:00.123456789Z",
+    "2026-10-01T12:00:00-05:00",
+  ])
+    assert.equal(
+      codeOf(() =>
+        parseRouteRecord({
+          ...record,
+          createdAt: good,
+          updatedAt: "2030-01-01T00:00:00Z",
+        }),
+      ),
+      "ok",
+      good,
+    );
+  assert.equal(
+    codeOf(() =>
+      parseRouteRecord({
+        ...record,
+        createdAt: "2026-10-02T00:00:00Z",
+        updatedAt: "2026-10-01T00:00:00Z",
+      }),
+    ),
+    "invalid-field",
+  );
+  const place: any = structuredClone(validPlaceRecord());
+  assert.equal(
+    codeOf(() => parsePlaceRecord({ ...place, updatedAt: "2026" })),
+    "invalid-field",
+  );
+  assert.equal(
+    codeOf(() =>
+      parsePlaceRecord({
+        ...place,
+        createdAt: "2026-10-02T00:00:00Z",
+        updatedAt: "2026-10-01T00:00:00Z",
+      }),
+    ),
+    "invalid-field",
+  );
+});
+
+test("the engine payload bytes are the same on every platform for the same route (gzip header OS byte fixed)", async () => {
+  const bytes = await encodeEngine(syntheticRoute());
+  assert.equal(bytes[9], 255);
+  assert.deepEqual(
+    await decodeEngine(bytes),
+    JSON.parse(JSON.stringify(syntheticRoute())),
   );
 });

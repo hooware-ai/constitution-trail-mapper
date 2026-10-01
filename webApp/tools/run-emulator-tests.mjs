@@ -14,8 +14,9 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildInvocation, normalizePath } from "./lib/emulator-invocation.mjs";
 
 const FIREBASE_TOOLS = "firebase-tools@15.32.1";
 const PROJECT = "demo-trail-mapper";
@@ -44,10 +45,8 @@ function freePort() {
 }
 
 const env = { ...process.env, NO_UPDATE_NOTIFIER: "1", CI: "1" };
-// Gradle uses JAVA_HOME while a bare `java` on PATH may be older: make the one we check the one the emulator uses.
-if (env.JAVA_HOME)
-  env.PATH = `${join(env.JAVA_HOME, "bin")}${delimiter}${env.PATH}`;
-const major = javaMajor(env);
+// Gradle uses JAVA_HOME while a bare `java` on PATH may be older: check, and later run with, the JDK JAVA_HOME names.
+const major = javaMajor(normalizePath(env, process.platform, env.JAVA_HOME));
 if (major < 21) {
   console.error(
     `The Firestore emulator needs JDK 21 or newer (found ${major || "no java"}). Set JAVA_HOME to a JDK 21+ and retry.`,
@@ -81,21 +80,16 @@ writeFileSync(
 console.log(
   `Firestore emulator on 127.0.0.1:${port} (project ${PROJECT}), JDK ${major}, ${FIREBASE_TOOLS}`,
 );
-const command = `node --import tsx --test ${files.join(" ")}`;
-const result = spawnSync(
-  "npx",
-  [
-    "--yes",
-    FIREBASE_TOOLS,
-    "emulators:exec",
-    "--only",
-    "firestore",
-    "--project",
-    PROJECT,
-    "--config",
-    `"${config}"`,
-    `"${command}"`,
-  ],
-  { cwd: webRoot, stdio: "inherit", shell: windows, env },
-);
+const invocation = buildInvocation({
+  env,
+  config,
+  command: `node --import tsx --test ${files.join(" ")}`,
+  project: PROJECT,
+  firebaseTools: FIREBASE_TOOLS,
+});
+const result = spawnSync(invocation.command, invocation.args, {
+  cwd: webRoot,
+  stdio: "inherit",
+  ...invocation.options,
+});
 process.exit(result.status ?? 1);

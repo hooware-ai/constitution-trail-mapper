@@ -206,11 +206,41 @@ function version(value: unknown): number {
     return fail("unsupported-version", "version", `${value} is not supported`);
   return value;
 }
+const RFC3339 =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+/** A real calendar instant in RFC 3339 form (date, time and offset all present and in range). */
 function timestamp(value: unknown, path: string): string {
-  const parsed = typeof value === "string" ? Date.parse(value) : NaN;
-  if (typeof value !== "string" || !Number.isFinite(parsed))
+  const match = typeof value === "string" ? RFC3339.exec(value) : null;
+  if (!match)
     return fail("invalid-field", path, "must be an RFC 3339 timestamp");
-  return value;
+  const [year, month, day, hour, minute, second] = match
+    .slice(1, 7)
+    .map(Number);
+  const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+  const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  if (
+    month < 1 ||
+    month > 12 ||
+    calendar.getUTCFullYear() !== year ||
+    calendar.getUTCMonth() !== month - 1 ||
+    calendar.getUTCDate() !== day ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 23 ||
+    offsetMinute > 59
+  )
+    return fail("invalid-field", path, "is not a valid calendar date and time");
+  return value as string;
+}
+/** createdAt and updatedAt: each valid, and the record is never updated before it was created. */
+function timestampPair(created: unknown, updated: unknown) {
+  const createdAt = timestamp(created, "createdAt");
+  const updatedAt = timestamp(updated, "updatedAt");
+  if (Date.parse(updatedAt) < Date.parse(createdAt))
+    fail("invalid-field", "updatedAt", "is earlier than createdAt");
+  return { createdAt, updatedAt };
 }
 function id(value: unknown, path: string): string {
   if (typeof value !== "string" || !ID_PATTERN.test(value))
@@ -437,6 +467,9 @@ export async function encodeEngine(route: unknown): Promise<Uint8Array> {
     new CompressionStream("gzip"),
     LIMITS.engineBytes + 1,
   );
+  // The gzip header's OS byte differs by platform (Windows vs Linux): mark it "unknown" so the same route always
+  // compresses to the same header. Decoders ignore the byte.
+  if (packed.length > 9) packed[9] = 255;
   if (packed.length > LIMITS.engineBytes)
     fail("payload-too-large", "engine", "is larger than a saved route may be");
   return packed;
@@ -566,6 +599,19 @@ function dataset(value: unknown): CloudDatasetIdentity {
   };
 }
 
+/** A Navigation route is point-to-point and an ExerciseLoop is a loop; any other pairing contradicts itself. */
+function kindMatchesDraft(kind: unknown, planned: CloudDraft) {
+  if (
+    (kind === "Navigation" && planned.mode !== "point") ||
+    (kind === "ExerciseLoop" && planned.mode !== "loop")
+  )
+    fail(
+      "invalid-field",
+      "kind",
+      `${String(kind)} does not match a ${planned.mode} plan`,
+    );
+}
+
 /** Both ends the rider chose must lie in the route's own box (with a little room), or the record contradicts itself. */
 function endpointsInside(planned: CloudDraft, bounds: CloudBounds) {
   for (const [name, point] of [
@@ -638,6 +684,7 @@ export async function buildRouteFields(input: {
     fields.engineCodec = ENGINE_CODEC;
     fields.engine = await encodeEngine(route);
   }
+  kindMatchesDraft(fields.kind, fields.draft);
   endpointsInside(fields.draft, bounds);
   return fields;
 }
@@ -741,6 +788,7 @@ export function parseRouteRecord(value: unknown): RouteRecord {
     fail("invalid-field", "pointCount", `must be 2-${LIMITS.pointCountMax}`);
   decodeGeometry(value.geometry as string, value.pointCount as number, bounds);
   const parsedDraft = draft(value.draft);
+  kindMatchesDraft(value.kind, parsedDraft);
   endpointsInside(parsedDraft, bounds);
   const record: RouteRecord = {
     schema: ROUTE_SCHEMA,
@@ -756,8 +804,7 @@ export function parseRouteRecord(value: unknown): RouteRecord {
     geometry: value.geometry as string,
     pointCount: value.pointCount as number,
     dataset: dataset(value.dataset),
-    createdAt: timestamp(value.createdAt, "createdAt"),
-    updatedAt: timestamp(value.updatedAt, "updatedAt"),
+    ...timestampPair(value.createdAt, value.updatedAt),
     revision: ((): number => {
       if (
         typeof value.revision !== "number" ||
@@ -822,8 +869,7 @@ export function parsePlaceRecord(value: unknown): PlaceRecord {
     label: text(value.label, "label", LIMITS.labelMax),
     latitude: latitude(value.latitude, "latitude"),
     longitude: longitude(value.longitude, "longitude"),
-    createdAt: timestamp(value.createdAt, "createdAt"),
-    updatedAt: timestamp(value.updatedAt, "updatedAt"),
+    ...timestampPair(value.createdAt, value.updatedAt),
     revision: ((): number => {
       if (
         typeof value.revision !== "number" ||
@@ -853,29 +899,119 @@ export function requireOwner<T extends { ownerUid: string }>(
  * The engine route inside a record must describe exactly the geometry the record declares (up to the 1e-7 degree
  * quantisation): a route that was replaced in one place and not the other is refused rather than half-trusted.
  */
+/** The parts of an engine route this contract relies on, validated: anything else in the engine's JSON is its own. */
+function engineShape(engine: unknown): {
+  kind: string;
+  totalDistanceMeters: number;
+  segments: Array<{ type: string; isRouted: boolean; points: LatLon[] }>;
+} {
+  if (!isObject(engine))
+    return fail("geometry-mismatch", "engine", "is not an object");
+  if (!ROUTE_KINDS.includes(engine.kind as never))
+    fail(
+      "geometry-mismatch",
+      "engine.kind",
+      "must be Navigation or ExerciseLoop",
+    );
+  if (
+    !isFiniteNumber(engine.totalDistanceMeters) ||
+    engine.totalDistanceMeters <= 0 ||
+    engine.totalDistanceMeters > LIMITS.lengthMetersMax
+  )
+    fail(
+      "geometry-mismatch",
+      "engine.totalDistanceMeters",
+      "must be a positive length",
+    );
+  if (
+    !Array.isArray(engine.segments) ||
+    engine.segments.length < 1 ||
+    engine.segments.length > LIMITS.pathCountMax
+  )
+    return fail(
+      "geometry-mismatch",
+      "engine.segments",
+      "must be a list of segments",
+    );
+  const segments = engine.segments.map((segment: unknown, i: number) => {
+    const at = `engine.segments[${i}]`;
+    if (!isObject(segment))
+      return fail("geometry-mismatch", at, "is not an object");
+    if (segment.type !== "Trail" && segment.type !== "Access")
+      fail("geometry-mismatch", `${at}.type`, "must be Trail or Access");
+    if (segment.isRouted !== undefined && typeof segment.isRouted !== "boolean")
+      fail("geometry-mismatch", `${at}.isRouted`, "must be true or false");
+    if (
+      !Array.isArray(segment.points) ||
+      segment.points.length < 2 ||
+      segment.points.length > LIMITS.pointCountMax
+    )
+      return fail(
+        "geometry-mismatch",
+        `${at}.points`,
+        "must be a list of at least two points",
+      );
+    const points = segment.points.map((point: unknown, j: number) => {
+      if (!isObject(point))
+        return fail(
+          "geometry-mismatch",
+          `${at}.points[${j}]`,
+          "is not an object",
+        );
+      return {
+        latitude: latitude(point.latitude, `${at}.points[${j}].latitude`),
+        longitude: longitude(point.longitude, `${at}.points[${j}].longitude`),
+      };
+    });
+    return {
+      type: segment.type as string,
+      isRouted: segment.isRouted !== false,
+      points,
+    };
+  });
+  return {
+    kind: engine.kind as string,
+    totalDistanceMeters: engine.totalDistanceMeters as number,
+    segments,
+  };
+}
+
+/**
+ * The engine route inside a record must describe exactly the record it travels in: its structure is validated
+ * (anything missing or not a finite coordinate is refused), its kind and length summary agree with the record, and its
+ * geometry equals the declared geometry up to the 1e-7 degree quantisation. A route replaced in one place and not the
+ * other is refused rather than half-trusted.
+ */
 export async function engineMatchesRecord(
   record: RouteRecord,
 ): Promise<unknown> {
   if (record.engine === undefined)
     return fail("missing-field", "engine", "is not present");
   const engine = await decodeEngine(fromBase64(record.engine, "engine"));
-  if (!isObject(engine) || !Array.isArray(engine.segments))
-    return fail("geometry-mismatch", "engine", "has no segments");
+  const shape = engineShape(engine);
+  if (shape.kind !== record.kind)
+    fail("geometry-mismatch", "engine.kind", "differs from the record's kind");
+  // Both numbers are the same value written by the builder; any difference means one side was altered.
+  if (!(Math.abs(shape.totalDistanceMeters - record.lengthMeters) <= 0.01))
+    fail(
+      "geometry-mismatch",
+      "engine.totalDistanceMeters",
+      "differs from the record's length",
+    );
   const declared = decodeGeometry(
     record.geometry,
     record.pointCount,
     record.bounds,
   );
-  const segments = engine.segments as RouteSegmentLike[];
-  if (segments.length !== declared.length)
+  if (shape.segments.length !== declared.length)
     fail("geometry-mismatch", "engine", "has a different number of segments");
   const tolerance = POLYLINE_PRECISION_DEGREES * 2;
-  segments.forEach((segment, i) => {
+  shape.segments.forEach((segment, i) => {
     const want = declared[i];
     if (
       segment.points.length !== want.points.length ||
       segment.type !== want.type ||
-      (segment.isRouted !== false) !== want.isRouted
+      segment.isRouted !== want.isRouted
     )
       fail(
         "geometry-mismatch",
@@ -883,9 +1019,10 @@ export async function engineMatchesRecord(
         "differs from the record's geometry",
       );
     segment.points.forEach((point, j) => {
+      // Written so a value that is not a number can never pass (a comparison with NaN is false).
       if (
-        Math.abs(point.latitude - want.points[j].latitude) > tolerance ||
-        Math.abs(point.longitude - want.points[j].longitude) > tolerance
+        !(Math.abs(point.latitude - want.points[j].latitude) <= tolerance) ||
+        !(Math.abs(point.longitude - want.points[j].longitude) <= tolerance)
       )
         fail(
           "geometry-mismatch",

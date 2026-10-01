@@ -86,6 +86,7 @@ service cloud.firestore {
         && isText(d.title, 120)
         && d.kind in ['Navigation', 'ExerciseLoop']
         && validDraft(d.draft)
+        && ((d.kind == 'Navigation' && d.draft.mode == 'point') || (d.kind == 'ExerciseLoop' && d.draft.mode == 'loop'))
         && d.lengthMeters is number && d.lengthMeters > 0 && d.lengthMeters <= 400000
         && validBounds(d.bounds)
         && insideBounds(d.draft.start, d.bounds)

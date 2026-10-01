@@ -46,6 +46,9 @@ test("firestore.rules uses exactly the limits and constants of the TypeScript co
   has(`d.schema == '${PLACE_SCHEMA}'`);
   has(`d.engineCodec == '${ENGINE_CODEC}'`);
   has(`d.kind in ${quoted(ROUTE_KINDS)}`);
+  // Navigation is point-to-point and ExerciseLoop is a loop, in the rules as in the validators.
+  has("d.kind == 'Navigation' && d.draft.mode == 'point'");
+  has("d.kind == 'ExerciseLoop' && d.draft.mode == 'loop'");
   has(`s.kind in ${quoted(DATASET_KINDS)}`);
   // The text rule is the same pattern, written for the rules language.
   const pattern = TEXT_PATTERN.source.replace(/\\\//g, "/");

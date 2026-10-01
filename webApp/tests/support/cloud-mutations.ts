@@ -115,6 +115,22 @@ export const ROUTE_MUTATIONS: Mutation[] = [
     rules: "deny",
   },
   {
+    name: "a Navigation route with a loop plan",
+    change: (r) => {
+      r.draft.mode = "loop";
+      r.draft.destination = null;
+      r.draft.miles = 3;
+    },
+    ts: "invalid-field",
+    rules: "deny",
+  },
+  {
+    name: "an ExerciseLoop route with a point-to-point plan",
+    change: (r) => (r.kind = "ExerciseLoop"),
+    ts: "invalid-field",
+    rules: "deny",
+  },
+  {
     name: "an unknown route kind",
     change: (r) => (r.kind = "Bike"),
     ts: "invalid-field",
@@ -303,6 +319,58 @@ export const ROUTE_MUTATIONS: Mutation[] = [
     rules: "na",
     note: "timestamps are server-assigned in a document",
   },
+  {
+    name: "a created time of only a year",
+    change: (r) => (r.createdAt = "2026"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "an updated time of 1",
+    change: (r) => (r.updatedAt = "1"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a month of 13",
+    change: (r) => (r.createdAt = "2026-13-01T00:00:00Z"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a day that does not exist",
+    change: (r) => (r.createdAt = "2026-02-30T00:00:00Z"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a time with no zone offset",
+    change: (r) => (r.updatedAt = "2026-10-01T12:00:00"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "an updated time before the created time",
+    change: (r) => (r.updatedAt = "2026-09-30T00:00:00Z"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a valid time with an offset and fractional seconds",
+    change: (r) => {
+      r.createdAt = "2026-10-01T07:30:00.123456+05:30";
+      r.updatedAt = "2026-10-01T13:00:00.5Z";
+    },
+    ts: "ok",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
 ];
 
 export const PLACE_MUTATIONS: Mutation[] = [
@@ -393,5 +461,57 @@ export const PLACE_MUTATIONS: Mutation[] = [
     ts: "ok",
     rules: "deny",
     note: "a create must be revision 1",
+  },
+  {
+    name: "a created time of only a year",
+    change: (r) => (r.createdAt = "2026"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "an updated time of 1",
+    change: (r) => (r.updatedAt = "1"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a month of 13",
+    change: (r) => (r.createdAt = "2026-13-01T00:00:00Z"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a day that does not exist",
+    change: (r) => (r.createdAt = "2026-02-30T00:00:00Z"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a time with no zone offset",
+    change: (r) => (r.updatedAt = "2026-10-01T12:00:00"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "an updated time before the created time",
+    change: (r) => (r.updatedAt = "2026-09-30T00:00:00Z"),
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "a valid time with an offset and fractional seconds",
+    change: (r) => {
+      r.createdAt = "2026-10-01T07:30:00.123456+05:30";
+      r.updatedAt = "2026-10-01T13:00:00.5Z";
+    },
+    ts: "ok",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
   },
 ];
