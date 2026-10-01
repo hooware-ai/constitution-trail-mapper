@@ -22,7 +22,9 @@
     "package:dataset": "node tools/package-dataset.mjs",
     "test:county": "playwright test -c playwright.county.config.ts",
     "verify:county": "node tools/verify-county-package.mjs",
-    "test:rules": "node tools/run-emulator-tests.mjs"
+    "test:rules": "node tools/run-emulator-tests.mjs",
+    "test:rules:controls": "node tools/rules-negative-control.mjs",
+    "test:rules:prefetch": "node tools/run-emulator-tests.mjs --prefetch"
   },
   "dependencies": {
     "leaflet": "1.9.4",

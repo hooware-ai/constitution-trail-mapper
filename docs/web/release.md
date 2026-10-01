@@ -74,6 +74,8 @@ A file scan passing is never approval. A real dataset can only become releasable
 
 `.github/workflows/web-release-check.yml` runs the same check on pull requests and pushes that touch the web, bridge, shared-logic or Gradle files: JDK 21, Node 24, a locked install, `npm run release:check`, and a negative check that a production build without the core manifest fails. It uploads `dist/` and `dist-report/` (14 days) labelled fixture-only. It has read-only permissions, no secrets, no deploy step and no cloud access. Its first hosted run failed because the wrapper script is committed without its executable bit; the check now runs the wrapper through `sh` and the tracked mode is fixed. See the pull request for the latest hosted result.
 
+A second, independent workflow, `.github/workflows/web-firestore-rules.yml` (**Web Firestore rules**), runs the local-emulator Firestore rules tests and negative controls; it does not change this release check. See [cloud-library-contract.md](cloud-library-contract.md#hosted-check-web-firestore-rules).
+
 ## What this does not certify
 
 Real data, physical iPhone/Android browsers, authentication, hosting or a public launch: #47, #41, #31-#33 and #51 remain gates. Built-artifact smoke tests use the fixture network (or, for `--dataset county`, check the county files, headers and provenance); automated runs never request map tiles. A real-data county artifact is produced by `python tools/fetch-web-review-data.py`, `npm run package:dataset` and `npm run release:check -- --dataset county`; see [county-dataset.md](county-dataset.md) for what it was measured to do.
