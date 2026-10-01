@@ -137,7 +137,7 @@ details > button {
   margin: 4px;
 }
 header {
-  height: 80px;
+  min-height: 80px;
   display: flex;
   align-items: center;
   gap: 20px;
@@ -416,14 +416,42 @@ nav button > span {
   font-size: 1.6rem;
   line-height: 1.25;
 }
-/* The smallest phones (320 pt) at larger text sizes: the four tabs shrink and tighten instead of scrolling sideways. */
+/* Phones: at larger text the header, the tabs and the route actions wrap onto more rows instead of scrolling sideways, being
+ cut off or sitting under another control. At normal text size they still share one row. */
+@media (max-width: 760px) {
+  header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .header-actions {
+    flex-wrap: wrap;
+  }
+  nav {
+    flex-wrap: wrap;
+  }
+  nav button {
+    flex: 1 1 3.4rem;
+    min-width: 0;
+  }
+  .actions {
+    flex-wrap: wrap;
+  }
+  .actions button {
+    flex: 1 1 5rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+/* The smallest phones (320 pt) also tighten their padding. */
 @media (max-width: 360px) {
+  header {
+    padding: 8px 12px;
+  }
   nav {
     padding: 6px 8px;
     gap: 4px;
   }
   nav button {
-    min-width: 0;
     padding: 3px 2px;
   }
 }
@@ -693,7 +721,7 @@ dialog::backdrop {
 }
 @media (max-width: 760px) {
   header {
-    height: 66px;
+    min-height: 66px;
     padding: 10px 16px;
     gap: 10px;
   }

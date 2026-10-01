@@ -212,29 +212,119 @@ test("[engine] no automatically detectable WCAG 2 A/AA violations on the planner
   await check("Help");
 });
 
-test("[engine] at 175% text no screen scrolls sideways, except the known limit on the smallest phone", async ({
-  page,
-}, info) => {
-  const smallest = info.project.name === "webkit-iphone-se";
-  const overflowing: string[] = [];
-  const large = () =>
-    page.evaluate(() => (document.documentElement.style.fontSize = "28px"));
-  await planPoint(page);
-  await large();
-  if (!(await fitsWidth(page))) overflowing.push("Route preview");
-  // A reload restores the preview; go home to reach the tabs.
-  await page.evaluate(() => (document.documentElement.style.fontSize = ""));
-  await page.getByRole("button", { name: "Trail Mapper home" }).click();
-  await large();
-  for (const tab of tabs) {
-    await nav(page, tab).click();
-    if (!(await fitsWidth(page))) overflowing.push(tab);
-  }
-  if (smallest) {
-    // Known limit, recorded not hidden: 320 pt wide at 175% text. See docs/web/launch-acceptance.md.
-    info.annotations.push({
-      type: "known-limit",
-      description: `175% text on a 320 pt screen scrolls sideways on: ${overflowing.join(", ") || "nothing"}`,
+/** What a rider would experience as broken at large text: sideways scrolling, a control off the screen, cut-off text. */
+async function problems(page: Page) {
+  return page.evaluate(() => {
+    const width = window.innerWidth;
+    const shown = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        style.visibility !== "hidden" &&
+        style.display !== "none"
+      );
+    };
+    const name = (el: Element) =>
+      `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30)}"`;
+    const out: string[] = [];
+    const scrolls = document.documentElement.scrollWidth - width;
+    if (scrolls > 1) out.push(`page scrolls sideways by ${scrolls}px`);
+    for (const el of document.querySelectorAll(
+      "button, a[href], input, select, textarea, [role=button]",
+    )) {
+      if (!shown(el)) continue;
+      const box = el.getBoundingClientRect();
+      if (box.right > width + 1 || box.left < -1)
+        out.push(`off the screen: ${name(el)}`);
+    }
+    for (const el of document.querySelectorAll("body *")) {
+      if (!shown(el) || el.closest(".leaflet-container")) continue;
+      // Visually hidden helper text (screen-reader only) is meant to be clipped.
+      const own = el.getBoundingClientRect();
+      if (own.width <= 2 && own.height <= 2) continue;
+      const style = getComputedStyle(el);
+      const cuts = ["hidden", "clip"].includes(style.overflowX);
+      if (cuts && el.scrollWidth > el.clientWidth + 1)
+        out.push(`cut off: ${name(el)}`);
+    }
+    return out;
+  });
+}
+const sound = async (page: Page, what: string) =>
+  expect(await problems(page), what).toEqual([]);
+
+for (const percent of [175, 200]) {
+  test(`[engine] at ${percent}% text every key screen fits, nothing is cut off, and controls stay reachable`, async ({
+    page,
+  }, info) => {
+    // Known desktop limit, documented in docs/web/launch-acceptance.md: text-only 200% on a wide window makes the fixed-width
+    // planner column scroll sideways inside itself. The phone profiles (the requirement) are asserted at both sizes.
+    test.skip(
+      percent === 200 && info.project.name === "webkit-desktop",
+      "desktop 200% text-only scaling: documented limit",
+    );
+    const size = `${(16 * percent) / 100}px`;
+    await page.goto("/");
+    await page.evaluate(
+      (px) => (document.documentElement.style.fontSize = px),
+      size,
+    );
+    for (const tab of tabs) {
+      await nav(page, tab).click();
+      await sound(page, `${tab} at ${percent}%`);
+    }
+    // The tabs are still big enough to touch, and the bar does not hide the page.
+    if (info.project.name.includes("iphone")) {
+      for (const tab of tabs) {
+        const box = await nav(page, tab).boundingBox();
+        expect(Math.min(box!.width, box!.height), tab).toBeGreaterThanOrEqual(
+          44,
+        );
+      }
+    }
+    await nav(page, "Plan").click();
+    await page.getByRole("button", { name: /Go somewhere/ }).click();
+    await sound(page, "planner");
+    await page.getByRole("button", { name: /^Start:/ }).click();
+    await sound(page, "place chooser");
+    await page
+      .getByRole("button", { name: "Pick on map", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Use map center" }),
+    ).toBeVisible();
+    await sound(page, "map picker");
+    await page.getByRole("button", { name: "Use map center" }).click();
+    await choose(page, "Destination", "Review trailhead · South");
+    await page.getByRole("button", { name: "Find route", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Route preview", exact: true }),
+    ).toBeVisible();
+    await sound(page, "route preview");
+    for (const name of ["Directions", "Share"]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await sound(page, `${name} dialog`);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).not.toBeVisible();
+    }
+    // The primary action is reachable by scrolling to it and is on the screen when there.
+    const start = page.getByRole("button", {
+      name: "Start navigation",
+      exact: true,
     });
-  } else expect(overflowing).toEqual([]);
-});
+    await start.scrollIntoViewIfNeeded();
+    const box = await start.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(-1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(
+      page.viewportSize()!.width + 1,
+    );
+    await page.getByRole("button", { name: /^Help/ }).first().click();
+    await expect(
+      page.getByRole("dialog", { name: "Help and about" }),
+    ).toBeVisible();
+    await sound(page, "Help dialog");
+  });
+}
