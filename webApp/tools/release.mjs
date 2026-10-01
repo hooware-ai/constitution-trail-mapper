@@ -79,6 +79,25 @@ function freePort() {
   });
 }
 
+/** A free port whose successor is free too (the county suite owns both); retries past reserved or busy neighbours. */
+async function freePortPair() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const port = await freePort();
+    const free = await new Promise((resolve) => {
+      const server = createServer();
+      server.unref();
+      server.on("error", () => resolve(false));
+      server.listen(port + 1, "127.0.0.1", () =>
+        server.close(() => resolve(true)),
+      );
+    });
+    if (free) return port;
+  }
+  throw new Error(
+    "Could not find two adjacent free ports for the county suite.",
+  );
+}
+
 function requireTools() {
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major < 22 || (major === 22 && minor < 12))
@@ -185,7 +204,7 @@ run(
 );
 if (!args.has("--skip-e2e")) {
   // Packaged-dataset production path on SYNTHETIC data, two owned ports (review and public builds).
-  const countyPort = String(await freePort());
+  const countyPort = String(await freePortPair());
   run(
     `County-mode suite on synthetic data (ports ${countyPort} and ${Number(countyPort) + 1})`,
     "npx",
