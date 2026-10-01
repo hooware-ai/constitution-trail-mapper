@@ -17,10 +17,12 @@ on:
       - "webApp/tests/fixtures/cloud/**"
       - "webApp/tests/unit/cloud-*"
       - "webApp/tests/unit/emulator-invocation.test.ts"
+      - "webApp/tests/unit/owned-process.test.ts"
       - "webApp/tests/unit/rules-controls.test.ts"
       - "webApp/tools/run-emulator-tests.mjs"
       - "webApp/tools/rules-negative-control.mjs"
       - "webApp/tools/lib/emulator-invocation.*"
+      - "webApp/tools/lib/owned-process.*"
       - "webApp/tools/lib/rules-controls.*"
       - "webApp/package.json"
       - "webApp/package-lock.json"
@@ -35,10 +37,12 @@ on:
       - "webApp/tests/fixtures/cloud/**"
       - "webApp/tests/unit/cloud-*"
       - "webApp/tests/unit/emulator-invocation.test.ts"
+      - "webApp/tests/unit/owned-process.test.ts"
       - "webApp/tests/unit/rules-controls.test.ts"
       - "webApp/tools/run-emulator-tests.mjs"
       - "webApp/tools/rules-negative-control.mjs"
       - "webApp/tools/lib/emulator-invocation.*"
+      - "webApp/tools/lib/owned-process.*"
       - "webApp/tools/lib/rules-controls.*"
       - "webApp/package.json"
       - "webApp/package-lock.json"
@@ -86,7 +90,7 @@ jobs:
           npm ci
 
       - name: Unit tests for the gate's own tooling and the saved-record contract (no emulator)
-        run: npx tsx --test tests/unit/cloud-*.test.ts tests/unit/emulator-invocation.test.ts tests/unit/rules-controls.test.ts
+        run: npx tsx --test tests/unit/cloud-*.test.ts tests/unit/emulator-invocation.test.ts tests/unit/owned-process.test.ts tests/unit/rules-controls.test.ts
 
       # First run on a clean runner: fetch the pinned firebase-tools and the Firestore emulator jar (about 60 MB).
       # Nothing here depends on a developer's cache; a separate step gives a download failure its own clear error.

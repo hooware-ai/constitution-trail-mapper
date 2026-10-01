@@ -12,11 +12,13 @@
 // Environment (all optional):
 //   TRAIL_RULES_FILE         rules to test instead of cloud/firestore.rules (used by the negative controls; never committed)
 //   TRAIL_EMULATOR_LOG       also write everything the run prints to this file (hosted runs upload it on failure)
-//   TRAIL_EMULATOR_TIMEOUT_MS  stop the run after this long (default 600000); the emulator is stopped and the run fails
+//   TRAIL_EMULATOR_TIMEOUT_MS  stop the run after this long (default 600000): this run's own process tree (shell,
+//                            firebase-tools, emulator, tests) is stopped, its listeners released, and the run exits 124
+//                            (SIGINT/SIGTERM stop the same tree and exit 130/143; see tools/lib/owned-process.mjs)
 //
 // First use downloads the Firestore emulator jar (about 60 MB) into ~/.cache/firebase/emulators through the pinned
 // firebase-tools (tools/lib/emulator-invocation.mjs); a developer's cache is a convenience, never a requirement.
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   createWriteStream,
   mkdtempSync,
@@ -35,6 +37,7 @@ import {
   normalizePath,
   withoutCredentials,
 } from "./lib/emulator-invocation.mjs";
+import { runOwned } from "./lib/owned-process.mjs";
 
 const webRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const windows = process.platform === "win32";
@@ -78,37 +81,17 @@ const say = (text) => {
 };
 const timeoutMs = Number(env.TRAIL_EMULATOR_TIMEOUT_MS ?? 600_000);
 
-/** Runs a child with output copied to the log, a time limit, and signal forwarding so the emulator is always stopped. */
-function run(invocation) {
-  return new Promise((done) => {
-    const child = spawn(invocation.command, invocation.args, {
-      cwd: webRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-      ...invocation.options,
-    });
-    child.stdout.on("data", (chunk) => say(chunk.toString()));
-    child.stderr.on("data", (chunk) => say(chunk.toString()));
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      say(`\nTimed out after ${timeoutMs} ms: stopping the emulator run.\n`);
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 10_000).unref();
-    }, timeoutMs);
-    const forward = (signal) => () => child.kill(signal);
-    for (const signal of ["SIGINT", "SIGTERM"])
-      process.on(signal, forward(signal));
-    child.on("error", (error) => {
-      say(`Could not start: ${error.message}\n`);
-      clearTimeout(timer);
-      done(1);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      done(timedOut ? 124 : (code ?? 1));
-    });
+/** Runs a child with output copied to the log. Its whole process tree is stopped on a timeout or SIGINT/SIGTERM. */
+const cancel = new AbortController();
+for (const signal of ["SIGINT", "SIGTERM"])
+  process.on(signal, () => cancel.abort(signal));
+const run = (invocation) =>
+  runOwned(invocation, {
+    cwd: webRoot,
+    timeoutMs,
+    say,
+    signal: cancel.signal,
   });
-}
 const finish = (code) => {
   if (log) log.end(() => process.exit(code));
   else process.exit(code);
