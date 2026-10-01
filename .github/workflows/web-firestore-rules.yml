@@ -63,8 +63,6 @@ jobs:
         working-directory: webApp
     env:
       CI: "true"
-      # Synthetic-only logs: the emulator, the rules and the tests use fixtures and the demo project, nothing real.
-      TRAIL_EMULATOR_LOG: ${{ runner.temp }}/rules-logs/emulator-run.log
     steps:
       - uses: actions/checkout@v4
         with:
@@ -95,11 +93,16 @@ jobs:
       - name: Fetch the pinned Firestore emulator
         timeout-minutes: 10
         run: npm run test:rules:prefetch
+        env:
+          # Synthetic-only logs (fixtures and the demo project); uploaded if the job fails. The `runner` context is not
+          # available in job-level env, so each step names its own log.
+          TRAIL_EMULATOR_LOG: ${{ runner.temp }}/rules-logs/prefetch.log
 
       - name: Rules tests on the local emulator (owner, signed-out, cross-account, validation)
         timeout-minutes: 10
         run: npm run test:rules
         env:
+          TRAIL_EMULATOR_LOG: ${{ runner.temp }}/rules-logs/rules-tests.log
           TRAIL_EMULATOR_TIMEOUT_MS: "480000"
 
       - name: Negative controls (weakened or malformed rules must be detected)
