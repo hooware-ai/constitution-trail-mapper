@@ -306,7 +306,11 @@ test("[engine] Save keeps the route in this browser only, survives a reload, and
   await page.getByRole("button", { name: "Close Share route" }).click();
 
   await page.reload();
-  // A reload restores the route preview (by design); go home to reach the Saved tab.
+  // A reload restores the route preview (by design). Wait for it, or the home click can land before the restore finishes
+  // and be overwritten by it (seen on the slower hosted runner); then go home to reach the Saved tab.
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Trail Mapper home" }).click();
   await page
     .getByRole("navigation")
