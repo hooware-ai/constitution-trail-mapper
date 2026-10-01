@@ -238,7 +238,7 @@ function timestamp(value: unknown, path: string): string {
  * The instant a validated timestamp names, in whole nanoseconds since the epoch, using every fractional digit (up to
  * nine) and the zone offset: two spellings of one instant compare equal and no precision is silently dropped.
  */
-function instantNanos(valid: string): bigint {
+export function instantNanos(valid: string): bigint {
   const match = RFC3339.exec(valid)!;
   const [year, month, day, hour, minute, second] = match
     .slice(1, 7)
