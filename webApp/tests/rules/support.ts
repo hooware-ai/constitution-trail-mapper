@@ -28,8 +28,11 @@ export async function createEnvironment(): Promise<RulesTestEnvironment> {
     firestore: {
       host: hostname,
       port: Number(port),
+      // TRAIL_RULES_FILE lets the negative controls (tools/rules-negative-control.mjs) test a deliberately weakened copy
+      // of the rules from a temporary directory; without it the committed rules are what is tested.
       rules: readFileSync(
-        join(process.cwd(), "cloud", "firestore.rules"),
+        process.env.TRAIL_RULES_FILE ??
+          join(process.cwd(), "cloud", "firestore.rules"),
         "utf8",
       ),
     },

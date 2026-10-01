@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  FIREBASE_TOOLS,
+  PROJECT_ID,
   buildInvocation,
+  buildPrefetchInvocation,
   normalizePath,
+  withoutCredentials,
 } from "../../tools/lib/emulator-invocation.mjs";
 
 const common = {
@@ -102,4 +106,64 @@ test("POSIX: without JAVA_HOME the inherited PATH is left exactly as it was", ()
     ...common,
   });
   assert.equal(invocation.options.env.PATH, "/usr/bin:/bin");
+});
+
+test("credential and project variables never reach the emulator run, and nothing else is touched", () => {
+  const env = {
+    PATH: "/usr/bin",
+    HOME: "/home/runner",
+    JAVA_HOME: "/opt/jdk",
+    GOOGLE_APPLICATION_CREDENTIALS: "/secrets/key.json",
+    GOOGLE_CLOUD_PROJECT: "real-project",
+    GCLOUD_PROJECT: "real-project",
+    FIREBASE_TOKEN: "1//token",
+    FIREBASE_CONFIG: "{}",
+    firebase_service_account_json: "{}",
+    GOOGLE_OAUTH_ACCESS_TOKEN: "ya29",
+  };
+  const kept = withoutCredentials(env);
+  assert.deepEqual(Object.keys(kept).sort(), ["HOME", "JAVA_HOME", "PATH"]);
+  const run = buildInvocation({
+    platform: "linux",
+    env,
+    config: "/tmp/c.json",
+    command: "node x",
+  });
+  const prefetch = buildPrefetchInvocation({ platform: "linux", env });
+  for (const invocation of [run, prefetch]) {
+    const names = Object.keys(invocation.options.env);
+    assert.ok(
+      !names.some((n) => /GOOGLE|GCLOUD|FIREBASE/i.test(n)),
+      names.join(","),
+    );
+    assert.equal(invocation.options.env.HOME, "/home/runner");
+  }
+});
+
+test("the emulator tooling and demo project are pinned in one place and used by both invocations", () => {
+  assert.match(FIREBASE_TOOLS, /^firebase-tools@\d+\.\d+\.\d+$/);
+  assert.match(PROJECT_ID, /^demo-/);
+  const run = buildInvocation({
+    platform: "linux",
+    env: { PATH: "/usr/bin" },
+    config: "/tmp/c.json",
+    command: "node x",
+  });
+  assert.ok(run.args.includes(FIREBASE_TOOLS));
+  assert.equal(run.args[run.args.indexOf("--project") + 1], PROJECT_ID);
+  const prefetch = buildPrefetchInvocation({
+    platform: "linux",
+    env: { PATH: "/usr/bin" },
+  });
+  assert.deepEqual(prefetch.args, [
+    "--yes",
+    FIREBASE_TOOLS,
+    "setup:emulators:firestore",
+  ]);
+  assert.equal(prefetch.options.shell, false);
+  assert.equal(
+    buildPrefetchInvocation({ platform: "win32", env: { Path: "C:\\x" } })
+      .options.shell,
+    true,
+  );
 });

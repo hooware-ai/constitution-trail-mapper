@@ -1,0 +1,128 @@
+name: Web Firestore rules
+
+# Local-only security gate for the saved-library Firestore rules (issue #31). It runs the owner / signed-out / cross-account
+# rules tests against the LOCAL Firestore emulator under the demo project id `demo-trail-mapper`, then proves the gate can
+# fail by weakening throwaway copies of the rules (never committed) and requiring the suite to catch each one.
+# It never authenticates, deploys, or touches a real Firebase/Google project: no secrets, `contents: read`, and the runner
+# strips credential/project variables from the emulator's environment. See docs/web/cloud-library-contract.md.
+# Check name on pull requests: "Web Firestore rules / Firestore rules emulator tests".
+
+on:
+  pull_request:
+    paths:
+      - "webApp/cloud/**"
+      - "webApp/src/cloud/**"
+      - "webApp/tests/rules/**"
+      - "webApp/tests/support/cloud-*"
+      - "webApp/tests/fixtures/cloud/**"
+      - "webApp/tests/unit/cloud-*"
+      - "webApp/tests/unit/emulator-invocation.test.ts"
+      - "webApp/tests/unit/owned-process.test.ts"
+      - "webApp/tests/unit/rules-controls.test.ts"
+      - "webApp/tools/run-emulator-tests.mjs"
+      - "webApp/tools/rules-negative-control.mjs"
+      - "webApp/tools/lib/emulator-invocation.*"
+      - "webApp/tools/lib/owned-process.*"
+      - "webApp/tools/lib/rules-controls.*"
+      - "webApp/package.json"
+      - "webApp/package-lock.json"
+      - ".github/workflows/web-firestore-rules.yml"
+  push:
+    branches: [main, "codex/web-app"]
+    paths:
+      - "webApp/cloud/**"
+      - "webApp/src/cloud/**"
+      - "webApp/tests/rules/**"
+      - "webApp/tests/support/cloud-*"
+      - "webApp/tests/fixtures/cloud/**"
+      - "webApp/tests/unit/cloud-*"
+      - "webApp/tests/unit/emulator-invocation.test.ts"
+      - "webApp/tests/unit/owned-process.test.ts"
+      - "webApp/tests/unit/rules-controls.test.ts"
+      - "webApp/tools/run-emulator-tests.mjs"
+      - "webApp/tools/rules-negative-control.mjs"
+      - "webApp/tools/lib/emulator-invocation.*"
+      - "webApp/tools/lib/owned-process.*"
+      - "webApp/tools/lib/rules-controls.*"
+      - "webApp/package.json"
+      - "webApp/package-lock.json"
+      - ".github/workflows/web-firestore-rules.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-firestore-rules-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rules-emulator:
+    name: Firestore rules emulator tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: webApp
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The emulator needs JDK 21+; setup-java also sets JAVA_HOME, which the runner puts first on PATH.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: webApp/package-lock.json
+
+      - name: Locked install
+        run: |
+          mkdir -p "$RUNNER_TEMP/rules-logs"
+          npm ci
+
+      - name: Unit tests for the gate's own tooling and the saved-record contract (no emulator)
+        run: npx tsx --test tests/unit/cloud-*.test.ts tests/unit/emulator-invocation.test.ts tests/unit/owned-process.test.ts tests/unit/rules-controls.test.ts
+
+      # First run on a clean runner: fetch the pinned firebase-tools and the Firestore emulator jar (about 60 MB).
+      # Nothing here depends on a developer's cache; a separate step gives a download failure its own clear error.
+      - name: Fetch the pinned Firestore emulator
+        timeout-minutes: 10
+        run: npm run test:rules:prefetch
+        env:
+          # Synthetic-only logs (fixtures and the demo project); uploaded if the job fails. The `runner` context is not
+          # available in job-level env, so each step names its own log.
+          TRAIL_EMULATOR_LOG: ${{ runner.temp }}/rules-logs/prefetch.log
+
+      - name: Rules tests on the local emulator (owner, signed-out, cross-account, validation)
+        timeout-minutes: 10
+        run: npm run test:rules
+        env:
+          TRAIL_EMULATOR_LOG: ${{ runner.temp }}/rules-logs/rules-tests.log
+          TRAIL_EMULATOR_TIMEOUT_MS: "480000"
+
+      - name: Negative controls (weakened or malformed rules must be detected)
+        timeout-minutes: 15
+        run: npm run test:rules:controls -- --skip-baseline 2>&1 | tee "$RUNNER_TEMP/rules-logs/negative-controls.log"
+
+      # The runner stops the emulator it started; this only sweeps up an orphan if a step was killed hard.
+      - name: Make sure no emulator is left running
+        if: always()
+        run: pkill -f cloud-firestore-emulator || true
+
+      - name: Keep the run logs when something failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firestore-rules-logs
+          path: ${{ runner.temp }}/rules-logs
+          retention-days: 7
+          if-no-files-found: warn
