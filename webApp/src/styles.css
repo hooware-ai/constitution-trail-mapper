@@ -349,6 +349,8 @@ header .quiet {
 }
 .route-row span:nth-child(2) {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .route-glyph {
   font-size: 1.7rem;
@@ -356,6 +358,8 @@ header .quiet {
 }
 .route-row strong {
   font-size: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .route-row small {
   display: block;
