@@ -7,6 +7,7 @@ import {
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { DataSources } from "./DataSources";
+import { HelpDialog } from "./Help";
 import { AccessConnections } from "./AccessConnections";
 import {
   type DialogNotice,
@@ -62,7 +63,7 @@ type Screen =
   | "explore"
   | "updates"
   | "map-picker";
-type Popup = "directions" | "share" | "clear" | "rename" | null;
+type Popup = "directions" | "share" | "clear" | "rename" | "help" | null;
 const EMPTY_LIBRARY: RouteLibrary = {
   version: 1,
   saved: [],
@@ -1145,7 +1146,17 @@ export function App() {
             Trail Mapper<small>Bloomington–Normal</small>
           </span>
         </button>
-        <span className="local-badge">On this browser · no account</span>
+        <div className="header-actions">
+          <button
+            className="help-button"
+            aria-haspopup="dialog"
+            onClick={() => setPopup("help")}
+          >
+            Help
+            <span className="visually-hidden"> and about</span>
+          </button>
+          <span className="local-badge">On this browser · no account</span>
+        </div>
       </header>
       <div className="review-banner" role="status">
         {network?.mode === "county"
@@ -1568,8 +1579,17 @@ export function App() {
                     </p>
                   )}
                   <Legend />
+                  <p className="warning" id="foreground-note">
+                    <strong>
+                      Keep this page open and visible while you ride.
+                    </strong>{" "}
+                    Guidance pauses if you switch tabs, lock the screen or leave
+                    the page. There is no background tracking or offline
+                    navigation.
+                  </p>
                   <button
                     className="primary wide"
+                    aria-describedby="foreground-note"
                     disabled={checking || !preview.canNavigate || !online}
                     onClick={() => void startNavigation()}
                   >
@@ -1646,6 +1666,10 @@ export function App() {
                   ? "Returning to start"
                   : "Ride in progress"}
               </h1>
+              <p className="caption">
+                Keep this page open and visible: guidance pauses if you switch
+                tabs or lock the screen.
+              </p>
               <div className={"guidance " + nav.phase} aria-live="polite">
                 <h2>
                   {nav.phase === "reacquiring"
@@ -1933,6 +1957,9 @@ export function App() {
                   : "Street basemap tiles are optional and require internet. Trail geometry is supplied by the locally loaded dataset."}
               </p>
               <DataSources network={network} />
+              <button className="wide" onClick={() => setPopup("help")}>
+                Help, privacy and sources
+              </button>
               <button className="primary wide" onClick={() => begin("point")}>
                 Plan a ride
               </button>
@@ -1959,6 +1986,9 @@ export function App() {
                 </p>
               </section>
               <DataSources network={network} />
+              <button className="wide" onClick={() => setPopup("help")}>
+                Help, privacy and sources
+              </button>
               <div className="updates-list">
                 {network.updates.map((update) => (
                   <article key={update.id}>
@@ -2082,6 +2112,17 @@ export function App() {
               : "Download private GeoJSON"}
           </button>
         </Modal>
+      )}
+      {popup === "help" && (
+        <HelpDialog
+          network={network}
+          build={{
+            ...__TRAIL_BUILD__,
+            dataset: __TRAIL_DATASET__,
+            channel: __TRAIL_CHANNEL__,
+          }}
+          onClose={() => setPopup(null)}
+        />
       )}
       {popup === "clear" && (
         <Modal
