@@ -416,6 +416,17 @@ nav button > span {
   font-size: 1.6rem;
   line-height: 1.25;
 }
+/* The smallest phones (320 pt) at larger text sizes: the four tabs shrink and tighten instead of scrolling sideways. */
+@media (max-width: 360px) {
+  nav {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  nav button {
+    min-width: 0;
+    padding: 3px 2px;
+  }
+}
 nav button[aria-current="page"] {
   background: #cdefe7;
   color: #093b33;

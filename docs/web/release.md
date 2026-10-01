@@ -1,6 +1,6 @@
 # Web release check
 
-This is the reproducible, clean-source path from a checkout to a verified web artifact. It **prepares and verifies**; it does not publish anything, create cloud resources or choose a provider. The artifact it produces is the synthetic **fixture-only** review build and is labelled not publishable until an approved dataset exists (see [Dataset identity](#dataset-identity-the-47-contract)).
+This is the reproducible, clean-source path from a checkout to a verified web artifact. It **prepares and verifies**; it does not publish anything, create cloud resources or choose a provider. By default the artifact it produces is the synthetic **fixture** review build; with `--dataset county` it is the **county review candidate** (254 reviewed existing trail features, `approved: false`; see [county-dataset.md](county-dataset.md)). Either way it is labelled not publishable until an approved dataset exists (see [Dataset identity](#dataset-identity-the-47-contract)); a county build can support a private pilot only after the owner closes the pilot gates in [launch-acceptance.md](launch-acceptance.md).
 
 ## One command
 

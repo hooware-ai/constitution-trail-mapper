@@ -37,7 +37,7 @@ The reproducible clean-source path is `cd webApp && npm run release:check`; see 
     npm run test:e2e
     npm run build
 
-Real-data JVM tests require the ignored generated assets. Browser tests use synthetic data and simulated location; no map tiles or private locations are needed. Build output, node_modules, test traces, routing assets and local configuration are ignored. The production build includes a publication-sensitive content scan and produces a fixture-only static directory.
+Real-data JVM tests require the ignored generated assets. Automated WebKit coverage of the first-visit journey (`npm run test:webkit`, after `npx playwright install webkit`) and the operator checklist for physical Android Chrome and iPhone Safari are in [launch-acceptance.md](launch-acceptance.md); WebKit here is Playwright's engine build, not a device. Browser tests use synthetic data and simulated location; no map tiles or private locations are needed. Build output, node_modules, test traces, routing assets and local configuration are ignored. The production build includes a publication-sensitive content scan and produces a fixture-only static directory.
 
 iOS compilation and execution require macOS/Xcode. Windows Gradle metadata or JVM checks cannot establish iOS runtime acceptance.
 
