@@ -585,3 +585,150 @@ test("the engine payload bytes are the same on every platform for the same route
     JSON.parse(JSON.stringify(syntheticRoute())),
   );
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// the builder refuses what its own reader would refuse, before anything is built or encoded
+
+const builderCases: Array<[string, (route: any) => void]> = [
+  ["an isRouted that is text", (r) => (r.segments[0].isRouted = "invalid")],
+  ["an isRouted that is a number", (r) => (r.segments[0].isRouted = 1)],
+  ["a segment type that does not exist", (r) => (r.segments[0].type = "Bike")],
+  ["a segment that is null", (r) => (r.segments[1] = null)],
+  ["points that are not a list", (r) => (r.segments[0].points = "x")],
+  ["a point with no latitude", (r) => delete r.segments[0].points[0].latitude],
+  [
+    "a point whose longitude is text",
+    (r) => (r.segments[0].points[1].longitude = "x"),
+  ],
+  ["a point that is null", (r) => (r.segments[0].points[0] = null)],
+  [
+    "a segment with one point",
+    (r) => (r.segments[0].points = [r.segments[0].points[0]]),
+  ],
+  ["no segments", (r) => (r.segments = [])],
+  ["no kind", (r) => delete r.kind],
+  ["a kind that does not exist", (r) => (r.kind = "Bike")],
+];
+for (const [name, change] of builderCases)
+  test(`the builder refuses a route with ${name} before anything is built`, async () => {
+    const route: any = syntheticRoute();
+    change(route);
+    let built: unknown = "never built";
+    const code = await asyncCodeOf(async () => {
+      built = await buildRouteFields({
+        id: ROUTE_ID,
+        ownerUid: "alice",
+        local: pointLocal(route),
+      });
+    });
+    assert.notEqual(code, "ok");
+    assert.ok(!code.startsWith("other:"), code);
+    assert.equal(built, "never built");
+  });
+function pointLocal(route: unknown) {
+  return {
+    key: ROUTE_KEY,
+    title: "Synthetic west to north",
+    route,
+    draft: {
+      mode: "point" as const,
+      start: { label: "Start", latitude: 40.5, longitude: -88.99 },
+      destination: { label: "End", latitude: 40.52, longitude: -88.97 },
+      miles: null,
+      proposed: false,
+    },
+    dataset: FIXTURE_DATASET,
+  };
+}
+test("a valid route builds, and what the builder makes passes the reader's own checks end to end", async () => {
+  const fields = await buildRouteFields({
+    id: ROUTE_ID,
+    ownerUid: "alice",
+    local: pointLocal(syntheticRoute()),
+  });
+  const record = toRouteRecord(fields, {
+    createdAt: T0,
+    updatedAt: T0,
+    revision: 1,
+  });
+  assert.equal(
+    codeOf(() => parseRouteRecord(record)),
+    "ok",
+  );
+  assert.equal(await asyncCodeOf(() => engineMatchesRecord(record)), "ok");
+  // Also with an explicitly estimated segment and a loop.
+  const loopRoute: any = syntheticRoute("ExerciseLoop");
+  loopRoute.segments[0].isRouted = false;
+  const loop = await buildRouteFields({
+    id: "r_loopbuilt0123456789abcdef01234",
+    ownerUid: "alice",
+    local: {
+      ...pointLocal(loopRoute),
+      draft: {
+        mode: "loop",
+        start: { label: "Start", latitude: 40.5, longitude: -88.99 },
+        destination: null,
+        miles: 3,
+        proposed: false,
+      },
+    },
+  });
+  const loopRecord = toRouteRecord(loop, {
+    createdAt: T0,
+    updatedAt: T0,
+    revision: 1,
+  });
+  assert.equal(await asyncCodeOf(() => engineMatchesRecord(loopRecord)), "ok");
+});
+
+test("an update time is compared at full precision and across offsets, never truncated to milliseconds", async () => {
+  const route: any = structuredClone(await validRouteRecord());
+  const place: any = structuredClone(validPlaceRecord());
+  const times = (createdAt: string, updatedAt: string) => ({
+    createdAt,
+    updatedAt,
+  });
+  const cases: Array<[string, string, "ok" | "invalid-field"]> = [
+    [
+      "2026-10-01T12:00:00.000000002Z",
+      "2026-10-01T12:00:00.000000001Z",
+      "invalid-field",
+    ],
+    ["2026-10-01T12:00:00.000000001Z", "2026-10-01T12:00:00.000000001Z", "ok"],
+    ["2026-10-01T12:00:00.000000001Z", "2026-10-01T12:00:00.000000002Z", "ok"],
+    ["2026-10-01T12:00:00Z", "2026-10-01T17:30:00+05:30", "ok"],
+    [
+      "2026-10-01T12:00:00Z",
+      "2026-10-01T17:29:59.999999999+05:30",
+      "invalid-field",
+    ],
+    [
+      "2026-10-01T12:00:00.1Z",
+      "2026-10-01T12:00:00.09999999Z",
+      "invalid-field",
+    ],
+    [
+      "2026-10-01T12:00:00-05:00",
+      "2026-10-01T16:59:59.999999999Z",
+      "invalid-field",
+    ],
+    ["2026-10-01T12:00:00-05:00", "2026-10-01T17:00:00Z", "ok"],
+    ["1969-12-31T23:59:59.5Z", "1969-12-31T23:59:59.4Z", "invalid-field"],
+  ];
+  for (const [createdAt, updatedAt, expected] of cases) {
+    assert.equal(
+      codeOf(() =>
+        parseRouteRecord({ ...route, ...times(createdAt, updatedAt) }),
+      ),
+      expected,
+      `route ${createdAt} -> ${updatedAt}`,
+    );
+    assert.equal(
+      codeOf(() =>
+        parsePlaceRecord({ ...place, ...times(createdAt, updatedAt) }),
+      ),
+      expected,
+      `place ${createdAt} -> ${updatedAt}`,
+    );
+  }
+});

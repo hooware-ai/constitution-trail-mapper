@@ -207,8 +207,8 @@ function version(value: unknown): number {
   return value;
 }
 const RFC3339 =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
-/** A real calendar instant in RFC 3339 form (date, time and offset all present and in range). */
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+/** A real calendar instant in RFC 3339 form (date, time and offset all present and in range; no leap seconds). */
 function timestamp(value: unknown, path: string): string {
   const match = typeof value === "string" ? RFC3339.exec(value) : null;
   if (!match)
@@ -216,8 +216,8 @@ function timestamp(value: unknown, path: string): string {
   const [year, month, day, hour, minute, second] = match
     .slice(1, 7)
     .map(Number);
-  const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
-  const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+  const offsetHour = match[9] === undefined ? 0 : Number(match[9]);
+  const offsetMinute = match[10] === undefined ? 0 : Number(match[10]);
   const calendar = new Date(Date.UTC(year, month - 1, day));
   if (
     month < 1 ||
@@ -234,11 +234,30 @@ function timestamp(value: unknown, path: string): string {
     return fail("invalid-field", path, "is not a valid calendar date and time");
   return value as string;
 }
+/**
+ * The instant a validated timestamp names, in whole nanoseconds since the epoch, using every fractional digit (up to
+ * nine) and the zone offset: two spellings of one instant compare equal and no precision is silently dropped.
+ */
+function instantNanos(valid: string): bigint {
+  const match = RFC3339.exec(valid)!;
+  const [year, month, day, hour, minute, second] = match
+    .slice(1, 7)
+    .map(Number);
+  const seconds =
+    BigInt(Date.UTC(year, month - 1, day, hour, minute, second)) / 1000n;
+  const offset =
+    match[8] === undefined
+      ? 0n
+      : BigInt((Number(match[9]) * 60 + Number(match[10])) * 60) *
+        (match[8] === "-" ? -1n : 1n);
+  const nanos = BigInt((match[7] ?? "").padEnd(9, "0") || "0");
+  return (seconds - offset) * 1_000_000_000n + nanos;
+}
 /** createdAt and updatedAt: each valid, and the record is never updated before it was created. */
 function timestampPair(created: unknown, updated: unknown) {
   const createdAt = timestamp(created, "createdAt");
   const updatedAt = timestamp(updated, "updatedAt");
-  if (Date.parse(updatedAt) < Date.parse(createdAt))
+  if (instantNanos(updatedAt) < instantNanos(createdAt))
     fail("invalid-field", "updatedAt", "is earlier than createdAt");
   return { createdAt, updatedAt };
 }
@@ -642,9 +661,6 @@ export async function buildRouteFields(input: {
   const route = input.local.route;
   if (!isObject(route) || !Array.isArray(route.segments))
     return fail("malformed", "route", "has no segments");
-  const { geometry, pointCount, bounds } = encodeGeometry(
-    route.segments as RouteSegmentLike[],
-  );
   const kind = route.kind;
   if (!ROUTE_KINDS.includes(kind as never))
     fail("invalid-field", "route.kind", "must be Navigation or ExerciseLoop");
@@ -659,6 +675,13 @@ export async function buildRouteFields(input: {
       "lengthMeters",
       `must be 0-${LIMITS.lengthMetersMax} m`,
     );
+  // The route the engine produced must be one this contract's own reader would accept: check its shape before
+  // anything is read from it, built or encoded, so a malformed route fails here with a CloudRecordError and never
+  // reaches a write.
+  engineShape(route);
+  const { geometry, pointCount, bounds } = encodeGeometry(
+    route.segments as RouteSegmentLike[],
+  );
   if (!input.local.draft.start)
     fail("missing-field", "draft.start", "is required");
   const fields: RouteFields = {
@@ -686,6 +709,17 @@ export async function buildRouteFields(input: {
   }
   kindMatchesDraft(fields.kind, fields.draft);
   endpointsInside(fields.draft, bounds);
+  // Belt and braces: what the builder produces must pass the reader's own engine check.
+  if (fields.engine) {
+    const epoch = "1970-01-01T00:00:00Z";
+    await engineMatchesRecord(
+      toRouteRecord(fields, {
+        createdAt: epoch,
+        updatedAt: epoch,
+        revision: 1,
+      }),
+    );
+  }
   return fields;
 }
 

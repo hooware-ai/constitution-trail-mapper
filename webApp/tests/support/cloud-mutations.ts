@@ -371,6 +371,16 @@ export const ROUTE_MUTATIONS: Mutation[] = [
     rules: "na",
     note: "timestamps are server-assigned in a document",
   },
+  {
+    name: "an updated time one nanosecond before the created time",
+    change: (r) => {
+      r.createdAt = "2026-10-01T12:00:00.000000002Z";
+      r.updatedAt = "2026-10-01T12:00:00.000000001Z";
+    },
+    ts: "invalid-field",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
 ];
 
 export const PLACE_MUTATIONS: Mutation[] = [
@@ -511,6 +521,16 @@ export const PLACE_MUTATIONS: Mutation[] = [
       r.updatedAt = "2026-10-01T13:00:00.5Z";
     },
     ts: "ok",
+    rules: "na",
+    note: "timestamps are server-assigned in a document",
+  },
+  {
+    name: "an updated time one nanosecond before the created time",
+    change: (r) => {
+      r.createdAt = "2026-10-01T12:00:00.000000002Z";
+      r.updatedAt = "2026-10-01T12:00:00.000000001Z";
+    },
+    ts: "invalid-field",
     rules: "na",
     note: "timestamps are server-assigned in a document",
   },
