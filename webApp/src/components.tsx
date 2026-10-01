@@ -166,13 +166,18 @@ export function PlaceChooser({
       </ul>
       {!options.length && (
         <p>
-          No matching place. Try a park or trail crossing, or pick on the map.
+          No matching place. This search only knows {places.length} public
+          places and the places you saved. Use Pick on map, Use current location
+          or a saved place instead.
         </p>
       )}
       <p className="caption">
+        Not an address or business search: only {places.length} public places
+        near Bloomington–Normal{fixture ? " (plus review trailheads)" : ""} and
+        your saved places, searched on this device.{" "}
         {start
-          ? "Local place search. Results near your selected start are shown first."
-          : "Using Bloomington–Normal area; Start has no resolved coordinate."}
+          ? "Results near your selected start are shown first."
+          : "Start has no resolved coordinate, so results are not ordered by distance."}
       </p>
     </Modal>
   );

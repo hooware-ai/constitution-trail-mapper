@@ -839,6 +839,88 @@ dialog::backdrop {
 .local-badge {
   font-size: 0.8rem;
 }
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.help-button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 14px;
+  font-weight: 700;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-weight: 700;
+}
+.help {
+  overflow-wrap: anywhere;
+}
+.help h3 {
+  margin: 18px 0 6px;
+}
+.help h3:focus,
+.help section:focus {
+  outline: 2px solid #145c4b;
+  outline-offset: 2px;
+}
+.help ul.help-contents {
+  padding-left: 0;
+}
+.help-contents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.help-contents a {
+  display: inline-block;
+  min-height: 44px;
+  line-height: 44px;
+}
+.help-critical {
+  border-left: 4px solid #8a5a00;
+  background: #fff6e5;
+  padding: 4px 12px;
+  border-radius: 8px;
+}
+.help dt {
+  font-weight: 700;
+  margin-top: 8px;
+}
+.help dd {
+  margin: 2px 0 0;
+}
+.help textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}
+.help ul {
+  padding-left: 1.2em;
+}
+.help li {
+  margin-bottom: 8px;
+}
 .eyebrow {
   display: none;
 }
@@ -1040,6 +1122,17 @@ dialog::backdrop {
 @media (max-width: 760px) {
   .app-header .brand {
     font-size: 1.15rem;
+  }
+  header .brand {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .header-actions {
+    flex-shrink: 0;
+    gap: 6px;
+  }
+  .help-button {
+    padding: 6px 10px;
   }
   .local-badge {
     max-width: 110px;

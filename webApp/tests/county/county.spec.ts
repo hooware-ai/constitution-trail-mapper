@@ -710,3 +710,41 @@ test("a description with damaged omission details is refused at load, with Retry
     "Review candidate",
   );
 });
+
+test("Help describes the packaged county data it is running on: coverage, license, changes, identity and review status", async ({
+  page,
+}) => {
+  await seedPlaces(page);
+  await page.goto("/");
+  await expect(page.locator(".review-banner")).toContainText(
+    "Review candidate",
+  );
+  await page.getByRole("button", { name: /^Help/ }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Help and about" });
+  await expect(dialog).toContainText(
+    "Bloomington–Normal and nearby McLean County",
+  );
+  await expect(dialog).toContainText("5 existing trail features (about");
+  await expect(dialog).toContainText(
+    "The county data has no street or shared-roadway information",
+  );
+  await expect(dialog).not.toContainText("Do not ride it");
+  // Source, license and change notices, with the license as a real link.
+  await expect(dialog.getByRole("link", { name: /CC BY 4.0/ })).toHaveAttribute(
+    "href",
+    "https://creativecommons.org/licenses/by/4.0/",
+  );
+  await expect(dialog).toContainText("Changes made:");
+  await expect(dialog).toContainText("Feature set reviewed on 2026-01-01");
+  await expect(dialog).toContainText("not approved for public release");
+  // Dataset and build identity: the data version and its hash prefix, and the build line.
+  const record = await (await page.request.get("/data/dataset.json")).json();
+  await expect(dialog).toContainText(record.version);
+  await expect(dialog).toContainText(record.content.sha256.slice(0, 12));
+  await expect(dialog).toContainText("county data build");
+  // The optional basemap exists in this build, so the privacy copy does not say it is unavailable.
+  await expect(dialog).not.toContainText(
+    "not offered in the synthetic review build",
+  );
+  await expect(dialog).toContainText("Street basemap (online)");
+});

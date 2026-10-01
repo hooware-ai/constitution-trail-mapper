@@ -1,7 +1,8 @@
 import { defineConfig } from "vite";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { verifyCoreManifest } from "./tools/lib/core.mjs";
+import { execFileSync } from "node:child_process";
+import { repoRoot, verifyCoreManifest } from "./tools/lib/core.mjs";
 import { verifyPackageDir } from "./tools/lib/dataset-package.mjs";
 import { distDir } from "./tools/lib/provenance.mjs";
 
@@ -19,6 +20,28 @@ if (channel !== "review" && channel !== "public")
   throw new Error(
     `TRAIL_CHANNEL must be "review" or "public" (got "${channel}").`,
   );
+const git = (...args: string[]) => {
+  try {
+    return execFileSync("git", args, {
+      cwd: repoRoot,
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return null;
+  }
+};
+const status = git("status", "--porcelain", "--untracked-files=all");
+let coreHash: string | null = null;
+try {
+  coreHash = (await verifyCoreManifest()).inputs.sha256.slice(0, 12);
+} catch {
+  /* dev servers may run before the core is built; Help then omits it */
+}
+const buildInfo = {
+  commit: git("rev-parse", "--short=12", "HEAD") ?? "unknown",
+  dirty: status === null ? null : status.length > 0,
+  core: coreHash,
+};
 const countyPackage = resolve(
   process.env.TRAIL_COUNTY_DIR ?? "generated/county",
 );
@@ -28,6 +51,7 @@ export default defineConfig({
   define: {
     __TRAIL_DATASET__: JSON.stringify(datasetKind),
     __TRAIL_CHANNEL__: JSON.stringify(channel),
+    __TRAIL_BUILD__: JSON.stringify(buildInfo),
   },
   build: { outDir: distDir, emptyOutDir: true },
   server: {

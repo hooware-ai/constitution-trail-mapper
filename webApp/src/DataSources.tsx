@@ -7,12 +7,21 @@ const day = (iso: string) => iso.slice(0, 10);
  * What data the routes are planned on, who supplied it under which license, what was changed and what is missing.
  * Extraction time and review date are shown as what they are; neither is presented as the source's own freshness.
  */
-export function DataSources({ network }: { network: Network }) {
+export function DataSources({
+  network,
+  level = 2,
+}: {
+  network: Network;
+  /** Heading level of the section title, so it nests correctly inside a dialog. */
+  level?: 2 | 3;
+}) {
+  const Title = `h${level}` as "h2" | "h3";
+  const Sub = `h${level + 1}` as "h3" | "h4";
   const record = network.datasetRecord;
   if (network.mode === "fixture")
     return (
       <section className="data-sources" aria-label="Trail data">
-        <h2>Trail data</h2>
+        <Title>Trail data</Title>
         <p>
           Synthetic review geometry created for Trail Mapper (CC0). It is not
           real infrastructure and is never approved for a ride.
@@ -22,7 +31,7 @@ export function DataSources({ network }: { network: Network }) {
   if (!record)
     return (
       <section className="data-sources" aria-label="Trail data">
-        <h2>Trail data</h2>
+        <Title>Trail data</Title>
         <p>
           Private local review data. It has no recorded identity, license
           evidence or approval, so it is for developer review only.
@@ -32,7 +41,7 @@ export function DataSources({ network }: { network: Network }) {
   const { source, omitted, approval, content } = record;
   return (
     <section className="data-sources" aria-label="Trail data">
-      <h2>Trail data</h2>
+      <Title>Trail data</Title>
       <p>
         {record.label} · version <code>{record.version}</code>
       </p>
@@ -53,7 +62,7 @@ export function DataSources({ network }: { network: Network }) {
       <p>
         {content.featureCount} existing trail features. {source.disclaimer}
       </p>
-      <h3>What is not included</h3>
+      <Sub>What is not included</Sub>
       <ul>
         {omitted.proposedFeatureIds.length > 0 && (
           <li>
