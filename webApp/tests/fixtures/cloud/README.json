@@ -1,0 +1,15 @@
+{
+  "note": "Synthetic records for the Trail Mapper saved-library contract (docs/web/cloud-library-contract.md). Self-authored geometry, fixture dataset provenance, no real place, rider or county data.",
+  "contract": "trail-mapper.saved-route/1 and trail-mapper.saved-place/1",
+  "valid": [
+    "route-point-to-point.json",
+    "route-loop.json",
+    "route-no-engine.json",
+    "place.json"
+  ],
+  "invalid": "invalid-records.json: each entry names the CloudRecordError code a reader must report; none may open partly",
+  "ids": {
+    "route": "r_0123456789abcdef0123456789abcdef",
+    "place": "p_0123456789abcdef0123456789abcdef"
+  }
+}
