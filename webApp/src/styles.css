@@ -548,8 +548,9 @@ nav button[aria-current="page"] {
 }
 .route-stats {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24px;
+  gap: 8px 24px;
   margin: 20px 0 10px;
 }
 .route-stats > strong {
@@ -1119,6 +1120,7 @@ dialog::backdrop {
 .route-stats > div {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 .route-stats > div > strong {
   font-size: 2.5rem;
