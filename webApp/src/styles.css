@@ -182,7 +182,11 @@ header .quiet {
 }
 .workspace {
   display: grid;
-  grid-template-columns: minmax(340px, 420px) 1fr;
+  /* 340-420px at normal text; the column grows with larger text (rem) so its controls are never cut off, but never takes
+     more than about 60% of a narrow window. */
+  grid-template-columns:
+    minmax(max(340px, min(21.25rem, 55vw)), max(420px, min(26.25rem, 62vw)))
+    1fr;
   min-height: calc(100dvh - 189px);
   grid-template-areas: "panel map";
 }
@@ -678,6 +682,15 @@ dialog::backdrop {
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 20px;
+}
+/* At larger text a dialog's title and its close button wrap onto two lines instead of making the dialog scroll sideways. */
+.dialog-title,
+.dialog-heading {
+  flex-wrap: wrap;
+}
+.dialog-title button,
+.dialog-heading button {
+  margin-left: auto;
 }
 .dialog-title h2 {
   margin: 10px 0;

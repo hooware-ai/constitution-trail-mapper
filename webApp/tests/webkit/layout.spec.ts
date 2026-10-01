@@ -245,9 +245,13 @@ async function problems(page: Page) {
       const own = el.getBoundingClientRect();
       if (own.width <= 2 && own.height <= 2) continue;
       const style = getComputedStyle(el);
-      const cuts = ["hidden", "clip"].includes(style.overflowX);
+      // A scroll container whose content is wider than it is (the planner column scrolling inside itself) is as broken as
+      // cut-off text: controls start off its edge.
+      const cuts = ["hidden", "clip", "auto", "scroll"].includes(
+        style.overflowX,
+      );
       if (cuts && el.scrollWidth > el.clientWidth + 1)
-        out.push(`cut off: ${name(el)}`);
+        out.push(`cut off or scrolls inside itself: ${name(el)}`);
     }
     return out;
   });
@@ -259,12 +263,6 @@ for (const percent of [175, 200]) {
   test(`[engine] at ${percent}% text every key screen fits, nothing is cut off, and controls stay reachable`, async ({
     page,
   }, info) => {
-    // Known desktop limit, documented in docs/web/launch-acceptance.md: text-only 200% on a wide window makes the fixed-width
-    // planner column scroll sideways inside itself. The phone profiles (the requirement) are asserted at both sizes.
-    test.skip(
-      percent === 200 && info.project.name === "webkit-desktop",
-      "desktop 200% text-only scaling: documented limit",
-    );
     const size = `${(16 * percent) / 100}px`;
     await page.goto("/");
     await page.evaluate(
