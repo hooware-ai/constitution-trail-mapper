@@ -15,6 +15,13 @@
 }
 body {
   margin: 0;
+  /* A single long word breaks rather than widening the page (headings and notices at large text, wider fonts). */
+  overflow-wrap: break-word;
+}
+h1,
+h2,
+h3 {
+  overflow-wrap: anywhere;
 }
 button,
 input,
@@ -978,7 +985,7 @@ dialog::backdrop {
 }
 .route-choice {
   display: grid;
-  grid-template-columns: 36px 1fr;
+  grid-template-columns: 36px minmax(0, 1fr);
   gap: 2px 15px;
 }
 .route-choice > span {
@@ -1021,6 +1028,10 @@ dialog::backdrop {
 .checkbox small {
   display: block;
   font-weight: 400;
+}
+.checkbox > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .distance-presets {
   display: flex;

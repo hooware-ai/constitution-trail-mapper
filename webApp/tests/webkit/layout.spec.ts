@@ -230,7 +230,24 @@ async function problems(page: Page) {
       `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30)}"`;
     const out: string[] = [];
     const scrolls = document.documentElement.scrollWidth - width;
-    if (scrolls > 1) out.push(`page scrolls sideways by ${scrolls}px`);
+    if (scrolls > 1) {
+      // Name the widest culprits (the text range as well as the box: a long word can overflow a box that looks narrow).
+      const wide: string[] = [];
+      for (const el of document.querySelectorAll("body *")) {
+        if (el.closest(".leaflet-container")) continue;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const right = Math.max(
+          range.getBoundingClientRect().right,
+          el.getBoundingClientRect().right,
+        );
+        if (right > width + 1 && el.getBoundingClientRect().width > 2)
+          wide.push(`${name(el)} reaches ${Math.round(right)}px`);
+      }
+      out.push(
+        `page scrolls sideways by ${scrolls}px; reaching past the edge: ${wide.slice(-4).join("; ")}`,
+      );
+    }
     for (const el of document.querySelectorAll(
       "button, a[href], input, select, textarea, [role=button]",
     )) {
@@ -259,12 +276,22 @@ async function problems(page: Page) {
 const sound = async (page: Page, what: string) =>
   expect(await problems(page), what).toEqual([]);
 
-for (const percent of [175, 200]) {
-  test(`[engine] at ${percent}% text every key screen fits, nothing is cut off, and controls stay reachable`, async ({
+for (const [percent, wide] of [
+  [175, false],
+  [200, false],
+  [175, true],
+  [200, true],
+] as const) {
+  test(`[engine] at ${percent}% text${wide ? " with wider letters" : ""} every key screen fits, nothing is cut off, and controls stay reachable`, async ({
     page,
   }, info) => {
     const size = `${(16 * percent) / 100}px`;
     await page.goto("/");
+    if (wide)
+      // Stands in for a wider fallback font (the hosted Linux runner has one): every letter 0.14em wider (harsher than the hosted runner).
+      await page.addStyleTag({
+        content: "*{letter-spacing:0.14em !important}",
+      });
     await page.evaluate(
       (px) => (document.documentElement.style.fontSize = px),
       size,
