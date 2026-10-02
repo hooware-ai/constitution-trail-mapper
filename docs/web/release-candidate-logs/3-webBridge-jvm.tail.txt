@@ -1,0 +1,33 @@
+# last 60 lines of 3-webBridge-jvm (paths made checkout-relative)
+Reusing configuration cache.
+> Task :sharedLogic:jvmProcessResources NO-SOURCE
+> Task :webBridge:jvmTestProcessResources NO-SOURCE
+> Task :webBridge:jvmProcessResources NO-SOURCE
+> Task :webBridge:kmpPartiallyResolvedDependenciesChecker
+> Task :sharedLogic:kmpPartiallyResolvedDependenciesChecker
+> Task :webBridge:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :webBridge:processJvmMainResources SKIPPED
+> Task :webBridge:processJvmTestResources SKIPPED
+> Task :sharedLogic:processJvmMainResources SKIPPED
+> Task :sharedLogic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :sharedLogic:compileKotlinJvm
+> Task :sharedLogic:compileJvmMainJava NO-SOURCE
+> Task :sharedLogic:jvmMainClasses
+> Task :sharedLogic:jvmJar
+
+> Task :webBridge:compileKotlinJvm
+w: file:///<home>/Documents/ctm-web-release-candidate/webBridge/src/commonMain/kotlin/com/trailmapper/web/WebRoutingBridge.kt:364:27 Condition is always 'true'.
+
+> Task :webBridge:compileJvmMainJava NO-SOURCE
+> Task :webBridge:jvmMainClasses
+> Task :webBridge:jvmJar
+> Task :webBridge:compileTestKotlinJvm
+> Task :webBridge:compileJvmTestJava NO-SOURCE
+> Task :webBridge:jvmTestClasses
+> Task :webBridge:jvmTest
+
+[Incubating] Problems report is available at: file:///<home>/Documents/ctm-web-release-candidate/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 8s
+8 actionable tasks: 8 executed
+Configuration cache entry reused.

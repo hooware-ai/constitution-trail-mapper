@@ -1,0 +1,12 @@
+1-sharedLogic-jvm exit=0 secs=89 :: ./gradlew :sharedLogic:jvmTest
+2-sharedLogic-js exit=0 secs=20 :: ./gradlew :sharedLogic:jsNodeTest
+3-webBridge-jvm exit=0 secs=9 :: ./gradlew :webBridge:jvmTest
+4-webBridge-js exit=0 secs=13 :: ./gradlew :webBridge:jsNodeTest
+5-shared-androidHost exit=0 secs=16 :: ./gradlew :shared:testAndroidHostTest
+6-android-assemble exit=0 secs=25 :: ./gradlew :androidApp:assembleDebug
+7-android-lint exit=0 secs=47 :: ./gradlew :androidApp:lintDebug
+8-npm-ci exit=0
+9-release-check exit=0 
+10-webkit-install exit=0
+11-test-webkit exit=0
+12-test-rules exit=0

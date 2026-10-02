@@ -1,0 +1,61 @@
+# last 60 lines of 12-rules (paths made checkout-relative)
+false for 'create' @ L107, false for 'create' @ L165, false for 'update' @ L113, false for 'update' @ L165
+[2026-10-02T23:43:07.211Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa66e error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L107, false for 'create' @ L165, false for 'update' @ L113, false for 'update' @ L165
+[2026-10-02T23:43:07.220Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa66f error. Code: 7 Message: 7 PERMISSION_DENIED: 
+Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'update' @ L113, false for 'update' @ L165
+[2026-10-02T23:43:07.244Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa670 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'update' @ L113, false for 'update' @ L165
+[2026-10-02T23:43:07.257Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa671 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'create' @ L107, false for 'create' @ L165
+[2026-10-02T23:43:07.262Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa672 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L107, false for 'create' @ L165, false for 'update' @ L113, false for 'update' @ L165
+✔ a write cannot spoof its owner, reassign identity, or choose its own timestamps (238.0191ms)
+[2026-10-02T23:43:07.348Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa676 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'update' @ L113, false for 'update' @ L165
+[2026-10-02T23:43:07.366Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa677 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'update' @ L113, false for 'update' @ L165
+[2026-10-02T23:43:07.382Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa678 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'update' @ L113, false for 'update' @ L165
+✔ revisions give optimistic concurrency: a stale or skipped revision fails instead of overwriting (140.6439ms)
+[2026-10-02T23:43:07.488Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa67c error. Code: 7 Message: 7 PERMISSION_DENIED: 
+Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'update' @ L113, false for 'update' @ L165
+[2026-10-02T23:43:07.508Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa67d error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'create' @ L107, false for 'create' @ L165
+✔ deleting is final for that revision: an edit of a deleted record fails, a recreate starts again at revision 1 (112.5337ms)
+✔ lists are bounded, scoped to one account, and a collection-group read is denied (122.0947ms)
+[2026-10-02T23:43:07.685Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa681 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L165, false for 'update' @ L165
+[2026-10-02T23:43:07.716Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa683 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L165, false for 'update' @ L165
+[2026-10-02T23:43:07.734Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa684 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L165, false for 'update' @ L165
+[2026-10-02T23:43:07.747Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa685 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L165, false for 'update' @ L165
+✔ nothing else in the database is readable or writable (122.8019ms)
+[2026-10-02T23:43:07.818Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa686 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'create' @ L107, false for 'create' @ L165
+[2026-10-02T23:43:07.896Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa687 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'create' @ L107, false for 'create' @ L165
+✔ payload bounds: a document at the limits is accepted and one byte over is refused, with no partial write (179.1959ms)
+[2026-10-02T23:43:08.007Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa68a error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'create' @ L107, false for 'create' @ L165
+[2026-10-02T23:43:08.018Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa68b error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'create' @ L107, false for 'create' @ L165
+[2026-10-02T23:43:08.044Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x4b7fa68d error. Code: 7 Message: 7 PERMISSION_DENIED: 
+evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L165, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L113, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'update' @ L165, false for 'update' @ L113, false for 'update' @ L165
+✔ a route's kind and plan must pair up in the rules too, in both directions (107.1078ms)
+ℹ tests 75
+ℹ suites 0
+ℹ pass 75
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7404.1721
++  Script exited successfully (code 0)
+i  emulators: Shutting down emulators.
+i  firestore: Stopping Firestore Emulator
+!  Firestore Emulator has exited upon receiving signal: SIGINT
+i  hub: Stopping emulator hub
+i  logging: Stopping Logging Emulator

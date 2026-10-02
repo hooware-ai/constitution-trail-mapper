@@ -1,0 +1,20 @@
+# last 60 lines of 1-sharedLogic-jvm (paths made checkout-relative)
+Reusing configuration cache.
+> Task :sharedLogic:jvmProcessResources NO-SOURCE
+> Task :sharedLogic:jvmTestProcessResources NO-SOURCE
+> Task :sharedLogic:kmpPartiallyResolvedDependenciesChecker
+> Task :sharedLogic:processJvmMainResources SKIPPED
+> Task :sharedLogic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :sharedLogic:processJvmTestResources SKIPPED
+> Task :sharedLogic:compileKotlinJvm
+> Task :sharedLogic:compileJvmMainJava NO-SOURCE
+> Task :sharedLogic:jvmMainClasses
+> Task :sharedLogic:jvmJar
+> Task :sharedLogic:compileTestKotlinJvm
+> Task :sharedLogic:compileJvmTestJava NO-SOURCE
+> Task :sharedLogic:jvmTestClasses
+> Task :sharedLogic:jvmTest
+
+BUILD SUCCESSFUL in 1m 27s
+5 actionable tasks: 5 executed
+Configuration cache entry reused.

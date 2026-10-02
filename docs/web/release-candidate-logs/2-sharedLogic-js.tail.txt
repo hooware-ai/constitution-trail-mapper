@@ -1,0 +1,33 @@
+# last 60 lines of 2-sharedLogic-js (paths made checkout-relative)
+Reusing configuration cache.
+> Task :kotlinNodeJsSetup SKIPPED
+> Task :sharedLogic:kotlinNodeJsSetup SKIPPED
+> Task :sharedLogic:jsProcessResources NO-SOURCE
+> Task :kotlinKotlinNpmCachesSetup
+> Task :sharedLogic:jsTestProcessResources NO-SOURCE
+> Task :sharedLogic:kmpPartiallyResolvedDependenciesChecker
+> Task :sharedLogic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :kotlinRestorePackageLock
+> Task :sharedLogic:jsPackageJson
+> Task :sharedLogic:jsPublicPackageJson
+> Task :sharedLogic:jsTestPackageJson
+> Task :webBridge:jsPackageJson
+> Task :sharedLogic:jsTestPublicPackageJson
+> Task :webBridge:jsPublicPackageJson
+> Task :webBridge:jsTestPackageJson
+> Task :webBridge:jsTestPublicPackageJson
+> Task :kotlinPackageJsonUmbrella
+> Task :rootPackageJson
+> Task :kotlinNpmInstall
+> Task :kotlinStorePackageLock
+> Task :sharedLogic:compileKotlinJs
+> Task :sharedLogic:jsMainClasses
+> Task :sharedLogic:compileTestKotlinJs
+> Task :sharedLogic:jsTestClasses
+> Task :sharedLogic:compileTestDevelopmentExecutableKotlinJs
+> Task :sharedLogic:jsTestTestDevelopmentExecutableCompileSync
+> Task :sharedLogic:jsNodeTest
+
+BUILD SUCCESSFUL in 20s
+19 actionable tasks: 19 executed
+Configuration cache entry reused.

@@ -1,0 +1,13 @@
+# last 60 lines of 8-npm-ci (paths made checkout-relative)
+
+added 121 packages, and audited 122 packages in 39s
+
+12 packages are looking for funding
+  run `npm fund` for details
+
+5 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.

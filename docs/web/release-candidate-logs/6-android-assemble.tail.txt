@@ -1,0 +1,61 @@
+# last 60 lines of 6-android-assemble (paths made checkout-relative)
+> Task :shared:generateActualResourceCollectorsForAndroidMain
+> Task :shared:packageAndroidMainResources
+> Task :androidApp:javaPreCompileDebug
+> Task :shared:parseAndroidMainLocalResources
+> Task :sharedLogic:processAndroidMainManifest
+> Task :shared:processAndroidMainManifest
+> Task :shared:generateAndroidMainRFile
+> Task :androidApp:checkDebugAarMetadata
+> Task :androidApp:processDebugNavigationResources
+> Task :androidApp:mergeDebugAssets
+> Task :androidApp:compileDebugNavigationResources
+> Task :androidApp:packageDebugResources
+> Task :androidApp:checkDebugDuplicateClasses
+> Task :androidApp:parseDebugLocalResources
+> Task :androidApp:generateDebugRFile
+> Task :androidApp:processDebugMainManifest
+> Task :androidApp:processDebugManifest
+> Task :androidApp:compressDebugAssets
+> Task :androidApp:mergeDebugNativeLibs
+> Task :androidApp:processDebugManifestForPackage
+> Task :shared:compileAndroidMainLibraryResources
+
+> Task :androidApp:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libmaplibre.so. Run with --info option to learn more.
+
+> Task :androidApp:generateDebugGlobalSynthetics
+> Task :sharedLogic:compileAndroidMain
+> Task :sharedLogic:processAndroidMainJavaRes
+> Task :sharedLogic:bundleAndroidMainClassesToCompileJar
+> Task :sharedLogic:bundleLibRuntimeToDirAndroidMain
+> Task :androidApp:mergeDebugResources
+
+> Task :shared:compileAndroidMain
+w: file:///<home>/Documents/ctm-web-release-candidate/shared/src/commonMain/kotlin/com/trailmapper/shared/TrailMapperViewModel.kt:119:13 Expression is unused.
+w: file:///<home>/Documents/ctm-web-release-candidate/shared/src/commonMain/kotlin/com/trailmapper/shared/TrailRoutePreviewSaveController.kt:104:17 Expression is unused.
+
+> Task :shared:processAndroidMainJavaRes
+> Task :androidApp:processDebugResources
+> Task :shared:bundleAndroidMainClassesToCompileJar
+> Task :shared:bundleLibRuntimeToDirAndroidMain
+> Task :androidApp:mergeLibDexDebug
+> Task :androidApp:mergeExtDexDebug
+
+> Task :androidApp:compileDebugKotlin
+w: file:///<home>/Documents/ctm-web-release-candidate/androidApp/src/main/kotlin/com/trailmapper/android/map/TrailRouteMapActivity.kt:295:13 Expression is unused.
+
+> Task :androidApp:processDebugJavaRes
+> Task :androidApp:compileDebugJavaWithJavac
+> Task :androidApp:mergeDebugJavaResource
+> Task :androidApp:dexBuilderDebug
+> Task :androidApp:mergeProjectDexDebug
+> Task :androidApp:packageDebug
+> Task :androidApp:assembleDebug
+> Task :androidApp:createDebugApkListingFileRedirect
+
+[Incubating] Problems report is available at: file:///<home>/Documents/ctm-web-release-candidate/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 24s
+69 actionable tasks: 69 executed
+Configuration cache entry reused.

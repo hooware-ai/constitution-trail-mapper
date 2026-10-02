@@ -1,0 +1,39 @@
+# last 60 lines of 4-webBridge-js (paths made checkout-relative)
+Reusing configuration cache.
+> Task :kotlinNodeJsSetup SKIPPED
+> Task :webBridge:kotlinNodeJsSetup SKIPPED
+> Task :kotlinKotlinNpmCachesSetup
+> Task :webBridge:jsTestProcessResources NO-SOURCE
+> Task :webBridge:jsProcessResources NO-SOURCE
+> Task :sharedLogic:kmpPartiallyResolvedDependenciesChecker
+> Task :webBridge:kmpPartiallyResolvedDependenciesChecker
+> Task :sharedLogic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :webBridge:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :kotlinRestorePackageLock
+> Task :sharedLogic:jsPackageJson
+> Task :sharedLogic:jsPublicPackageJson
+> Task :webBridge:jsPackageJson
+> Task :sharedLogic:jsTestPackageJson
+> Task :webBridge:jsPublicPackageJson
+> Task :sharedLogic:jsTestPublicPackageJson
+> Task :webBridge:jsTestPackageJson
+> Task :webBridge:jsTestPublicPackageJson
+> Task :kotlinPackageJsonUmbrella
+> Task :rootPackageJson
+> Task :sharedLogic:compileKotlinJs
+> Task :kotlinNpmInstall
+> Task :kotlinStorePackageLock
+
+> Task :webBridge:compileKotlinJs
+w: file:///<home>/Documents/ctm-web-release-candidate/webBridge/src/commonMain/kotlin/com/trailmapper/web/WebRoutingBridge.kt:364:27 Condition is always 'true'.
+
+> Task :webBridge:jsMainClasses
+> Task :webBridge:compileTestKotlinJs
+> Task :webBridge:jsTestClasses
+> Task :webBridge:compileTestDevelopmentExecutableKotlinJs
+> Task :webBridge:jsTestTestDevelopmentExecutableCompileSync
+> Task :webBridge:jsNodeTest
+
+BUILD SUCCESSFUL in 12s
+21 actionable tasks: 21 executed
+Configuration cache entry reused.

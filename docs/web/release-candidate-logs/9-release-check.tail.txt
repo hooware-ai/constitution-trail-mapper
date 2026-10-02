@@ -1,0 +1,61 @@
+# last 60 lines of 9-release-check (paths made checkout-relative)
+  ok 54 [osm-chromium] › tests\county\osm-supplement.spec.ts:76:1 › a destination only the reviewed OpenStreetMap path reaches can be planned, and Help and the map credit say where it came from (2.9s)
+  ok 55 [osm-chromium] › tests\county\osm-supplement.spec.ts:125:1 › Explore marks the reviewed additions in the map key, as native does (2.6s)
+  ok 56 [osm-chromium] › tests\county\osm-supplement.spec.ts:142:1 › the supplement changes the data identity a saved route remembers, and no accessibility violation appears in the data section (3.7s)
+  ok 57 [osm-chromium] › tests\county\osm-supplement.spec.ts:171:1 › control: the same journey on the county build WITHOUT the supplement cannot reach that destination as a mapped route (3.1s)
+(node:26728) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 58 [access-chromium] › tests\county\access-tiles.spec.ts:63:1 › opening the planner downloads the base roads and no service-road tile or index (2.7s)
+  ok 59 [access-chromium] › tests\county\access-tiles.spec.ts:77:1 › a trip downloads the index and only the tiles around its endpoints, and the road access is routed (2.9s)
+  ok 60 [access-chromium] › tests\county\access-tiles.spec.ts:100:1 › a tile that cannot be downloaded is reported, and the next attempt succeeds (2.9s)
+  ok 61 [access-chromium] › tests\county\access-tiles.spec.ts:126:1 › a tile whose bytes were altered fails its hash and is not used (3.1s)
+  ok 62 [access-chromium] › tests\county\access-tiles.spec.ts:152:1 › Help and the map credit say where the road data came from, with no accessibility violation (3.1s)
+  ok 63 [access-chromium] › tests\county\access-tiles.spec.ts:180:1 › Explore draws the reported closure with its official notice link, and its switch hides and shows it (2.7s)
+  ok 64 [access-chromium] › tests\county\access-tiles.spec.ts:214:1 › control: the same journey on the build WITHOUT access data cannot be navigated (2.8s)
+(node:52068) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 65 [access-mobile] › tests\county\access-tiles.spec.ts:63:1 › opening the planner downloads the base roads and no service-road tile or index (2.5s)
+  ok 66 [access-mobile] › tests\county\access-tiles.spec.ts:77:1 › a trip downloads the index and only the tiles around its endpoints, and the road access is routed (2.8s)
+  ok 67 [access-mobile] › tests\county\access-tiles.spec.ts:100:1 › a tile that cannot be downloaded is reported, and the next attempt succeeds (2.9s)
+  ok 68 [access-mobile] › tests\county\access-tiles.spec.ts:126:1 › a tile whose bytes were altered fails its hash and is not used (2.9s)
+  ok 69 [access-mobile] › tests\county\access-tiles.spec.ts:152:1 › Help and the map credit say where the road data came from, with no accessibility violation (3.1s)
+  ok 70 [access-mobile] › tests\county\access-tiles.spec.ts:180:1 › Explore draws the reported closure with its official notice link, and its switch hides and shows it (2.7s)
+  ok 71 [access-mobile] › tests\county\access-tiles.spec.ts:214:1 › control: the same journey on the build WITHOUT access data cannot be navigated (2.8s)
+(node:11828) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 72 [proposed-chromium] › tests\county\proposed-layer.spec.ts:61:1 › the proposed layer is off by default: without the opt-in the proposed end cannot be navigated to (2.8s)
+  ok 73 [proposed-chromium] › tests\county\proposed-layer.spec.ts:82:1 › with the explicit opt-in the proposed segments are routed as a preview that cannot start navigation (2.8s)
+  ok 74 [proposed-chromium] › tests\county\proposed-layer.spec.ts:99:1 › Help lists the proposed layer with the rights it was admitted under, and has no accessibility violation (3.1s)
+  ok 75 [proposed-chromium] › tests\county\proposed-layer.spec.ts:120:1 › control: the standard county build has no proposed layer, and the switch says so instead of doing nothing (2.8s)
+(node:43664) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 76 [proposed-mobile] › tests\county\proposed-layer.spec.ts:61:1 › the proposed layer is off by default: without the opt-in the proposed end cannot be navigated to (2.9s)
+  ok 77 [proposed-mobile] › tests\county\proposed-layer.spec.ts:82:1 › with the explicit opt-in the proposed segments are routed as a preview that cannot start navigation (2.9s)
+  ok 78 [proposed-mobile] › tests\county\proposed-layer.spec.ts:99:1 › Help lists the proposed layer with the rights it was admitted under, and has no accessibility violation (3.0s)
+  ok 79 [proposed-mobile] › tests\county\proposed-layer.spec.ts:120:1 › control: the standard county build has no proposed layer, and the switch says so instead of doing nothing (2.8s)
+(node:33404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 80 [credits-chromium] › tests\county\image-credits.spec.ts:34:1 › the route image carries the county, OpenStreetMap, access and proposed credits in full (3.2s)
+(node:19820) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 81 [osm-mobile] › tests\county\osm-supplement.spec.ts:49:1 › the packaged supplement is in the data record, counted, hash-named and described (138ms)
+  ok 82 [osm-mobile] › tests\county\osm-supplement.spec.ts:76:1 › a destination only the reviewed OpenStreetMap path reaches can be planned, and Help and the map credit say where it came from (3.0s)
+  ok 83 [osm-mobile] › tests\county\osm-supplement.spec.ts:125:1 › Explore marks the reviewed additions in the map key, as native does (2.5s)
+  ok 84 [osm-mobile] › tests\county\osm-supplement.spec.ts:142:1 › the supplement changes the data identity a saved route remembers, and no accessibility violation appears in the data section (3.4s)
+  ok 85 [osm-mobile] › tests\county\osm-supplement.spec.ts:171:1 › control: the same journey on the county build WITHOUT the supplement cannot reach that destination as a mapped route (2.9s)
+(node:26316) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 86 [artifact] › tests\dist\county-smoke.spec.ts:11:1 › the dataset record is revalidated on every load while the hash-named network is immutable (2.7s)
+  ok 87 [artifact] › tests\dist\county-smoke.spec.ts:61:1 › provenance names the county dataset, its manifest and content, and states approval truthfully (27ms)
+
+  87 passed (5.4m)
+
+=== Re-verify provenance after the suites
+Distribution audit passed: 7 files, no local review assets or credential patterns, provenance verified. NOT approved for public release: dataset is the synthetic fixture network; dataset is not marked approved.
+
+Release check passed.
+  commit:   048ab56d6b9393ad4ab68cc43d2672f04e6e4781
+  core:     inputs 01bc47b1a4d7f533  output 4f552090dbd3818c
+  dataset:  synthetic-review-network@1 (fixture, approved: false)
+  artifact: dist/ 7 files, b32db6bdf034f602
+  public release: BLOCKED - dataset is the synthetic fixture network; dataset is not marked approved
