@@ -3543,3 +3543,172 @@ test("control: the same jump IS credited once continued travel from where it lan
   const carried = await leaveAndRejoin(page);
   expect(carried.carried.distanceMeters).toBeGreaterThan(1500);
 });
+
+async function openShare(page: Page, miles = "1") {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("spinbutton", { name: "Custom miles" }).fill(miles);
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Share route" })).toBeVisible();
+}
+/** Decodes the PNG in the page and reports what it contains, so the test judges the picture and not just the file. */
+async function describePng(page: Page, bytes: Buffer) {
+  return page.evaluate(async (base64) => {
+    const data = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(
+      new Blob([data], { type: "image/png" }),
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(bitmap, 0, 0);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let route = 0;
+    let dark = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
+      if (
+        Math.abs(r - 8) < 12 &&
+        Math.abs(g - 114) < 12 &&
+        Math.abs(b - 95) < 12
+      )
+        route++;
+      if (r < 60 && g < 60 && b < 60) dark++;
+    }
+    const top = ctx.getImageData(10, 5, 1, 1).data;
+    return {
+      width: bitmap.width,
+      height: bitmap.height,
+      route,
+      dark,
+      accentBar: [top[0], top[1], top[2]],
+      signature: Array.from(data.slice(0, 8)),
+    };
+  }, bytes.toString("base64"));
+}
+
+test("the route image downloads as a real PNG with the route, the header and no map tiles requested", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", { value: undefined });
+  });
+  await openShare(page);
+  // The map on the page may ask for its optional tiles; making the picture must not ask for anything at all.
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  const button = page.getByRole("button", { name: "Save route image" });
+  await expect(button).toBeEnabled();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    button.click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("trail-mapper-route.png");
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const png = Buffer.concat(chunks);
+  expect(png.length).toBeGreaterThan(10_000);
+  const info = await describePng(page, png);
+  expect(info.signature).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  expect(info.width).toBe(1080);
+  expect(info.height).toBeGreaterThan(800);
+  // The header's accent bar, the route's own colour, and dark text and cues are all really there.
+  expect(info.accentBar).toEqual([8, 114, 95]);
+  expect(info.route).toBeGreaterThan(300);
+  expect(info.dark).toBeGreaterThan(300);
+  // Private by default, and said so; nothing came from a map service.
+  await expect(
+    page.getByText("Route image downloaded with endpoint areas removed."),
+  ).toBeVisible();
+  expect(
+    requests.filter(
+      (url) => !url.startsWith("blob:") && !url.startsWith("data:"),
+    ),
+  ).toEqual([]);
+});
+
+test("approving exact endpoints changes what the image says, and the file differs", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", { value: undefined });
+  });
+  await openShare(page, "5");
+  const grab = async () => {
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Save route image" }).click(),
+    ]);
+    const chunks: Buffer[] = [];
+    for await (const chunk of await download.createReadStream())
+      chunks.push(chunk as Buffer);
+    return Buffer.concat(chunks);
+  };
+  const hidden = await grab();
+  await page
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const exact = await grab();
+  await expect(
+    page.getByText("Route image downloaded with your endpoint approval."),
+  ).toBeVisible();
+  expect(exact.equals(hidden)).toBe(false);
+});
+
+test("where the browser can share a file the image goes to the share sheet, and closing the sheet is not an error", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    (window as any).__shares = [];
+    (window as any).__abort = false;
+    Object.defineProperty(navigator, "canShare", {
+      value: (data: any) => !!data?.files?.length,
+    });
+    Object.defineProperty(navigator, "share", {
+      value: async (data: any) => {
+        (window as any).__shares.push({
+          title: data.title,
+          files: data.files.map((f: File) => ({
+            name: f.name,
+            type: f.type,
+            size: f.size,
+          })),
+        });
+        if ((window as any).__abort)
+          throw new DOMException("closed", "AbortError");
+      },
+    });
+  });
+  await openShare(page);
+  const share = page.getByRole("button", { name: "Share route image" });
+  await expect(share).toBeEnabled();
+  await share.click();
+  await expect(page.getByText("Route image shared.")).toBeVisible();
+  const shared = await page.evaluate(() => (window as any).__shares);
+  expect(shared).toHaveLength(1);
+  expect(shared[0].title).toBe("Trail Mapper route");
+  expect(shared[0].files[0]).toMatchObject({
+    name: "trail-mapper-route.png",
+    type: "image/png",
+  });
+  expect(shared[0].files[0].size).toBeGreaterThan(10_000);
+
+  // Dismissing the share sheet is a choice: no error is shown.
+  await page.evaluate(() => ((window as any).__abort = true));
+  await share.click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__shares.length))
+    .toBe(2);
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: /could not|failed|error|cannot/i }),
+  ).toHaveCount(0);
+});

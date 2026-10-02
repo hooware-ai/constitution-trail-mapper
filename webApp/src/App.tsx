@@ -9,6 +9,7 @@ import { MapView } from "./MapView";
 import { DataSources } from "./DataSources";
 import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
+import { renderImage } from "./shareImage";
 import { HelpDialog } from "./Help";
 import { AccessConnections } from "./AccessConnections";
 import {
@@ -1245,6 +1246,91 @@ export function App() {
         );
     }
   }
+  /**
+   * A picture of the route, drawn on this device with no map tiles (see shareImage.ts). It follows the same endpoint rule as
+   * the file export: unless the rider approves it, the route within about 300 m of the start and finish is left out and
+   * the ends are not marked. Shared with the system share sheet when it can take a file, otherwise downloaded.
+   */
+  const canShareImage = () => {
+    try {
+      return (
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({
+          files: [new File([""], "route.png", { type: "image/png" })],
+        })
+      );
+    } catch {
+      return false;
+    }
+  };
+  async function shareImage() {
+    if (!selected || !preview) return;
+    if (routeNeedsRecalculation(preview)) {
+      announce({
+        kind: "error",
+        message: `${staleRouteMessage(preview)} It cannot be shown as verified trail: recalculate it first.`,
+      });
+      return;
+    }
+    try {
+      if (!cues)
+        throw new Error(
+          "The route's direction cues are not ready yet. Try again in a moment.",
+        );
+      const blob = await renderImage({
+        title: selected.title,
+        summary: preview.summary ?? "",
+        warnings: preview.warnings,
+        attribution: exportAttribution(),
+        pieces: cues.pieces,
+        turnarounds: cues.turnarounds,
+        context: (network?.features ?? [])
+          .filter(
+            (feature) => feature.status !== "Proposed" || !!preview.proposed,
+          )
+          .flatMap((feature) => feature.paths),
+        exact: exactExport,
+      });
+      const file = new File([blob], "trail-mapper-route.png", {
+        type: "image/png",
+      });
+      if (canShareImage()) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: "Trail Mapper route",
+            text: "A ride planned with Trail Mapper.",
+          });
+          announce({ kind: "success", message: "Route image shared." });
+        } catch (e) {
+          // Closing the share sheet is a choice, not a failure.
+          if ((e as { name?: string }).name !== "AbortError") throw e;
+        }
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "trail-mapper-route.png";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      announce({
+        kind: "success",
+        message: exactExport
+          ? "Route image downloaded with your endpoint approval."
+          : "Route image downloaded with endpoint areas removed.",
+      });
+    } catch (e) {
+      announce({ kind: "error", message: errorText(e) });
+    }
+  }
+  function exportAttribution(): string {
+    return network?.mode === "fixture"
+      ? "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure. Map attribution: OpenStreetMap contributors."
+      : network?.datasetRecord
+        ? `${network.datasetRecord.source.attribution} Changes: ${network.datasetRecord.source.changes} Generated route; not an official county map.`
+        : "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.";
+  }
   function downloadGeoJson() {
     if (!selected || !preview) return;
     // Its lines would be exported as verified existing trail, but the loaded data no longer confirms them.
@@ -1319,12 +1405,7 @@ export function App() {
         action: "download",
         includeExactEndpoints: exactExport,
         fullRouteApproved: exactExport,
-        attribution:
-          network?.mode === "fixture"
-            ? "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure. Map attribution: OpenStreetMap contributors."
-            : network?.datasetRecord
-              ? `${network.datasetRecord.source.attribution} Changes: ${network.datasetRecord.source.changes} Generated route; not an official county map.`
-              : "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.",
+        attribution: exportAttribution(),
       });
       const url = URL.createObjectURL(
         new Blob([JSON.stringify(geojson, null, 2)], {
@@ -2485,6 +2566,21 @@ export function App() {
             {exactExport
               ? "Download full route GeoJSON"
               : "Download private GeoJSON"}
+          </button>
+          <hr />
+          <h3>Route image</h3>
+          <p>
+            A picture of the route with its direction, notices and data credit,
+            drawn on this device. It has no map tiles, and it follows the choice
+            above: unless you include exact endpoints, about 300 m around the
+            start and finish are left out.
+          </p>
+          <button
+            className="wide"
+            disabled={!cues}
+            onClick={() => void shareImage()}
+          >
+            {canShareImage() ? "Share route image" : "Save route image"}
           </button>
         </Modal>
       )}
