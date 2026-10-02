@@ -1,8 +1,15 @@
-// Read-only evidence that lazy access delivery plans exactly what loading every road up front plans, on the REAL native
-// county and access assets. Two separate instances of the shared Kotlin core: one initialized with the whole access file
-// (the reference, which is how native loads it), one with only the base roads and an AccessSession that loads
-// hash-verified service-road tiles around each operation's endpoints. Every public-catalog pair and every catalog loop
-// is planned on both and the full responses are compared. Nothing is written, served or committed.
+// Read-only evidence of ACCESS-DELIVERY equivalence: lazy hash-verified tile loading plans exactly what loading every
+// access road up front plans, on the REAL native county and access assets. This is NOT a native parity measurement:
+// the trail network here is the county-only Existing configuration (no reviewed OpenStreetMap additions, no Proposed),
+// and the question answered is only "does delivering the roads in tiles change any answer?".
+//
+// Two separate instances of the shared Kotlin core are compared. The reference is initialized with the whole access file
+// (how native loads it). The lazy side is initialized with only the base roads and uses an AccessSession that loads
+// service-road tiles around each operation's endpoints; its session stays warm across all plans (tiles accumulate), as in
+// a page that has been open. Every public-catalog pair and catalog loop is planned on both and the full responses are
+// compared. Then each routed result is re-checked as a RESTORED RIDE: a brand-new core instance and a brand-new loader
+// (nothing loaded but the base roads) inspects the saved route through its session, and the verdict must equal the
+// reference's. Nothing is written, served or committed.
 //
 //   npx tsx tools/access-equivalence.mjs [--json]
 //
@@ -110,8 +117,33 @@ for (const place of places)
       request: { op: "plan", start: place, miles, proposed: false, now: NOW },
     });
 
+// A cold restored ride: new core instance, new loader, base roads only, then the session loads what the route needs.
+let coldInstances = 100;
+async function coldInspect(route) {
+  const call = await instance(++coldInstances);
+  const coldLoader = new AccessLoader(built.descriptor, {
+    fetchBytes: async (file) => new Uint8Array(files.get(file)).buffer,
+    sha256Hex: async (bytes) =>
+      createHash("sha256").update(new Uint8Array(bytes)).digest("hex"),
+    dispatch: call,
+  });
+  const init = call({
+    op: "initialize",
+    trails,
+    access: await coldLoader.baseText(),
+    now: NOW,
+  });
+  if (init.ok === false) throw new Error(init.error);
+  const cold = new AccessSession(coldLoader, call);
+  return {
+    verdict: await cold.run({ op: "inspect", route, now: NOW }),
+    tiles: coldLoader.loadedCells.length,
+  };
+}
+
 const rows = [];
-let reroutes = 0;
+let restored = 0;
+let coldTiles = 0;
 for (const { name, request } of requests) {
   const expected = reference(request);
   const actual = await session.run(request);
@@ -122,26 +154,22 @@ for (const { name, request } of requests) {
     routed: Boolean(expected.route),
     navigable: Boolean(expected.canNavigate),
   });
-  // A saved route is re-checked on the lazy side after the loader reset: a restored ride.
-  if (expected.route && !same === false) {
-    const check = await session.run({
-      op: "inspect",
-      route: expected.route,
-      now: NOW,
-    });
+  if (expected.route) {
+    const cold = await coldInspect(expected.route);
     const referenceCheck = reference({
       op: "inspect",
       route: expected.route,
       now: NOW,
     });
-    if (JSON.stringify(check) !== JSON.stringify(referenceCheck))
+    restored++;
+    coldTiles += cold.tiles;
+    if (JSON.stringify(cold.verdict) !== JSON.stringify(referenceCheck))
       rows.push({
-        name: `${name} (inspect)`,
+        name: `${name} (cold restored ride)`,
         same: false,
         routed: true,
         navigable: false,
       });
-    reroutes++;
   }
 }
 const mismatches = rows.filter((row) => !row.same);
@@ -149,7 +177,8 @@ const summary = {
   requests: requests.length,
   routed: rows.filter((r) => r.routed).length,
   navigable: rows.filter((r) => r.navigable).length,
-  inspectedRoutes: reroutes,
+  coldRestoredRides: restored,
+  coldRestoredTilesLoaded: coldTiles,
   mismatches: mismatches.map((m) => m.name),
   tilesLoaded: loader.loadedCells.length,
   tilesInPackage: built.tiles.length,
@@ -160,7 +189,7 @@ if (process.argv.includes("--json"))
   console.log(JSON.stringify(summary, null, 2));
 else {
   console.log(
-    `${summary.requests} plans (pairs and loops): ${summary.routed} routed, ${summary.navigable} navigable; ${summary.inspectedRoutes} routes re-inspected.`,
+    `Access-delivery equivalence, county-only Existing configuration (not native parity): ${summary.requests} plans (pairs and loops), ${summary.routed} routed, ${summary.navigable} navigable; ${summary.coldRestoredRides} cold restored rides checked (${summary.coldRestoredTilesLoaded} tiles loaded across them).`,
   );
   console.log(
     `Mismatches between lazy and whole-file loading: ${summary.mismatches.length}${summary.mismatches.length ? ` (${summary.mismatches.join("; ")})` : ""}.`,
