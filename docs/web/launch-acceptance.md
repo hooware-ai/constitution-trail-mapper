@@ -48,6 +48,9 @@ Not covered by any automated suite: real GPS and outdoor accuracy, OS location p
 3. **Harness limit, not an app defect: Playwright's WebKit geolocation provider reports `position.timestamp` in microseconds** (about 1.8e15 against 1.8e12 for milliseconds). The app correctly refuses a fix it cannot date and keeps offering the map picker, so the `[engine-geo]` spec asserts exactly that (and asserts acceptance if a later Playwright reports milliseconds). Whether **real** Safari reports a sane millisecond timestamp is on the operator checklist.
 4. **Parity, no defect:** when a place chooser opens, focus lands on its Close button (in Chromium and WebKit alike); Tab reaches the search field. Not changed.
 
+5. **Fixed (web-only, bounded): the map's county/local data credits (McGIS, CC BY 4.0) and Leaflet's own prefix link replaced the page in the same tab**, so an accidental tap during a ride would have ended foreground navigation. They now open in a new tab with `noopener noreferrer`, like every other external link in the app. Regressions: `tests/county/basemap-credit.spec.ts` (every credit link) and `tests/e2e/map-credit.spec.ts` (a tap during a ride opens a tab and the ride carries on); both fail without the change.
+6. **Coverage added, no defect found:** an automated WCAG 2 A/AA sweep of every main screen and dialog on Chromium and WebKit found no violations, and the production header policy is now pinned exactly and checked against the runbook.
+
 No other WebKit-specific defect was found: the module worker and Kotlin router start, local storage persists across reload, the interruption and recovery behavior matches Chromium, and axe reports no violations.
 
 ## Candidate record (fill in for each run; do not reuse an old record)
