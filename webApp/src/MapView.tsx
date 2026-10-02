@@ -13,6 +13,10 @@ const plain = (text: string) => {
   node.textContent = text;
   return node;
 };
+/** An attribution link opens in a new tab and never hands over this page: a tap on it must not end a ride in progress. */
+const credit = (href: string, text: string) =>
+  `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+
 export function MapView({
   features,
   route,
@@ -52,6 +56,8 @@ export function MapView({
       attributionControl: true,
       preferCanvas: true,
     }).setView([40.502, -88.97], 13);
+    // Leaflet's own prefix link would also replace this page; keep the credit, open it safely.
+    m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
     map.current = m;
     layers.current = L.layerGroup().addTo(m);
 
@@ -78,14 +84,14 @@ export function MapView({
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    const credit = fixture
+    const notice = fixture
       ? "Synthetic review geometry · CC0"
       : county
-        ? 'Trail data: <a href="https://www.mcgis.org">McGIS and members</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · changes: reviewed subset, normalized'
-        : 'Trail data: <a href="https://www.mcgis.org">McGIS and members</a> · U.S. Census · <a href="https://www.openstreetmap.org/copyright">© OSM contributors / ODbL</a>';
-    m.attributionControl.addAttribution(credit);
+        ? `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · ${credit("https://creativecommons.org/licenses/by/4.0/", "CC BY 4.0")} · changes: reviewed subset, normalized`
+        : `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · U.S. Census · ${credit("https://www.openstreetmap.org/copyright", "© OSM contributors / ODbL")}`;
+    m.attributionControl.addAttribution(notice);
     return () => {
-      m.attributionControl.removeAttribution(credit);
+      m.attributionControl.removeAttribution(notice);
     };
   }, [fixture, county]);
   useEffect(() => {
@@ -309,8 +315,10 @@ export function MapView({
       maxZoom: 19,
       // The licence credit is a visible, clickable link whenever the optional tiles are on (the tile policy requires
       // visible attribution); it opens the copyright page in a new tab without handing it this page.
-      attribution:
-        '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
+      attribution: credit(
+        "https://www.openstreetmap.org/copyright",
+        "© OpenStreetMap contributors",
+      ),
       crossOrigin: false,
     });
     tile.on("tileerror", () => setTileError(true));
