@@ -138,3 +138,11 @@ Proposed design (no shared or native source change, no Kotlin rebuild):
 ## Constraints kept
 
 No merge, deploy, resource, credential, terms acceptance or flag change; `webApp/release/dataset*.json` untouched; no shared or native source edit; no real tiles; one build at a time; the verified core is reused; guest-first; #33 paused.
+
+## Checkpoint 2: saved-route revalidation with access roads, and incremental access loading
+
+- **Defect (web-only, now fixed):** with ordinary-road access loaded, 25 of 27 freshly planned routes were flagged stale. A connector edge carries road geometry (the planner splices endpoint access into the first or last trail edge) and the check compared every line to the trail graph only. Core `webBridge` rebuilt once, serially: inputs `5555efaf0f4b`, output `d71e13d02d52`. Probe: 0 of 27 fresh routes flagged stale in the access configurations (0 of 22 without access, as before).
+- **Rule now:** trail-typed lines must still derive from the feature's own current geometry (a moved or redrawn trail is stale). Access-typed lines are checked leg by leg against the planner's access graph built for the route's own start and destination: a leg lies along an access reference segment, or is a join hop of at most 8.5 m (the access graph's 8 m snap tolerance) between two points on access geometry. A road that moved or vanished is stale.
+- **`addAccess` operation:** adds roads without re-initializing. Parsing has no side effects; duplicates inside a batch must be identical; an id already loaded must match in geometry, name, road class and endpoint-local status; any refusal changes nothing. Verdict and geometry caches are dropped when the loaded access data changes.
+- **Tests:** `tests/unit/bridge-access.test.ts` (6, through the real core): composite-edge fresh route verifies; moved trail, redrawn vertex, moved road and removed road are stale; incremental load; idempotence, duplicate and metadata conflicts leave state unchanged; no endpoint-local leak from a refused batch; re-initialize owns its own access data.
+- **Still open from the PR review:** lazy hash-verified access delivery with pinned identity and operation ownership (corrections c, d, e), the Proposed opt-in seam, the native UI comparison from actual implementations (f), and the probe wording split between core availability and web rejection reason (b).

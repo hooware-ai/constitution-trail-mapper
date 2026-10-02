@@ -22,6 +22,8 @@ class WebRoutingBridge {
     private var featureIndex: Map<String, TrailNetworkFeature> = emptyMap()
     private val revalidationCache = mutableMapOf<String, NetworkCheck>()
     private val geometryIndexes = mutableMapOf<String, GeometryIndex>()
+    /** Changes whenever the loaded access data changes, so no cached verdict or geometry outlives the data it read. */
+    private var accessEpoch = 0
 
     fun dispatch(requestJson: String): String = try {
         val request = json.parseToJsonElement(requestJson).jsonObject
@@ -34,6 +36,7 @@ class WebRoutingBridge {
             "snapshot" -> snapshot(request, now)
             "reroute" -> reroute(request, now)
             "recalculate" -> recalculate(request, now)
+            "addAccess" -> addAccess(request)
             else -> error("Unknown routing operation.")
         }
         JsonObject(mapOf("ok" to JsonPrimitive(true)) + result).toString()
@@ -55,13 +58,16 @@ class WebRoutingBridge {
         featureIndex = emptyMap()
         revalidationCache.clear()
         geometryIndexes.clear()
+        accessEpoch++
         val loaded = NormalizedTrailNetworkJsonSijko.features(request.string("trails"))
         require(loaded.isNotEmpty()) { "The trail dataset contains no features." }
         loaded.flatMap { it.paths }.flatten().forEach(::validatePoint)
-        val loadedRoads = request["access"]?.jsonPrimitive?.contentOrNull?.let(::accessFeatures)
+        val parsedRoads = request["access"]?.jsonPrimitive?.contentOrNull?.let(::parseAccess)
+        val loadedRoads = parsedRoads?.map { it.feature }
         require(loaded.map { it.id }.toSet().size == loaded.size) { "The trail dataset contains duplicate feature identifiers." }
         features = loaded
         roads = loadedRoads
+        parsedRoads?.filter { it.local }?.forEach { endpointLocalRoadIds += it.feature.id }
         featureIndex = loaded.associateBy { it.id }
         datasetIdentity = request["dataset"] ?: JsonNull
         trustSerializedRoutes = request.boolean("trustSerializedRoutes")
@@ -86,6 +92,43 @@ class WebRoutingBridge {
                 put("source", buildJsonObject { put("title", entry.source.title); put("url", entry.source.url) })
             } }))
             put("closures", closureJson(TrailRouteClosureSijko.activeClosures(now)))
+        }
+    }
+
+    /**
+     * Adds more access roads to the loaded set without re-initializing, so the trail network, the pinned identity and
+     * every route already planned stay exactly as they are. Idempotent: a feature that is already loaded must be
+     * identical (same paths); a different geometry under a known id is a conflict, never a silent replacement.
+     */
+    private fun addAccess(request: JsonObject): JsonObject {
+        requireNetwork()
+        // Nothing below touches loaded state until every check has passed, so a refused batch changes nothing.
+        val incoming = LinkedHashMap<String, ParsedAccessFeature>()
+        parseAccess(request.string("access")).forEach { parsed ->
+            val repeated = incoming[parsed.feature.id]
+            require(repeated == null || repeated == parsed) { "Access road ${parsed.feature.id} appears twice with different content." }
+            incoming[parsed.feature.id] = parsed
+        }
+        val current = roads.orEmpty()
+        val known = current.associateBy { it.id }
+        val fresh = mutableListOf<ParsedAccessFeature>()
+        incoming.values.forEach { parsed ->
+            val existing = known[parsed.feature.id]
+            if (existing == null) fresh += parsed
+            else require(existing == parsed.feature && (existing.id in endpointLocalRoadIds) == parsed.local) {
+                "Access road ${parsed.feature.id} is already loaded with different content."
+            }
+        }
+        if (fresh.isNotEmpty()) {
+            roads = current + fresh.map { it.feature }
+            fresh.filter { it.local }.forEach { endpointLocalRoadIds += it.feature.id }
+            revalidationCache.clear()
+            geometryIndexes.clear()
+            accessEpoch++
+        }
+        return buildJsonObject {
+            put("added", fresh.size)
+            put("accessFeatureCount", roads.orEmpty().size)
         }
     }
 
@@ -364,20 +407,25 @@ class WebRoutingBridge {
         put("closures", closureJson(closures))
     }
 
-    private fun accessFeatures(text: String): List<AccessNetworkFeature> =
-        json.parseToJsonElement(text.removePrefix("\uFEFF")).jsonObject.getValue("layers").jsonArray.flatMap { layer ->
+    private class ParsedAccessFeature(val feature: AccessNetworkFeature, val local: Boolean) {
+        override fun equals(other: Any?) = other is ParsedAccessFeature && feature == other.feature && local == other.local
+        override fun hashCode() = feature.hashCode() * 31 + local.hashCode()
+    }
+
+    /** Parses access JSON with no side effects; whether a feature is endpoint-local (service roads) travels with it. */
+    private fun parseAccess(text: String): List<ParsedAccessFeature> =
+        json.parseToJsonElement(text.removePrefix("﻿")).jsonObject.getValue("layers").jsonArray.flatMap { layer ->
+            val local = layer.jsonObject["id"]?.jsonPrimitive?.contentOrNull == "osm-service"
             layer.jsonObject.getValue("features").jsonArray.map { value ->
                 val feature = value.jsonObject
-                AccessNetworkFeature(
-                    id = feature.string("id").also { id ->
-                        if (layer.jsonObject["id"]?.jsonPrimitive?.contentOrNull == "osm-service") endpointLocalRoadIds += id
-                    }, name = feature["name"]?.jsonPrimitive?.contentOrNull,
+                ParsedAccessFeature(AccessNetworkFeature(
+                    id = feature.string("id"), name = feature["name"]?.jsonPrimitive?.contentOrNull,
                     roadClass = feature["mtfcc"]?.jsonPrimitive?.contentOrNull,
                     paths = feature.getValue("paths").jsonArray.map { path -> path.jsonArray.map { coordinate ->
                         val pair = coordinate.jsonArray
                         MapPoint(pair[1].jsonPrimitive.double, pair[0].jsonPrimitive.double).also(::validatePoint)
                     } },
-                )
+                ), local)
             }
         }
 
@@ -459,6 +507,9 @@ class WebRoutingBridge {
             add(geometryIndexes.getOrPut("open|$layers|$closedKey") { GeometryIndex(TrailGraphBuilderSijko.buildGraph(openNetwork.features)) })
             if (closedKey.isNotEmpty()) add(geometryIndexes.getOrPut("all|$layers") { GeometryIndex(TrailGraphBuilderSijko.buildGraph(enabled)) })
         }
+        // Ordinary-road access the planner spliced into the route comes from the access graph it built for the same
+        // endpoints (start and destination are the route's own first and last points), so check it against that.
+        val accessIndex = accessIndexFor(route)
         val issues = mutableListOf<NetworkIssue>()
         val seen = mutableSetOf<String>()
         for (edge in route.edges) {
@@ -482,7 +533,7 @@ class WebRoutingBridge {
                 issues += NetworkIssue("status-changed", id, "trail $id is now ${feature.status.name.lowercase()}")
             if (TrailFeatureFilterSijko.enabledFeatures(listOf(feature), layers).isEmpty() && seen.add("eligible:$id"))
                 issues += NetworkIssue("not-eligible", id, "trail $id is not available under this route's choices")
-            if (seen.add("geometry-checked:${edge.id}") && !edgeMatchesGraph(edge, id, indexes) && seen.add("geometry:$id"))
+            if (seen.add("geometry-checked:${edge.id}") && !edgeMatchesGraph(edge, id, indexes, accessIndex) && seen.add("geometry:$id"))
                 issues += NetworkIssue("geometry-changed", id, "trail $id has different geometry")
         }
         val result = NetworkCheck(if (issues.isEmpty()) "current" else "stale", route.edges.size, issues)
@@ -497,9 +548,23 @@ class WebRoutingBridge {
      * the way the planner does, so nothing here is a tolerance around the feature: a trail that moved, was redrawn or
      * was replaced has no matching derived geometry, and a normal snapped route over an unchanged network always does.
      */
-    private fun edgeMatchesGraph(edge: TrailGraphEdge, featureId: String, indexes: List<GeometryIndex>): Boolean {
-        val lines = edge.routeSegments.filter { it.isRouted }.map { it.points }.filter { it.isNotEmpty() }
-        return lines.all { line -> indexes.any { it.derives(featureId, line) } }
+    private fun edgeMatchesGraph(edge: TrailGraphEdge, featureId: String, indexes: List<GeometryIndex>, accessIndex: GeometryIndex?): Boolean =
+        edge.routeSegments.filter { it.isRouted && it.points.isNotEmpty() }.all { segment ->
+            // A trail-typed line is trail geometry and must derive from this feature. A connector edge also carries the
+            // ordinary-road access the planner spliced in front of (or behind) the trail piece: that line is road
+            // geometry, so it must derive from the access roads the planner saw, never from the trail.
+            indexes.any { it.derives(featureId, segment.points) } ||
+                (segment.type == TrailRouteSegmentType.Access && accessIndex?.derivesFromAny(segment.points) == true)
+        }
+
+    /** The planner's access graph for this route's endpoints, as geometry references; null when no access data is loaded. */
+    private fun accessIndexFor(route: TrailRoute): GeometryIndex? {
+        if (roads == null) return null
+        val points = route.segments.firstOrNull()?.points?.firstOrNull() to route.segments.lastOrNull()?.points?.lastOrNull()
+        val first = points.first ?: return null
+        val last = points.second ?: return null
+        val key = "access|$accessEpoch|${first.latitude},${first.longitude}|${last.latitude},${last.longitude}"
+        return geometryIndexes.getOrPut(key) { GeometryIndex(accessGraph(listOf(first, last)) ?: return null) }
     }
 
     /** The polylines the planner's graph derives from each feature: raw runs, connectors, and their node-anchored forms. */
@@ -512,6 +577,7 @@ class WebRoutingBridge {
         }
 
         private val byFeature = HashMap<String, MutableList<Reference>>()
+        private val all = mutableListOf<Reference>()
 
         init {
             val nodes = graph.nodes.associateBy { it.id }
@@ -521,9 +587,13 @@ class WebRoutingBridge {
                 if (raw.isEmpty()) continue
                 val references = byFeature.getOrPut(id) { mutableListOf() }
                 references += Reference(raw)
+                all += references.last()
                 val from = nodes[edge.fromNodeId]
                 val to = nodes[edge.toNodeId]
-                if (from != null && to != null && raw.size >= 2) references += Reference(listOf(from.point) + raw.drop(1).dropLast(1) + to.point)
+                if (from != null && to != null && raw.size >= 2) {
+                    references += Reference(listOf(from.point) + raw.drop(1).dropLast(1) + to.point)
+                    all += references.last()
+                }
             }
         }
 
@@ -534,8 +604,24 @@ class WebRoutingBridge {
          * spans a bend of the reference, however short, is not, and a line whose vertices differ from the derived ones
          * is conservatively treated as changed (recalculating always works).
          */
-        fun derives(featureId: String, line: List<MapPoint>): Boolean {
-            val references = byFeature[featureId] ?: return false
+        fun derives(featureId: String, line: List<MapPoint>): Boolean = derivesFrom(byFeature[featureId] ?: return false, line)
+
+        /**
+         * Access roads are anonymous in a connector line, and the planner's route line runs across several graph edges
+         * (and across the short hops that join roads within the access graph's snap tolerance). So each leg is checked on
+         * its own: it lies along some reference segment, or it is a hop no longer than the snap tolerance between two
+         * points that are both on the access geometry. A road that moved or was removed fails on its points.
+         */
+        fun derivesFromAny(line: List<MapPoint>): Boolean {
+            if (line.size == 1) return all.any { near(line[0], it.points) }
+            return line.windowed(size = 2, step = 1).all { (a, b) ->
+                derivesFrom(all, listOf(a, b)) ||
+                    (TrailDistanceSijko.metersBetween(a, b) <= ACCESS_JOIN_METERS &&
+                        all.any { near(a, it.points) } && all.any { near(b, it.points) })
+            }
+        }
+
+        private fun derivesFrom(references: List<Reference>, line: List<MapPoint>): Boolean {
             val margin = 0.0001
             val south = line.minOf { it.latitude } - margin
             val north = line.maxOf { it.latitude } + margin
@@ -663,4 +749,6 @@ private const val TRAVERSAL_PHYSICAL_TOLERANCE_METERS = 5.0
 private const val TRAVERSAL_DEFAULT_ACCURACY_METERS = 25.0
 private const val TRAVERSAL_MAX_ACCURACY_METERS = 50.0
 private const val DERIVED_GEOMETRY_METERS = 0.5
+/** The access graph joins roads whose nodes are within this distance (AccessGraphBuilderSijko's snap tolerance). */
+private const val ACCESS_JOIN_METERS = 8.5
 private const val REVALIDATION_CACHE_LIMIT = 64
