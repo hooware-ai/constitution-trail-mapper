@@ -496,6 +496,11 @@ export interface ActiveRide {
   version: 1;
   record: RouteRecord;
   routeProgressMeters: number;
+  /**
+   * How far the rider has credibly ridden the route (on-route, forward, no unconfirmed jumps), which can differ from the
+   * matched position after an off-route fix. Absent on rides saved before it was kept: restored conservatively.
+   */
+  riddenMeters?: number;
   creditedDistanceMeters: number;
   updatedAt: number;
 }
@@ -520,6 +525,8 @@ export class ActiveRideStore {
         value.routeProgressMeters < 0 ||
         !finite(value.creditedDistanceMeters) ||
         value.creditedDistanceMeters < 0 ||
+        (value.riddenMeters !== undefined &&
+          (!finite(value.riddenMeters) || value.riddenMeters < 0)) ||
         !finite(value.updatedAt)
       )
         throw new Error("invalid");

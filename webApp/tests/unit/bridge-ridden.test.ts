@@ -157,3 +157,46 @@ test(
     );
   },
 );
+
+test(
+  "with no router state yet, ridden progress starts from the saved ridden value, not from the matched progress",
+  { skip },
+  async () => {
+    const module: any = await import(
+      pathToFileURL(corePath).href + "?ridden=saved"
+    );
+    const call = (request: unknown) =>
+      JSON.parse(module.dispatch(JSON.stringify(request)));
+    const trails = readFileSync(
+      join(process.cwd(), "src", "data", "review-network.json"),
+      "utf8",
+    );
+    call({ op: "initialize", trails, trustSerializedRoutes: true, now: NOW });
+    const loop = call({
+      op: "plan",
+      start: east,
+      miles: 5,
+      proposed: false,
+      now: NOW,
+    });
+    const here = loop.route.segments[0].points[2];
+    const common = {
+      op: "snapshot",
+      route: loop.route,
+      point: here,
+      accuracy: 5,
+      timestamp: NOW,
+      now: NOW,
+      resume: true,
+    };
+    // A restored ride: the matched progress says 120 m, but 300 m were credibly ridden before the reload.
+    const withSaved = call({ ...common, progress: 120, ridden: 300 });
+    assert.equal(withSaved.ok, true, withSaved.error);
+    assert.equal(withSaved.ridden, 300);
+    // Without a saved value it falls back to the progress, as before.
+    const without = call({ ...common, progress: 120 });
+    assert.equal(without.ridden, 120);
+    // A nonsense value is ignored rather than trusted.
+    assert.equal(call({ ...common, progress: 120, ridden: -5 }).ridden, 120);
+  },
+);

@@ -247,3 +247,122 @@ test("arriving at a point-to-point destination is not a loop completion", async 
   await r.fix({ arrived: true });
   assert.deepEqual(r.arrived, []);
 });
+
+// ---- ridden progress survives a reload apart from the matched position ----------------------------------------------------
+
+import { ActiveRideStore } from "../../src/platform/storage";
+
+function persistedRide(options: { legacy?: boolean } = {}) {
+  const { storage, values } = memory();
+  let now = NOW;
+  let push: (fix: LocationFix) => void = () => {};
+  const seen: { previousRidden: number; previousProgress: number }[] = [];
+  const build = (evaluate: (c: any) => Partial<NavigationGuidance>) =>
+    new ForegroundNavigationController({
+      location: {
+        watch: (success) => {
+          push = success;
+          return 0;
+        },
+        clearWatch: () => {},
+      },
+      clock: { now: () => now, setInterval: () => 1, clearInterval: () => {} },
+      storage: new ActiveRideStore(storage),
+      evaluate: async (_route, _fix, context) => {
+        seen.push(context);
+        return {
+          routeProgressMeters: 120,
+          distanceFromRouteMeters: 2,
+          instruction: "Continue",
+          remainingMeters: 800,
+          ...evaluate(context),
+        } as NavigationGuidance;
+      },
+    });
+  const fix = async () => {
+    now += 5000;
+    push({ latitude: 40, longitude: -89, accuracy: 10, timestamp: now });
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+  };
+  void options;
+  return { storage, values, build, fix, seen };
+}
+
+test("ridden progress is stored apart from the matched position and restored from there", async () => {
+  const f = persistedRide();
+  const first = f.build(() => ({ routeProgressMeters: 120, ridden: 300 }));
+  first.start(record("ExerciseLoop"));
+  await f.fix();
+  const stored = JSON.parse([...f.values.values()][0]);
+  // The rider rode about 300 m, then an off-route fix projected back onto 120 m: both are kept, distinctly.
+  assert.equal(stored.routeProgressMeters, 120);
+  assert.equal(stored.riddenMeters, 300);
+  first.dispose();
+
+  const restored = f.build(() => ({}));
+  assert.equal(restored.restore()?.key, "route-ExerciseLoop");
+  assert.equal(restored.state.routeProgressMeters, 120);
+  assert.equal(restored.state.riddenMeters, 300, "not the matched position");
+  await f.fix();
+  assert.equal(
+    f.seen.at(-1)!.previousRidden,
+    300,
+    "the router is given the saved ridden progress",
+  );
+});
+
+test("a ride saved before ridden progress was kept restores conservatively: never more than was covered", async () => {
+  const { storage } = memory();
+  const store = new ActiveRideStore(storage);
+  const legacy = {
+    version: 1 as const,
+    record: record("ExerciseLoop"),
+    routeProgressMeters: 900,
+    creditedDistanceMeters: 250,
+    updatedAt: NOW,
+  };
+  store.write(legacy);
+  const controller = new ForegroundNavigationController({
+    storage: store,
+    clock: { now: () => NOW, setInterval: () => 1, clearInterval: () => {} },
+    evaluate: async () => ({}) as NavigationGuidance,
+  });
+  controller.restore();
+  // The matched progress may have been inflated by an off-route projection; the observed distance cannot have been.
+  assert.equal(controller.state.riddenMeters, 250);
+  assert.equal(controller.state.routeProgressMeters, 900);
+  const lessProgress = new ActiveRideStore(memory().storage);
+  lessProgress.write({ ...legacy, routeProgressMeters: 100 });
+  const other = new ForegroundNavigationController({
+    storage: lessProgress,
+    clock: { now: () => NOW, setInterval: () => 1, clearInterval: () => {} },
+    evaluate: async () => ({}) as NavigationGuidance,
+  });
+  other.restore();
+  assert.equal(other.state.riddenMeters, 100);
+});
+
+test("a stored ride with an invalid ridden value is unreadable rather than trusted", () => {
+  const { storage, values } = memory();
+  const store = new ActiveRideStore(storage);
+  store.write({
+    version: 1,
+    record: record("ExerciseLoop"),
+    routeProgressMeters: 10,
+    riddenMeters: 5,
+    creditedDistanceMeters: 10,
+    updatedAt: NOW,
+  });
+  assert.equal(store.read().ok, true);
+  const key = [...values.keys()][0];
+  for (const bad of [-1, "5", null, Infinity]) {
+    const copy = JSON.parse(values.get(key)!);
+    copy.riddenMeters = bad;
+    values.set(key, JSON.stringify(copy));
+    assert.equal(
+      store.read().ok,
+      false,
+      `riddenMeters ${String(bad)} is refused`,
+    );
+  }
+});

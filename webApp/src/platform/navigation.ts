@@ -69,7 +69,12 @@ export interface NavigationDependencies {
   evaluate: (
     route: unknown,
     fix: LocationFix,
-    context: { resume: boolean; previousProgress: number },
+    context: {
+      resume: boolean;
+      previousProgress: number;
+      /** Where ridden progress stands (a restored ride's saved value); the router uses it before its own state exists. */
+      previousRidden: number;
+    },
   ) => Promise<NavigationGuidance>;
 }
 export const MAX_FIX_AGE_MS = 15_000;
@@ -177,7 +182,12 @@ export class ForegroundNavigationController {
     this.state = { ...this.state, ...patch };
     this.emit();
   }
-  start(record: RouteRecord, initialProgress = 0, creditedDistance = 0): void {
+  start(
+    record: RouteRecord,
+    initialProgress = 0,
+    creditedDistance = 0,
+    initialRidden?: number,
+  ): void {
     this.invalidate();
     this.completionReported = false;
     this.state = {
@@ -185,7 +195,13 @@ export class ForegroundNavigationController {
       record,
       routeProgressMeters: Math.max(0, initialProgress),
       // A restored ride resumes from its saved progress; a fresh route (reroute, reverse, new ride) starts from zero.
-      riddenMeters: Math.max(0, initialProgress),
+      // A restored ride resumes from its saved ridden progress. One saved before that was kept falls back to the LESSER of
+      // the matched progress and the observed distance: never more than was credibly covered (an off-route projection can
+      // only have inflated the matched progress), and a rejoin from there errs toward riding more of the loop.
+      riddenMeters: Math.max(
+        0,
+        initialRidden ?? Math.min(initialProgress, creditedDistance),
+      ),
       creditedDistanceMeters: Math.max(0, creditedDistance),
     };
     this.persist();
@@ -217,6 +233,7 @@ export class ForegroundNavigationController {
       stored.state.record,
       stored.state.routeProgressMeters,
       stored.state.creditedDistanceMeters,
+      stored.state.riddenMeters,
     );
     return stored.state.record;
   }
@@ -402,6 +419,7 @@ export class ForegroundNavigationController {
       const guidance = await this.deps.evaluate(this.state.record.route, fix, {
         resume,
         previousProgress: this.state.routeProgressMeters,
+        previousRidden: this.state.riddenMeters,
       });
       if (
         generation !== this.generation ||
@@ -499,6 +517,7 @@ export class ForegroundNavigationController {
       version: 1,
       record: this.state.record,
       routeProgressMeters: this.state.routeProgressMeters,
+      riddenMeters: this.state.riddenMeters,
       creditedDistanceMeters: this.state.creditedDistanceMeters,
       updatedAt: this.clock.now(),
     });

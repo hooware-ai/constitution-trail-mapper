@@ -2752,9 +2752,10 @@ test("reversing mid-ride drops the credit already earned and the new direction s
 
 /**
  * Lets a test hold the routing worker's answer to one operation, change its verdict, and release it. Only the answer is
- * touched: the worker, the router and every other operation are the real ones.
+ * touched: the worker, the router and every other operation are the real ones. A test sets `window.__ops[op]` to
+ * `{ hold, patch }`; a held answer is parked as `__ops[op].release` (and `pending` is true) until the test calls it.
  */
-async function interceptReverse(page: Page) {
+async function interceptOps(page: Page) {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker;
     class Spy extends NativeWorker {
@@ -2776,14 +2777,21 @@ async function interceptReverse(page: Page) {
         this.addEventListener("message", (event: MessageEvent) => {
           const deliver = (data: unknown) =>
             handler?.call(this, new MessageEvent("message", { data }));
-          const override = (window as any).__reverseOverride;
-          if (override && ops.get(event.data?.id) === "reverse") {
+          const override = (window as any).__ops?.[
+            ops.get(event.data?.id) ?? ""
+          ];
+          if (override) {
             const data = {
               ...event.data,
-              result: { ...event.data.result, ...override.patch },
+              result: { ...event.data.result, ...(override.patch ?? {}) },
             };
-            if (override.hold) override.release = () => deliver(data);
-            else deliver(data);
+            if (override.hold) {
+              override.pending = true;
+              override.release = () => {
+                override.pending = false;
+                deliver(data);
+              };
+            } else deliver(data);
             return;
           }
           deliver(event.data);
@@ -2819,7 +2827,7 @@ for (const [name, patch] of [
   test(`a held reverse that comes back blocked by ${name} stops the ride and its credit, and riding resumes only through a fresh start`, async ({
     page,
   }) => {
-    await interceptReverse(page);
+    await interceptOps(page);
     await page.clock.install();
     await planLoopPreview(page);
     await page
@@ -2842,7 +2850,7 @@ for (const [name, patch] of [
     // Hold the answer to Reverse, and make it come back blocked.
     await page.evaluate(
       (patch) => {
-        (window as any).__reverseOverride = { hold: true, patch };
+        (window as any).__ops = { reverse: { hold: true, patch } };
       },
       patch as unknown as Record<string, unknown>,
     );
@@ -2854,7 +2862,7 @@ for (const [name, patch] of [
     expect((await activeRideOf(page)).creditedDistanceMeters).toBeGreaterThan(
       100,
     );
-    await page.evaluate(() => (window as any).__reverseOverride.release());
+    await page.evaluate(() => (window as any).__ops.reverse.release());
 
     // Released: the ride is over, not left running on the old route and not restarted on the new one.
     await expect(
@@ -2867,7 +2875,7 @@ for (const [name, patch] of [
 
     // Recovery is explicit: a fresh, accepted route and a fresh Start, from zero.
     await page.evaluate(() => {
-      delete (window as any).__reverseOverride;
+      delete (window as any).__ops;
     });
     await page
       .getByRole("button", { name: "Start navigation", exact: true })
@@ -2912,6 +2920,8 @@ async function fixOrFinish(page: Page, lat: number, lon: number) {
           : 0;
         return (
           updated >= timestamp ||
+          // The ride is gone: this fix finished the loop (whether or not its history has been recorded yet).
+          !key ||
           /Exercise route complete/.test(document.body.innerText)
         );
       }, timestamp),
@@ -3081,4 +3091,191 @@ test("rejoining a loop carries what was already ridden, and keeps it across a re
       ),
     ),
   ).toBe(false);
+});
+
+// A completed ride belongs to the moment it was completed: holding the answer that records its history must not let that
+// answer end, or otherwise touch, a ride started afterwards.
+test("a held completion record never stops the ride that was started after the loop finished", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await interceptOps(page);
+  await page.clock.install();
+  await planLoopPreview(page);
+  await page.evaluate(() => {
+    (window as any).__ops = { completedSession: { hold: true } };
+  });
+  await rideWholeLoop(page);
+
+  // The loop is over at once, whatever the worker is doing: the ride ended where it finished.
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  expect(await activeRideOf(page)).toBeNull();
+  await expect(page.getByText(/^Exercise route complete/)).toHaveCount(0);
+  expect(await completedOf(page)).toEqual([]);
+
+  // A new ride starts while the old answer is still held.
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  const first = (await rideRoutePoints(page))[0];
+  await acceptedFix(page, first[0], first[1]);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+
+  // Releasing the old answer records the old loop and says so, and leaves the new ride exactly as it was.
+  await page.evaluate(() => (window as any).__ops.completedSession.release());
+  await expect(page.getByText("Exercise route complete.")).toBeVisible();
+  await expect.poll(async () => (await completedOf(page)).length).toBe(1);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const ride = await activeRideOf(page);
+  expect(ride).not.toBeNull();
+  expect(ride.creditedDistanceMeters).toBe(0);
+});
+
+test("a held carry never restarts a ride that was stopped, or replaced by a new one, while it was held", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await page.clock.install();
+  await planLoopPreview(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const points = await rideRoutePoints(page);
+  await acceptedFix(page, points[0][0], points[0][1]);
+  for (const meters of [80, 160, 240, 300]) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, meters);
+    await acceptedFix(page, lat, lon);
+  }
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.491, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.492, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.493, -88.99);
+
+  // Hold the carry that a rejoin needs, ask to rejoin, then end this ride and start another before it is released.
+  await page.evaluate(() => {
+    (window as any).__ops = { carryRide: { hold: true } };
+  });
+  await page
+    .getByRole("button", { name: "Rejoin the loop", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => !!(window as any).__ops.carryRide.pending))
+    .toBe(true);
+  await page
+    .getByRole("button", { name: "Stop navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  const again = (await rideRoutePoints(page))[0];
+  await acceptedFix(page, again[0], again[1]);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const before = await activeRideOf(page);
+
+  await page.evaluate(() => (window as any).__ops.carryRide.release());
+  // The late answer is for a ride that no longer exists: it is discarded without a word, the new ride is untouched and
+  // nothing is carried into it.
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__ops.carryRide.pending))
+    .toBe(false);
+  await page.waitForTimeout(300);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const after = await activeRideOf(page);
+  expect(after.record.key).toBe(before.record.key);
+  expect(after.creditedDistanceMeters).toBe(before.creditedDistanceMeters);
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).some((k) =>
+        k.endsWith("trail-mapper.web.carried-ride.v1"),
+      ),
+    ),
+  ).toBe(false);
+});
+
+test("ridden progress survives a reload after an off-route fix moved the matched position, and a rejoin uses it", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await planLoopPreview(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const points = await rideRoutePoints(page);
+  await acceptedFix(page, points[0][0], points[0][1]);
+  for (const meters of [80, 160, 240, 300]) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, meters);
+    await acceptedFix(page, lat, lon);
+  }
+  // Leave the loop: the off-route position projects back onto an earlier part of it.
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.491, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.492, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.493, -88.99);
+  const stored = await activeRideOf(page);
+  expect(stored.riddenMeters).toBeGreaterThan(250);
+  expect(stored.riddenMeters).toBeLessThan(330);
+  expect(
+    stored.routeProgressMeters,
+    "the matched position is distinct from what was ridden",
+  ).toBeLessThan(stored.riddenMeters - 100);
+
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const restored = await activeRideOf(page);
+  expect(restored.riddenMeters).toBe(stored.riddenMeters);
+  expect(restored.routeProgressMeters).toBe(stored.routeProgressMeters);
+
+  // Back on the loop a little further on, then off it again: the rejoin carries what was ridden, not the matched position.
+  await page.clock.fastForward(1000);
+  const [lat, lon] = pointAlong(points, 320);
+  await acceptedFix(page, lat, lon);
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.491, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.492, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.493, -88.99);
+  await page
+    .getByRole("button", { name: "Rejoin the loop", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const carried = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.carried-ride.v1"),
+    );
+    return key ? JSON.parse(localStorage.getItem(key)!) : null;
+  });
+  expect(carried).not.toBeNull();
+  expect(carried.carried.distanceMeters).toBeGreaterThan(250);
+  expect(carried.carried.distanceMeters).toBeLessThan(350);
 });

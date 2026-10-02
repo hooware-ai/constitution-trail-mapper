@@ -356,6 +356,8 @@ export function App() {
               accuracy: fix.accuracy,
               timestamp: fix.timestamp,
               progress: context.previousProgress,
+              // The first evaluation of a restored ride starts from the saved RIDDEN progress, not the matched position.
+              ridden: context.previousRidden,
               resume: context.resume,
               state: snapshotState.current,
               now: Date.now(),
@@ -417,6 +419,8 @@ export function App() {
                 ride.record,
                 ride.routeProgressMeters,
                 ride.creditedDistanceMeters,
+                // The saved RIDDEN progress, kept apart from the matched position (older saves fall back conservatively).
+                ride.riddenMeters,
               );
               restoreScreen("navigation");
             } else
@@ -750,19 +754,34 @@ export function App() {
   /** The rider's completed loops, newest first: recently ridden edges cost more, so the next loop is a fresh one. */
   const loopHistory = () => completedRef.current?.read().state ?? [];
   /**
-   * An exercise loop was genuinely completed. Record it as native does (including what was carried across a rejoin),
-   * end the ride, and say so; if the history cannot be saved the completion is still reported, and so is that.
+   * An exercise loop was genuinely completed (called synchronously by the navigation controller). The completed ride is
+   * ended HERE, before anything is awaited: it belongs to this moment, so a later ride, a reversal or a worker restart
+   * can never be stopped by it. Only the recording of the history happens afterwards, and it touches no live state: it
+   * uses the worker captured now and the carried ride captured now, and ends in a notice.
    */
-  async function finishLoop(record: RouteRecord) {
+  function loopFinished(record: RouteRecord) {
     const client = clientRef.current;
-    if (!client) return;
+    const carried = carriedRef.current;
+    controllerRef.current?.stop();
+    snapshotState.current = undefined;
+    carriedRef.current = null;
+    carriedStoreRef.current?.clear();
+    go("preview");
+    void recordCompletion(client, record, carried);
+  }
+  async function recordCompletion(
+    client: RoutingClient | null,
+    record: RouteRecord,
+    carried: { distanceMeters: number; traversalEdges: unknown[] } | null,
+  ) {
     let message = "Exercise route complete.";
     try {
+      if (!client) throw new Error("routing unavailable");
       const made = await client.call<{ session: unknown }>({
         op: "completedSession",
         route: record.route,
         completedAt: Date.now(),
-        ...(carriedRef.current ? { carried: carriedRef.current } : {}),
+        ...(carried ? { carried } : {}),
       });
       if (made.session) {
         const saved = completedRef.current?.record(made.session);
@@ -773,14 +792,9 @@ export function App() {
     } catch {
       message = "Exercise route complete, but its history could not be saved.";
     }
-    controllerRef.current?.stop();
-    snapshotState.current = undefined;
-    carriedRef.current = null;
-    carriedStoreRef.current?.clear();
-    go("preview");
     setToast({ message });
   }
-  finishLoopRef.current = (record) => void finishLoop(record);
+  finishLoopRef.current = loopFinished;
   async function plan() {
     if (!clientRef.current || !draft.start) return;
     const token = ++operation.current;
@@ -933,13 +947,14 @@ export function App() {
     const controller = controllerRef.current;
     // One captured snapshot supplies both the worker payload and the later applicability check.
     const request = controller?.rerouteRequest();
-    if (!controller || !request || !clientRef.current) return;
+    const client = clientRef.current;
+    if (!controller || !request || !client) return;
     const token = ++operation.current;
     setBusy(true);
     setError("");
     try {
       const result = routeOkay(
-        await clientRef.current.call<RouteResult>({
+        await client.call<RouteResult>({
           op: "reroute",
           route: request.record.route,
           point: {
@@ -954,6 +969,26 @@ export function App() {
         }),
       );
       if (token !== operation.current) return;
+      // Everything that needs the worker is finished BEFORE the ownership check below, so that once the ride is known to
+      // be the same ride, adopting the replacement is one synchronous step that cannot be overtaken.
+      let carried: {
+        distanceMeters: number;
+        traversalEdges: unknown[];
+      } | null = null;
+      if (mode === "rejoin") {
+        // What was ridden of the loop before leaving it counts toward the finished workout, as in native.
+        const made = await client.call<{
+          carried: { distanceMeters: number; traversalEdges: unknown[] };
+        }>({
+          op: "carryRide",
+          route: request.record.route,
+          progress: request.riddenMeters,
+          ...(carriedRef.current ? { carried: carriedRef.current } : {}),
+          now: Date.now(),
+        });
+        carried = made.carried;
+        if (token !== operation.current) return;
+      }
       // A newer fix may have queued behind this reroute: wait for it so the current position is known.
       const settled = await controller.whenEvaluationsSettled();
       if (token !== operation.current) return;
@@ -969,6 +1004,7 @@ export function App() {
           result.warnings.join(" ") ||
             "This reroute cannot be navigated safely.",
         );
+      // From here to the end of the try block nothing is awaited.
       const record = makeRecord(
         result,
         request.record.draft as Draft,
@@ -978,22 +1014,9 @@ export function App() {
       setReverseOf(null);
       setSelected(record);
       snapshotState.current = undefined;
-      if (mode === "rejoin") {
-        // What was ridden of the loop before leaving it counts toward the finished workout, as in native.
-        const carried = await clientRef.current.call<{
-          carried: { distanceMeters: number; traversalEdges: unknown[] };
-        }>({
-          op: "carryRide",
-          route: request.record.route,
-          progress: request.riddenMeters,
-          ...(carriedRef.current ? { carried: carriedRef.current } : {}),
-          now: Date.now(),
-        });
-        carriedRef.current = carried.carried;
-        carriedStoreRef.current?.write({
-          recordKey: record.key,
-          carried: carried.carried,
-        });
+      if (carried) {
+        carriedRef.current = carried;
+        carriedStoreRef.current?.write({ recordKey: record.key, carried });
       }
       controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));

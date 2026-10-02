@@ -401,7 +401,9 @@ class WebRoutingBridge {
         // Ridden progress is what a rejoin and a carried ride are measured from, exactly as in native: a position an
         // off-route fix projects onto never counts. The first evaluation of a ride starts from the saved progress.
         val hasState = request["state"]?.takeIf { it != JsonNull } != null
-        val previousRidden = TrailRouteRiddenProgress(if (hasState) state.ridden else progress, state.pendingJump)
+        // With no state yet (a new or restored ride) it starts from the caller's saved ridden progress, else the progress.
+        val savedRidden = request["ridden"]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 }
+        val previousRidden = TrailRouteRiddenProgress(if (hasState) state.ridden else savedRidden ?: progress, state.pendingJump)
         val riddenNow = if (credible && !resuming && !ambiguous) TrailRouteRiddenProgressSijko.next(previousRidden, snapshot) else previousRidden
         val nextState = BrowserNavigationState(
             maximumProgress = when {
