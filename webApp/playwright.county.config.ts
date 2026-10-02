@@ -14,13 +14,13 @@ export default defineConfig({
     {
       name: "chromium",
       testDir: "tests/county",
-      testIgnore: /osm-supplement|access-tiles|proposed-layer/,
+      testIgnore: /osm-supplement|access-tiles|proposed-layer|image-credits/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "mobile-chromium",
       testDir: "tests/county",
-      testIgnore: /osm-supplement|access-tiles|proposed-layer/,
+      testIgnore: /osm-supplement|access-tiles|proposed-layer|image-credits/,
       use: { ...devices["Pixel 7"] },
     },
     // The county build that also packages the SYNTHETIC reviewed OpenStreetMap supplement (its own port).
@@ -65,6 +65,16 @@ export default defineConfig({
       testMatch: /proposed-layer/,
       use: { ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${port + 4}` },
     },
+    // The county build with EVERY credited layer at once, for the route image's credits (port + 5).
+    {
+      name: "credits-chromium",
+      testDir: "tests/county",
+      testMatch: /image-credits/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: `http://127.0.0.1:${port + 5}`,
+      },
+    },
     {
       name: "osm-mobile",
       testDir: "tests/county",
@@ -106,6 +116,12 @@ export default defineConfig({
     {
       command: `node tests/support/serve-county.mjs --port ${port + 2} --osm`,
       url: `http://127.0.0.1:${port + 2}`,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      command: `node tests/support/serve-county.mjs --port ${port + 5} --osm --access --proposed`,
+      url: `http://127.0.0.1:${port + 5}`,
       reuseExistingServer: false,
       timeout: 180000,
     },

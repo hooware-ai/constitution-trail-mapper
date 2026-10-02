@@ -159,6 +159,8 @@ export function App() {
     dialogEpoch = useRef(0),
     shownPopup = useRef<Popup>(null),
     shareAttempt = useRef(0),
+    imageAttempt = useRef(0),
+    shownRouteRef = useRef<unknown>(undefined),
     announceFrame = useRef(0);
   popupOpen.current = popup !== null;
   // Every open or close is a new dialog session; late results from an earlier one are ignored.
@@ -1265,32 +1267,50 @@ export function App() {
   };
   async function shareImage() {
     if (!selected || !preview) return;
+    // This attempt belongs to the dialog session, the route and the request that started it; anything that finishes after
+    // any of them has moved on is refused before it can download, share or speak.
+    const epoch = dialogEpoch.current,
+      attempt = ++imageAttempt.current,
+      route = preview.route,
+      title = selected.title,
+      exact = exactExport,
+      bound = cuesState && cuesState.route === route ? cuesState.data : null,
+      current = () =>
+        epoch === dialogEpoch.current &&
+        attempt === imageAttempt.current &&
+        shownRouteRef.current === route;
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
     if (routeNeedsRecalculation(preview)) {
-      announce({
-        kind: "error",
-        message: `${staleRouteMessage(preview)} It cannot be shown as verified trail: recalculate it first.`,
-      });
+      announce(
+        {
+          kind: "error",
+          message: `${staleRouteMessage(preview)} It cannot be shown as verified trail: recalculate it first.`,
+        },
+        epoch,
+      );
       return;
     }
     try {
-      if (!cues)
+      if (!bound)
         throw new Error(
           "The route's direction cues are not ready yet. Try again in a moment.",
         );
       const blob = await renderImage({
-        title: selected.title,
+        title,
         summary: preview.summary ?? "",
         warnings: preview.warnings,
         attribution: exportAttribution(),
-        pieces: cues.pieces,
-        turnarounds: cues.turnarounds,
+        pieces: bound.pieces,
+        turnarounds: bound.turnarounds,
         context: (network?.features ?? [])
           .filter(
             (feature) => feature.status !== "Proposed" || !!preview.proposed,
           )
           .flatMap((feature) => feature.paths),
-        exact: exactExport,
+        exact,
       });
+      if (!current()) return;
       const file = new File([blob], "trail-mapper-route.png", {
         type: "image/png",
       });
@@ -1301,7 +1321,11 @@ export function App() {
             title: "Trail Mapper route",
             text: "A ride planned with Trail Mapper.",
           });
-          announce({ kind: "success", message: "Route image shared." });
+          if (current())
+            announce(
+              { kind: "success", message: "Route image shared." },
+              epoch,
+            );
         } catch (e) {
           // Closing the share sheet is a choice, not a failure.
           if ((e as { name?: string }).name !== "AbortError") throw e;
@@ -1314,22 +1338,45 @@ export function App() {
       link.download = "trail-mapper-route.png";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      announce({
-        kind: "success",
-        message: exactExport
-          ? "Route image downloaded with your endpoint approval."
-          : "Route image downloaded with endpoint areas removed.",
-      });
+      announce(
+        {
+          kind: "success",
+          message: exact
+            ? "Route image downloaded with your endpoint approval."
+            : "Route image downloaded with endpoint areas removed.",
+        },
+        epoch,
+      );
     } catch (e) {
-      announce({ kind: "error", message: errorText(e) });
+      if (current()) announce({ kind: "error", message: errorText(e) }, epoch);
     }
   }
+  /** The credit for what the route was actually drawn from: the county data, and every separately included part of it. */
   function exportAttribution(): string {
-    return network?.mode === "fixture"
-      ? "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure. Map attribution: OpenStreetMap contributors."
-      : network?.datasetRecord
-        ? `${network.datasetRecord.source.attribution} Changes: ${network.datasetRecord.source.changes} Generated route; not an official county map.`
-        : "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.";
+    if (network?.mode === "fixture")
+      return "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure. Map attribution: OpenStreetMap contributors.";
+    const record = network?.datasetRecord;
+    if (!record)
+      return "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.";
+    const parts = [
+      `${record.source.attribution} Changes: ${record.source.changes}`,
+    ];
+    for (const part of record.supplements ?? [])
+      parts.push(
+        `Reviewed OpenStreetMap paths (${part.featureCount}, kept as their own layer): ${part.attribution}. License: ${part.license} (${part.licenseUrl}).`,
+      );
+    if (record.access)
+      parts.push(
+        record.access.index.localFeatureCount > 0
+          ? "Road access: U.S. Census Bureau TIGER/Line roads and © OpenStreetMap contributors service roads (ODbL, https://www.openstreetmap.org/copyright), used only to route access to trails."
+          : "Road access: U.S. Census Bureau TIGER/Line roads, used only to route access to trails.",
+      );
+    if (record.proposedLayer)
+      parts.push(
+        `Proposed trails (preview only, not built): ${record.proposedLayer.attribution}. License: ${record.proposedLayer.license} (${record.proposedLayer.licenseUrl}).`,
+      );
+    parts.push("Generated route; not an official county map.");
+    return parts.join(" ");
   }
   function downloadGeoJson() {
     if (!selected || !preview) return;
@@ -1454,23 +1501,35 @@ export function App() {
       : null;
   // The map cues (chevrons, second pass, turn-around signs) come from the shared core for the route being shown. They are an
   // enhancement: if they cannot be had, the route is drawn as a plain line.
-  const [cues, setCues] = useState<MapCues | null>(null);
+  // A result belongs to the route it was computed for. It is used only while that route is the one being shown, so a
+  // held answer for an earlier route (a switch, a reversal, a failure, a restart) can never be drawn or exported
+  // under a different route's title and checks.
+  const [cuesState, setCuesState] = useState<{
+    route: unknown;
+    data: MapCues;
+  } | null>(null);
   const shownRoute = showRoute?.route;
+  shownRouteRef.current = shownRoute;
+  const cues =
+    cuesState && shownRoute !== undefined && cuesState.route === shownRoute
+      ? cuesState.data
+      : null;
   useEffect(() => {
     const client = clientRef.current;
-    if (!client || !shownRoute) {
-      setCues(null);
-      return;
-    }
+    setCuesState(null);
+    if (!client || !shownRoute) return;
     let current = true;
     client
       .call<MapCues>({ op: "mapCues", route: shownRoute })
       .then((made) => {
         if (current)
-          setCues({ pieces: made.pieces, turnarounds: made.turnarounds });
+          setCuesState({
+            route: shownRoute,
+            data: { pieces: made.pieces, turnarounds: made.turnarounds },
+          });
       })
       .catch(() => {
-        if (current) setCues(null);
+        if (current) setCuesState(null);
       });
     return () => {
       current = false;

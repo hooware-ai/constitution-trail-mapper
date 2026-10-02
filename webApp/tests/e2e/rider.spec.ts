@@ -2799,10 +2799,18 @@ async function interceptOps(page: Page) {
               result: { ...event.data.result, ...(override.patch ?? {}) },
             };
             if (override.hold) {
+              // Answers are parked in arrival order: release all of them, or one by index.
+              const parked: (() => void)[] = (override.parked ??= []);
+              parked.push(() => deliver(data));
               override.pending = true;
               override.release = () => {
                 override.pending = false;
-                deliver(data);
+                parked.splice(0).forEach((fn) => fn());
+              };
+              override.releaseOne = (index: number) => {
+                const [fn] = parked.splice(index, 1);
+                override.pending = parked.length > 0;
+                fn?.();
               };
             } else deliver(data);
             return;
@@ -3711,4 +3719,283 @@ test("where the browser can share a file the image goes to the share sheet, and 
       .getByRole("alert")
       .filter({ hasText: /could not|failed|error|cannot/i }),
   ).toHaveCount(0);
+});
+
+// ---- cues belong to the route they were computed for; the image is only made from the route that is shown ------------------
+
+async function openPlannerLoop(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+}
+async function makeLoop(page: Page, miles: string) {
+  await page.getByRole("spinbutton", { name: "Custom miles" }).fill(miles);
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+}
+const signs = (page: Page) => page.locator(".turnaround-marker");
+async function imageButtonEnabled(page: Page) {
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  const button = dialog.getByRole("button", { name: /route image$/ });
+  const enabled = await button.isEnabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  return enabled;
+}
+
+test("a held cue answer for an earlier route is never drawn or exported under the route now shown", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await page.addInitScript(() => {
+    (window as any).__ops = { mapCues: { hold: true } };
+  });
+  await openPlannerLoop(page);
+  await makeLoop(page, "1"); // route A turns back once
+  await page.getByRole("button", { name: "← Back" }).first().click();
+  await makeLoop(page, "3"); // route B never does
+  const parked = () =>
+    page.evaluate(() => (window as any).__ops.mapCues.parked.length);
+  await expect.poll(parked).toBeGreaterThanOrEqual(2);
+  const earlier = (await parked()) - 1; // everything before the last request is for route A
+  expect(await chevronPixels(page)).toBe(0);
+  expect(await imageButtonEnabled(page)).toBe(false);
+
+  // A's answer arrives while B is shown: it is for another route, so nothing of it appears and no image can be made.
+  for (let i = 0; i < earlier; i++)
+    await page.evaluate(() => (window as any).__ops.mapCues.releaseOne(0));
+  await expect.poll(parked).toBe(1);
+  await page.waitForTimeout(300);
+  expect(await chevronPixels(page)).toBe(0);
+  await expect(signs(page)).toHaveCount(0);
+  await expect(page.getByText(/Chevrons show direction/)).toHaveCount(0);
+  expect(await imageButtonEnabled(page)).toBe(false);
+
+  // B's own answer is what is drawn, and then the image is available.
+  await page.evaluate(() => (window as any).__ops.mapCues.releaseOne(0));
+  await expect.poll(() => chevronPixels(page)).toBeGreaterThan(50);
+  await expect(signs(page)).toHaveCount(0);
+  expect(await imageButtonEnabled(page)).toBe(true);
+});
+
+test("a reversal holds the image back until the reversed route has its own cues", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await openPlannerLoop(page);
+  await makeLoop(page, "1");
+  await expect(signs(page)).toHaveCount(1);
+  expect(await imageButtonEnabled(page)).toBe(true);
+  await page.evaluate(() => {
+    (window as any).__ops = { mapCues: { hold: true } };
+  });
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  // The earlier route's cues are not drawn on the reversed route, and no picture can be made from them.
+  await expect(signs(page)).toHaveCount(0);
+  expect(await chevronPixels(page)).toBe(0);
+  expect(await imageButtonEnabled(page)).toBe(false);
+  await page.evaluate(() => (window as any).__ops.mapCues.release());
+  await expect(signs(page)).toHaveCount(1);
+  expect(await imageButtonEnabled(page)).toBe(true);
+});
+
+test("when the cues for a route fail, nothing from another route is shown and no image is offered", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await openPlannerLoop(page);
+  await makeLoop(page, "1");
+  await expect(signs(page)).toHaveCount(1);
+  await page.evaluate(() => {
+    (window as any).__ops = {
+      mapCues: { patch: { ok: false, error: "cues unavailable" } },
+    };
+  });
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect(signs(page)).toHaveCount(0);
+  expect(await chevronPixels(page)).toBe(0);
+  expect(await imageButtonEnabled(page)).toBe(false);
+  // The route itself is still there and navigable.
+  await expect(
+    page.getByRole("button", { name: "Start navigation", exact: true }),
+  ).toBeEnabled();
+});
+
+test("after the routing worker restarts, the route's cues come back for that same route", async ({
+  page,
+}) => {
+  await trackWorkers(page);
+  await openPlannerLoop(page);
+  await makeLoop(page, "1");
+  await expect(signs(page)).toHaveCount(1);
+  await crashWorker(page);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Route planning stopped" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Restart route planning" }).click();
+  await expect(page.getByText("Route planning restarted")).toBeVisible();
+  await expect(signs(page)).toHaveCount(1);
+  expect(await imageButtonEnabled(page)).toBe(true);
+});
+
+// ---- the image attempt belongs to its dialog, its route and its click ----------------------------------------------------
+
+/** Parks every toBlob until the test releases it; also counts downloads the page starts. */
+async function holdBlobs(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", { value: undefined });
+    const original = HTMLCanvasElement.prototype.toBlob;
+    (window as any).__blobs = { parked: [] as (() => void)[], hold: true };
+    HTMLCanvasElement.prototype.toBlob = function (cb, type, quality) {
+      const run = () => original.call(this, cb, type, quality);
+      if ((window as any).__blobs.hold)
+        (window as any).__blobs.parked.push(run);
+      else run();
+    };
+  });
+}
+const parkedBlobs = (page: Page) =>
+  page.evaluate(() => (window as any).__blobs.parked.length);
+const releaseBlob = (page: Page, index = 0) =>
+  page.evaluate(
+    (i) => (window as any).__blobs.parked.splice(i, 1)[0]?.(),
+    index,
+  );
+
+test("an image still being drawn when its dialog is closed and reopened downloads nothing and speaks to no one", async ({
+  page,
+}) => {
+  await holdBlobs(page);
+  const downloads: string[] = [];
+  page.on("download", (d) => downloads.push(d.suggestedFilename()));
+  await openShare(page);
+  await page.getByRole("button", { name: "Save route image" }).click();
+  await expect.poll(() => parkedBlobs(page)).toBe(1);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  await expect(dialog).toBeVisible();
+  await releaseBlob(page);
+  await page.waitForTimeout(500);
+  expect(downloads).toEqual([]);
+  await expect(
+    dialog.getByText(/Route image/).filter({ hasText: /downloaded|shared/ }),
+  ).toHaveCount(0);
+  // The new dialog works normally.
+  await page.evaluate(() => ((window as any).__blobs.hold = false));
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: "Save route image" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("trail-mapper-route.png");
+  await expect(
+    dialog.getByText("Route image downloaded with endpoint areas removed."),
+  ).toBeVisible();
+});
+
+test("an image still being drawn when the route is switched is never saved for the new route", async ({
+  page,
+}) => {
+  await holdBlobs(page);
+  const downloads: string[] = [];
+  page.on("download", (d) => downloads.push(d.suggestedFilename()));
+  await openShare(page, "1");
+  await page.getByRole("button", { name: "Save route image" }).click();
+  await expect.poll(() => parkedBlobs(page)).toBe(1);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "← Back" }).first().click();
+  await makeLoop(page, "3");
+  await releaseBlob(page);
+  await page.waitForTimeout(500);
+  expect(downloads).toEqual([]);
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Share route" })
+      .getByText(/Route image (downloaded|shared)/),
+  ).toHaveCount(0);
+});
+
+test("overlapping attempts: only the latest click produces a file", async ({
+  page,
+}) => {
+  await holdBlobs(page);
+  const downloads: string[] = [];
+  page.on("download", (d) => downloads.push(d.suggestedFilename()));
+  await openShare(page);
+  const button = page.getByRole("button", { name: "Save route image" });
+  await button.click();
+  await button.click();
+  await expect.poll(() => parkedBlobs(page)).toBe(2);
+  await releaseBlob(page, 0); // the first, superseded attempt finishes first
+  await page.waitForTimeout(400);
+  expect(downloads).toEqual([]);
+  await releaseBlob(page, 0);
+  await expect.poll(() => downloads.length).toBe(1);
+  await page.waitForTimeout(300);
+  expect(downloads).toHaveLength(1);
+});
+
+test("a held share that succeeds or fails after the dialog was reopened leaves the new dialog alone; in the same dialog it reports", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    (window as any).__share = { settle: [] as ((fail?: Error) => void)[] };
+    Object.defineProperty(navigator, "canShare", {
+      value: (d: any) => !!d?.files?.length,
+    });
+    Object.defineProperty(navigator, "share", {
+      value: () =>
+        new Promise<void>((resolve, reject) =>
+          (window as any).__share.settle.push((fail?: Error) =>
+            fail ? reject(fail) : resolve(),
+          ),
+        ),
+    });
+  });
+  await openShare(page);
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  const share = () => dialog.getByRole("button", { name: "Share route image" });
+  const settle = (fail?: string) =>
+    page.evaluate(
+      (message) =>
+        (window as any).__share.settle.splice(0, 1)[0](
+          message ? new Error(message) : undefined,
+        ),
+      fail,
+    );
+  const waiting = () =>
+    page.evaluate(() => (window as any).__share.settle.length);
+
+  // Same dialog: success and failure are reported.
+  await share().click();
+  await expect.poll(waiting).toBe(1);
+  await settle();
+  await expect(dialog.getByText("Route image shared.")).toBeVisible();
+  await share().click();
+  await expect.poll(waiting).toBe(1);
+  await settle("the share sheet failed");
+  await expect(dialog.getByText("the share sheet failed")).toBeVisible();
+
+  // Dialog closed and reopened while a share is held: neither outcome is spoken in the new dialog.
+  for (const fail of [undefined, "late failure"]) {
+    await share().click();
+    await expect.poll(waiting).toBe(1);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await settle(fail);
+    await page.waitForTimeout(400);
+    await expect(dialog.getByText("Route image shared.")).toHaveCount(0);
+    await expect(dialog.getByText("late failure")).toHaveCount(0);
+  }
 });

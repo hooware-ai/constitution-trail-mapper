@@ -199,3 +199,77 @@ test("text wraps within the width, and projection preserves aspect", () => {
   const b = project({ latitude: 1, longitude: 1 });
   assert.ok(Math.abs(b.x - a.x) <= 380 && Math.abs(a.y - b.y) <= 180);
 });
+
+import { hideAround } from "../../src/shareImage";
+
+test("private mode trims the context trails too: nothing drawn enters a hidden circle, even one trail crossing the start", () => {
+  const a = long[0];
+  const b = long.at(-1)!;
+  // A cross trail running east-west straight through the start, and a long leg that passes through the finish area.
+  const crossesStart = line(
+    [a.latitude, a.longitude - 0.01],
+    [a.latitude, a.longitude + 0.01],
+  );
+  const crossesEnd = line(
+    [b.latitude - 0.02, b.longitude],
+    [b.latitude + 0.02, b.longitude],
+  );
+  const far = line([40.52, -88.96], [40.53, -88.96]);
+  const trimmed = hideAround([crossesStart, crossesEnd, far], a, b);
+  for (const p of trimmed.flat()) {
+    assert.ok(metersBetween(a, p) > PRIVACY_RADIUS_METERS + 50);
+    assert.ok(metersBetween(b, p) > PRIVACY_RADIUS_METERS + 50);
+  }
+  assert.ok(
+    trimmed.length >= 5,
+    "each crossing trail is cut into two pieces, the far one is kept",
+  );
+  // Through the plan: the drawn context never enters the circles, and exact mode keeps the whole trail.
+  const input = base({
+    exact: false,
+    context: [crossesStart, crossesEnd, far],
+  });
+  const plan = planImage(input, measure);
+  assert.ok(plan.context.length >= 5);
+  const exact = planImage(
+    base({ exact: true, context: [crossesStart, crossesEnd, far] }),
+    measure,
+  );
+  assert.equal(exact.context.length, 3);
+  // The context pixels near the start are absent in private mode: no context point projects within the hidden radius.
+  const startPixel = exact.markers[0].pixel;
+  const metersPerPixel =
+    metersBetween(a, b) /
+    Math.hypot(
+      exact.markers[1].pixel.x - startPixel.x,
+      exact.markers[1].pixel.y - startPixel.y,
+    );
+  for (const p of plan.context.flat())
+    assert.ok(
+      Math.hypot(p.x - startPixel.x, p.y - startPixel.y) * metersPerPixel >
+        PRIVACY_RADIUS_METERS * 0.8,
+    );
+});
+
+test("notices and credit are never truncated: a long credit and many notices all survive into the plan", () => {
+  const credit =
+    Array.from({ length: 40 }, (_, i) => `credit${i}`).join(" ") +
+    " https://example.test/license";
+  const warnings = Array.from(
+    { length: 12 },
+    (_, i) => `Notice number ${i} ` + "word ".repeat(60),
+  );
+  const plan = planImage(base({ attribution: credit, warnings }), measure);
+  assert.equal(plan.attribution.join(" "), credit);
+  assert.equal(plan.warnings.length, 12);
+  for (const [i, lines] of plan.warnings.entries())
+    assert.equal(lines.join(" "), warnings[i].trim());
+  const short = planImage(
+    base({ attribution: "Short credit.", warnings: [] }),
+    measure,
+  );
+  assert.ok(
+    plan.height > short.height,
+    "the picture grows to hold what it must say",
+  );
+});

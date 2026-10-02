@@ -81,30 +81,47 @@ export function hideEndpoints(
   last: Point,
   radius = PRIVACY_RADIUS_METERS,
 ): MapCuePiece[] {
+  const out: MapCuePiece[] = [];
+  for (const piece of pieces)
+    for (const run of hideAround([piece.points], first, last, radius))
+      out.push({
+        ...piece,
+        points: run,
+        // Distances are not drawn; keep the shape of the piece consistent.
+        distances: run.map((_, index) => piece.distances[0] + index),
+      });
+  return out;
+}
+
+/**
+ * The same trimming for any set of lines (the trails drawn around the route): densified to 50 m so one long leg cannot
+ * cross a hidden area unnoticed, split wherever it enters one, and nothing kept inside it. The privacy rule is about
+ * everything drawn, not only the route, so context lines are held to it too.
+ */
+export function hideAround(
+  lines: Point[][],
+  first: Point,
+  last: Point,
+  radius = PRIVACY_RADIUS_METERS,
+): Point[][] {
   const hidden = (point: Point) =>
     metersBetween(first, point) <= radius + 50 ||
     metersBetween(last, point) <= radius + 50;
-  const out: MapCuePiece[] = [];
-  for (const piece of pieces) {
+  const out: Point[][] = [];
+  for (const line of lines) {
     let run: Point[] = [];
     const flush = () => {
-      if (run.length >= 2)
-        out.push({
-          ...piece,
-          points: run,
-          // Distances are not drawn; keep the shape of the piece consistent.
-          distances: run.map((_, index) => piece.distances[0] + index),
-        });
+      if (run.length >= 2) out.push(run);
       run = [];
     };
     const sampled: Point[] = [];
-    for (let i = 0; i < piece.points.length; i++) {
+    for (let i = 0; i < line.length; i++) {
       if (i === 0) {
-        sampled.push(piece.points[0]);
+        sampled.push(line[0]);
         continue;
       }
-      const a = piece.points[i - 1];
-      const b = piece.points[i];
+      const a = line[i - 1];
+      const b = line[i];
       const steps = Math.max(1, Math.ceil(metersBetween(a, b) / 50));
       for (let step = 1; step <= steps; step++) {
         const t = step / steps;
@@ -246,7 +263,12 @@ export function planImage(
   // Context trails that come near the drawn route, so the picture shows where it is without a basemap.
   const margin =
     Math.max(box.north - box.south, box.east - box.west) * 0.35 + 0.002;
-  const context = input.context
+  // Under the privacy rule the trails around the route are trimmed exactly like the route, so nothing drawn enters a
+  // hidden circle (a trail through the start would otherwise show where the start is).
+  const contextLines = input.exact
+    ? input.context
+    : hideAround(input.context, first, last, radius);
+  const context = contextLines
     .filter((line) =>
       line.some(
         (p) =>
@@ -289,13 +311,9 @@ export function planImage(
     if (!together) markers.push({ pixel: project(last), label: "Finish" });
   }
 
-  const warnings = input.warnings
-    .slice(0, 8)
-    .map((w) => text(w, 28, false, innerWidth).slice(0, 5));
-  const attribution = text(input.attribution, 24, false, innerWidth).slice(
-    0,
-    4,
-  );
+  // Notices and credit are never cut short: the picture grows to hold all of them.
+  const warnings = input.warnings.map((w) => text(w, 28, false, innerWidth));
+  const attribution = text(input.attribution, 24, false, innerWidth);
   const footerTop = map.y + map.height + 36;
   const warningHeight = warnings.reduce(
     (sum, lines) => sum + lines.length * 38 + 14,
