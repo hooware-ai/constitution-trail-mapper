@@ -15,6 +15,7 @@ import {
   Legend,
   Modal,
   PlaceChooser,
+  ProposedChoice,
   RouteRow,
   SafeLink,
 } from "./components";
@@ -1438,21 +1439,13 @@ export function App() {
                   </p>
                 </fieldset>
               )}
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={draft.proposed}
-                  onChange={(e) =>
-                    setDraft({ ...draft, proposed: e.target.checked })
-                  }
-                />
-                <span>
-                  Include proposed trails
-                  <small>
-                    Opt in to planned paths that may not be built or usable.
-                  </small>
-                </span>
-              </label>
+              <ProposedChoice
+                network={network}
+                checked={draft.proposed}
+                onChange={(proposed) => setDraft({ ...draft, proposed })}
+                label="Include proposed trails"
+                description="Opt in to planned paths that may not be built or usable."
+              />
               <button
                 className="primary wide"
                 disabled={!canPlan}
@@ -1938,19 +1931,13 @@ export function App() {
                 See the trails, connectors and shared roadways used by the route
                 planner.
               </p>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={draft.proposed}
-                  onChange={(e) =>
-                    setDraft({ ...draft, proposed: e.target.checked })
-                  }
-                />
-                <span>
-                  Show proposed trails
-                  <small>Planned paths may not be built or usable.</small>
-                </span>
-              </label>
+              <ProposedChoice
+                network={network}
+                checked={draft.proposed}
+                onChange={(proposed) => setDraft({ ...draft, proposed })}
+                label="Show proposed trails"
+                description="Planned paths may not be built or usable."
+              />
               <Legend />
               <p>
                 {network.features.length} mapped trail features in this dataset.

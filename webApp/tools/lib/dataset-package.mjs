@@ -22,6 +22,14 @@ import {
 } from "./canonical-json.mjs";
 
 import {
+  PROPOSED_LAYER_ID,
+  ProposedError,
+  admitProposed,
+  checkProposedLayer,
+  committedProposedManifestFile,
+  proposedInputFile,
+} from "./proposed-layer.mjs";
+import {
   AccessPackageError,
   buildAccessParts,
   checkAccessParts,
@@ -70,7 +78,14 @@ export const approvalRecordFile = process.env.TRAIL_COUNTY_APPROVAL
 export const osmManifestFile = process.env.TRAIL_OSM_MANIFEST
   ? resolve(process.env.TRAIL_OSM_MANIFEST)
   : committedOsmManifestFile;
-export { committedOsmManifestFile, osmInputFile };
+export const proposedManifestFile =
+  process.env.TRAIL_PROPOSED_MANIFEST ?? committedProposedManifestFile;
+export {
+  committedOsmManifestFile,
+  osmInputFile,
+  committedProposedManifestFile,
+  proposedInputFile,
+};
 
 export class AdmissionError extends Error {
   constructor(message) {
@@ -324,7 +339,12 @@ export function admit(inputText, manifest) {
  * The runtime network as text: what the router reads plus the raw evidence the hashes cover. Geometry and attributes are
  * spliced in exactly as the extractor wrote them, so anyone can recompute the reviewed digests from the shipped file.
  */
-export function toNetworkText(features, domainsText, supplementLayer = null) {
+export function toNetworkText(
+  features,
+  domainsText,
+  supplementLayer = null,
+  proposedLayer = null,
+) {
   const ordered = [...features].sort((a, b) => {
     const [la, oa] = a.id.split(":").map(Number);
     const [lb, ob] = b.id.split(":").map(Number);
@@ -340,6 +360,7 @@ export function toNetworkText(features, domainsText, supplementLayer = null) {
     `{"schema":${JSON.stringify(NETWORK_SCHEMA)},"domains":${domainsText},"layers":[{"id":8,"name":"Reviewed licensed McGIS trails",` +
     `"featureCount":${ordered.length},"features":[${ordered.map(one).join(",")}]}` +
     (supplementLayer ? `,${JSON.stringify(supplementLayer)}` : "") +
+    (proposedLayer ? `,${JSON.stringify(proposedLayer)}` : "") +
     `]}`
   );
 }
@@ -364,6 +385,8 @@ export async function buildPackage({
   // Optional ordinary-road access: split into base roads (loaded with the data) and endpoint-local service-road tiles
   // (loaded on demand), every part hash-named and pinned by the record. Off unless given.
   access = null,
+  // Optional, rights-gated proposed trails: their own opt-in layer, only with a granted rights block (proposed-layer.mjs).
+  proposed = null,
 }) {
   const { features, domainsText } = admit(inputText, manifest);
   const input = JSON.parse(inputText);
@@ -371,8 +394,22 @@ export async function buildPackage({
   const admittedSupplement = supplement
     ? admitSupplement(supplement.inputText, supplement.manifest)
     : null;
+  let admittedProposed = null;
+  try {
+    admittedProposed = proposed
+      ? admitProposed(proposed.inputText, proposed.manifest)
+      : null;
+  } catch (error) {
+    if (error instanceof ProposedError) throw new AdmissionError(error.message);
+    throw error;
+  }
   const body = Buffer.from(
-    toNetworkText(features, domainsText, admittedSupplement?.layer ?? null),
+    toNetworkText(
+      features,
+      domainsText,
+      admittedSupplement?.layer ?? null,
+      admittedProposed?.layer ?? null,
+    ),
     "utf8",
   );
   const contentSha = sha256(body);
@@ -396,8 +433,12 @@ export async function buildPackage({
   }
   if (admittedSupplement)
     layerCounts[SUPPLEMENT_LAYER_ID] = admittedSupplement.layer.features.length;
+  if (admittedProposed)
+    layerCounts[PROPOSED_LAYER_ID] = admittedProposed.layer.features.length;
   const totalFeatures =
-    features.length + (admittedSupplement?.layer.features.length ?? 0);
+    features.length +
+    (admittedSupplement?.layer.features.length ?? 0) +
+    (admittedProposed?.layer.features.length ?? 0);
   const sources = input.sources;
   const record = {
     schema: RECORD_SCHEMA,
@@ -430,7 +471,11 @@ export async function buildPackage({
       disclaimer: sources.disclaimer,
     },
     omitted: {
+      // Segments admitted through the rights-gated layer are no longer omitted.
       proposedFeatureIds: [...excludedIds(manifest)]
+        .filter(
+          (id) => !(admittedProposed?.facts.segmentIds ?? []).includes(id),
+        )
         .map((id) => Number(id.split(":")[1]))
         .sort((a, b) => a - b),
       // What is left out, in words a rider can read. With a supplement packaged, the approval record's "none" no longer
@@ -454,6 +499,14 @@ export async function buildPackage({
       : {}),
     ...(accessParts
       ? { access: { ...accessParts.descriptor, combinedSha256: combinedSha } }
+      : {}),
+    ...(admittedProposed
+      ? {
+          proposedLayer: {
+            ...admittedProposed.facts,
+            manifestSha256: sha256(Buffer.from(proposed.manifestBytes)),
+          },
+        }
       : {}),
     approval: {
       approved: approval.approved === true,
@@ -500,6 +553,9 @@ export async function packageFromFiles({
   osmManifestPath = osmManifestFile,
   // Optional normalized access-road extract (TIGER roads plus endpoint-local service roads).
   accessInput = null,
+  // Optional proposed-trails extract; requires a manifest whose rights block is granted, else packaging is refused.
+  proposedInput = null,
+  proposedManifestPath = proposedManifestFile,
 } = {}) {
   let inputBytes;
   try {
@@ -527,6 +583,25 @@ export async function packageFromFiles({
       manifestBytes: osmManifestBytes,
     };
   }
+  let proposed = null;
+  if (proposedInput) {
+    let proposedText;
+    try {
+      proposedText = await readFile(proposedInput, "utf8");
+    } catch {
+      throw new AdmissionError(
+        `The proposed-trails extract is not present (${proposedInput}); this tool never contacts a server.`,
+      );
+    }
+    const proposedManifestBytes = await readFile(proposedManifestPath);
+    proposed = {
+      inputText: proposedText,
+      manifest: JSON.parse(
+        proposedManifestBytes.toString("utf8").replace(/^﻿/, ""),
+      ),
+      manifestBytes: proposedManifestBytes,
+    };
+  }
   let access = null;
   if (accessInput) {
     let text;
@@ -546,6 +621,7 @@ export async function packageFromFiles({
     approval: await readApprovalRecord(approvalPath),
     supplement,
     access,
+    proposed,
   });
   await writePackage(built, outDir);
   return built;
@@ -562,6 +638,7 @@ export function checkPackage(
   osmManifestBytes = null,
   // Returns the bytes of a package file by name (undefined when absent); required when the record has access parts.
   readPart = undefined,
+  proposedManifestBytes = null,
 ) {
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (record.schema !== RECORD_SCHEMA || record.kind !== "county")
@@ -595,8 +672,20 @@ export function checkPackage(
     );
   if ((record.supplements ?? []).some((part) => part.id !== SUPPLEMENT_KIND))
     refuse("The record describes a supplement this version does not know.");
+  const proposedLayers = network.layers.filter(
+    (layer) => layer.id === PROPOSED_LAYER_ID,
+  );
+  const hasProposed = Boolean(record.proposedLayer);
+  if (
+    hasProposed !== (proposedLayers.length === 1) ||
+    proposedLayers.length > 1
+  )
+    refuse(
+      "The proposed-trails layer and the record's description of it disagree.",
+    );
   const countyLayers = network.layers.filter(
-    (layer) => layer.id !== SUPPLEMENT_LAYER_ID,
+    (layer) =>
+      layer.id !== SUPPLEMENT_LAYER_ID && layer.id !== PROPOSED_LAYER_ID,
   );
   const features = countyLayers.flatMap((layer) => layer.features);
   const ids = new Set(features.map((f) => f.id));
@@ -606,7 +695,10 @@ export function checkPackage(
     if (excluded.has(id)) refuse(`${id} is excluded but present.`);
   const domains = authenticateDomains(tree.domains, manifest);
   const treeFeatures = tree.layers
-    .filter((layer) => layer.id !== SUPPLEMENT_LAYER_ID)
+    .filter(
+      (layer) =>
+        layer.id !== SUPPLEMENT_LAYER_ID && layer.id !== PROPOSED_LAYER_ID,
+    )
     .flatMap((layer) => layer.features);
   for (const [index, feature] of features.entries()) {
     const entry = entries.get(feature.id);
@@ -657,7 +749,28 @@ export function checkPackage(
     }
     supplementCount = supplementLayers[0].features.length;
   }
-  if (record.content.featureCount !== features.length + supplementCount)
+  let proposedCount = 0;
+  if (hasProposed) {
+    if (!proposedManifestBytes)
+      refuse(
+        "The record has a proposed-trails layer but no reviewed manifest to check it against.",
+      );
+    try {
+      proposedCount = checkProposedLayer(
+        proposedLayers[0],
+        record,
+        JSON.parse(proposedManifestBytes.toString("utf8").replace(/^﻿/, "")),
+        proposedManifestBytes,
+      );
+    } catch (error) {
+      if (error instanceof ProposedError) refuse(error.message);
+      throw error;
+    }
+  }
+  if (
+    record.content.featureCount !==
+    features.length + supplementCount + proposedCount
+  )
     refuse("The recorded feature count is wrong.");
   if (record.access) {
     if (!readPart)
@@ -675,9 +788,13 @@ export function checkPackage(
       record.access.index.sha256,
     );
     if (record.access.combinedSha256 !== combined)
-      refuse("The access identity does not match the network and its tile index.");
+      refuse(
+        "The access identity does not match the network and its tile index.",
+      );
     if (!record.version.endsWith(`.${combined.slice(0, 12)}`))
-      refuse("The dataset version does not name the combined network and access identity.");
+      refuse(
+        "The dataset version does not name the combined network and access identity.",
+      );
   } else if (!record.version.endsWith(`.${record.content.sha256.slice(0, 12)}`))
     refuse("The dataset version does not name the network content.");
   return network;
@@ -693,6 +810,9 @@ export async function verifyPackageDir(
   const body = await readFile(join(dir, record.content.file));
   const osmManifestBytes = (record.supplements ?? []).length
     ? await readFile(osmManifestFile)
+    : null;
+  const proposedManifestBytes = record.proposedLayer
+    ? await readFile(proposedManifestFile)
     : null;
   const listing = await readdir(dir);
   const present = new Map();
@@ -711,6 +831,7 @@ export async function verifyPackageDir(
     manifestBytes,
     osmManifestBytes,
     readPart,
+    proposedManifestBytes,
   );
   const stray = [...present.keys()].filter((name) => !used.has(name));
   if (stray.length)

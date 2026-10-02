@@ -47,6 +47,27 @@ export interface SupplementPart {
   /** What the review keeps OUT (known gaps stay gaps; unverified ways are never imported). */
   excludedUntilVerified: string[];
 }
+/**
+ * Proposed (not yet built) trail segments, packaged only under a granted rights block with evidence. They are their own
+ * layer, off unless the rider opts in, and a route using them is a preview that cannot start navigation.
+ */
+export interface ProposedLayerPart {
+  id: string;
+  layerId: string;
+  featureCount: number;
+  segmentIds: string[];
+  reviewedOn: string;
+  basis: string;
+  evidenceUrl: string;
+  evidenceSha256: string;
+  grantedBy: string;
+  grantedOn: string;
+  license: string;
+  licenseUrl: string;
+  attribution: string;
+  note: string;
+  manifestSha256: string;
+}
 /** A hash-named file the page may fetch from beside the dataset record: its name, exact size and SHA-256. */
 export interface AccessPartRef {
   file: string;
@@ -89,6 +110,8 @@ export interface DatasetRecord {
   source: DatasetSource;
   /** Optional reviewed supplements, each its own layer with its own source, licence and attribution. */
   supplements?: SupplementPart[];
+  /** Optional rights-gated proposed-trail segments (a separate opt-in layer). */
+  proposedLayer?: ProposedLayerPart;
   /** Optional ordinary-road access parts, pinned by hash. */
   access?: AccessDescriptor;
   /** What was deliberately left out and why, shown to riders as coverage limits. */
@@ -146,6 +169,32 @@ function validPart(part: unknown): boolean {
     SHA256.test(part.sha256) &&
     part.file.includes(part.sha256.slice(0, 12)) &&
     count(part.bytes)
+  );
+}
+function validProposed(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  return (
+    text(value.id) &&
+    text(value.layerId) &&
+    count(value.featureCount) &&
+    Array.isArray(value.segmentIds) &&
+    value.segmentIds.length === value.featureCount &&
+    value.segmentIds.every((id) => text(id)) &&
+    text(value.reviewedOn) &&
+    text(value.basis) &&
+    typeof value.evidenceUrl === "string" &&
+    /^https:\/\//i.test(value.evidenceUrl) &&
+    typeof value.evidenceSha256 === "string" &&
+    SHA256.test(value.evidenceSha256) &&
+    text(value.grantedBy) &&
+    text(value.grantedOn) &&
+    text(value.license) &&
+    typeof value.licenseUrl === "string" &&
+    /^https:\/\//i.test(value.licenseUrl) &&
+    text(value.attribution) &&
+    text(value.note) &&
+    typeof value.manifestSha256 === "string" &&
+    SHA256.test(value.manifestSha256)
   );
 }
 function validAccess(value: unknown): boolean {
@@ -273,6 +322,11 @@ export function parseDatasetRecord(
     throw new DatasetError(
       "data-corrupt",
       "The trail data approval record is invalid.",
+    );
+  if (value.proposedLayer !== undefined && !validProposed(value.proposedLayer))
+    throw new DatasetError(
+      "data-corrupt",
+      "The description of the proposed trails is invalid.",
     );
   if (value.access !== undefined && !validAccess(value.access))
     throw new DatasetError(

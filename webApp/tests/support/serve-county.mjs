@@ -1,12 +1,15 @@
 // Builds and serves a county-mode artifact from the SYNTHETIC package (tests/support/county-fixture.mjs) on a port
 // this run owns. Nothing here reads or needs the private licensed extract; the data is not county data.
 //
-//   node tests/support/serve-county.mjs --port <n> [--public] [--osm] [--access] [--scale <features>] [--build-only]
+//   node tests/support/serve-county.mjs --port <n> [--public] [--osm] [--access] [--proposed] [--scale <features>] [--build-only]
 //
 // --osm also packages the SYNTHETIC reviewed OpenStreetMap supplement (tests/support/osm-fixture.mjs) as its own layer.
 //
 // --access also packages SYNTHETIC ordinary-road access (tests/support/access-fixture.mjs): base roads plus hash-named
 // service-road tiles, loaded on demand.
+//
+// --proposed also packages SYNTHETIC proposed segments (tests/support/proposed-fixture.mjs) through the rights-gated seam,
+// with a synthetic granted rights block, as an opt-in preview-only layer.
 //
 // --scale swaps the five-feature package for a synthetic lattice of that many features, for sizing only.
 //
@@ -20,12 +23,19 @@ import { fileURLToPath } from "node:url";
 import { makeCounty, scaledList } from "./county-fixture.mjs";
 import { makeSupplement } from "./osm-fixture.mjs";
 import { makeAccessExtract } from "./access-fixture.mjs";
+import { makeProposed } from "./proposed-fixture.mjs";
 
 const webRoot = fileURLToPath(new URL("../../", import.meta.url));
 const channel = process.argv.includes("--public") ? "public" : "review";
 const withOsm = process.argv.includes("--osm");
 const withAccess = process.argv.includes("--access");
-const variant = [channel, withOsm ? "osm" : "", withAccess ? "access" : ""]
+const withProposed = process.argv.includes("--proposed");
+const variant = [
+  channel,
+  withOsm ? "osm" : "",
+  withAccess ? "access" : "",
+  withProposed ? "proposed" : "",
+]
   .filter(Boolean)
   .join("-");
 const work = join(webRoot, "generated", `synthetic-${variant}`);
@@ -55,6 +65,13 @@ if (withOsm) {
   await writeFile(files.osmManifest, JSON.stringify(supplement.manifest));
 }
 
+if (withProposed) {
+  const proposed = makeProposed();
+  files.proposedInput = join(work, "proposed-trails.json");
+  files.proposedManifest = join(work, "proposed-manifest.json");
+  await writeFile(files.proposedInput, JSON.stringify(proposed.input));
+  await writeFile(files.proposedManifest, JSON.stringify(proposed.manifest));
+}
 if (withAccess) {
   files.accessInput = join(work, "access-roads.json");
   await writeFile(files.accessInput, JSON.stringify(makeAccessExtract()));
@@ -69,6 +86,7 @@ const env = {
   TRAIL_COUNTY_APPROVAL: files.approval,
   TRAIL_DIST_DIR: distDir,
   ...(withOsm ? { TRAIL_OSM_MANIFEST: files.osmManifest } : {}),
+  ...(withProposed ? { TRAIL_PROPOSED_MANIFEST: files.proposedManifest } : {}),
 };
 // The modules read these variables when first imported, so package in a child with the same environment.
 const run = (label, args) => {
@@ -93,6 +111,7 @@ run("package", [
   county,
   ...(withOsm ? ["--osm-additions", files.osmInput] : []),
   ...(withAccess ? ["--access-roads", files.accessInput] : []),
+  ...(withProposed ? ["--proposed-trails", files.proposedInput] : []),
 ]);
 run("build", ["npx", "vite", "build"]);
 run("provenance", ["node", "tools/write-provenance.mjs"]);

@@ -1,3 +1,9 @@
+// NOTE ON "navigable": the probe reports two things apart. A route is AVAILABLE when the core found one. The web
+// additionally decides whether the rider may START navigation on it (no estimated access gap, no Proposed trail, a
+// current network, no blocking closure), which is stricter than native (native refuses only for a blocking closure).
+// Counts named `navigable` below are the WEB start rule; `startBlockedBy` gives the reason, and
+// tools/navigation-equivalence.mjs classifies both rules side by side. Zero navigable never means the core found no route.
+//
 // Native-to-web data parity probe. READ-ONLY and private: it reads native's generated (git-ignored) routing assets and the
 // web's public place catalog, drives the REAL shared Kotlin routing core in-process, and reports what each data
 // configuration can do. It never writes the assets, never uses a network, and its output is evidence for
@@ -136,6 +142,8 @@ for (const [name, config] of Object.entries(configs)) {
     pairs: 0,
     routed: 0,
     navigable: 0,
+    // Why the web refuses to start navigation on routes the core found (a route can have several reasons).
+    startBlockedBy: {},
     withAccessGap: 0,
     accessMetersTotal: 0,
     trailMilesTotal: 0,
@@ -167,11 +175,21 @@ for (const [name, config] of Object.entries(configs)) {
       if (r.network?.status === "stale") row.freshRoutesFlaggedStale++;
       const gaps = (r.accessGaps ?? []).length;
       if (r.canNavigate) row.navigable++;
+      else
+        for (const reason of [
+          gaps ? "estimated-access-gap" : null,
+          r.proposed ? "proposed-trail" : null,
+          (r.closures ?? []).length ? "blocking-closure" : null,
+          r.network && !["current", "trusted"].includes(r.network.status)
+            ? "network-not-current"
+            : null,
+        ].filter(Boolean))
+          row.startBlockedBy[reason] = (row.startBlockedBy[reason] ?? 0) + 1;
       if (gaps) row.withAccessGap++;
       row.accessMetersTotal += r.accessDistance ?? 0;
       row.trailMilesTotal += (r.distance ?? 0) / 1609.344;
       row.results[key] =
-        `${r.canNavigate ? "navigable" : "blocked"} ${(r.distance / 1609.344).toFixed(2)}mi access=${Math.round(r.accessDistance ?? 0)}m gaps=${gaps}`;
+        `route found; web start ${r.canNavigate ? "allowed" : "refused"} ${(r.distance / 1609.344).toFixed(2)}mi access=${Math.round(r.accessDistance ?? 0)}m gaps=${gaps}`;
     }
   for (const place of places) {
     for (const miles of [3, 8]) {

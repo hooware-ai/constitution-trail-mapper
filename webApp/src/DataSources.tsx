@@ -74,6 +74,18 @@ export function DataSources({
           <SafeLink href={part.licenseUrl}>{part.license}</SafeLink>.
         </p>
       ))}
+      {record.proposedLayer && (
+        <p>
+          <strong>Proposed trails (preview only):</strong>{" "}
+          {record.proposedLayer.featureCount} planned segments, shown and routed
+          only when you opt in, and never offered for navigation.{" "}
+          {record.proposedLayer.attribution} · License:{" "}
+          <SafeLink href={record.proposedLayer.licenseUrl}>
+            {record.proposedLayer.license}
+          </SafeLink>
+          .
+        </p>
+      )}
       {record.access && (
         <p>
           <strong>Road access:</strong> {record.access.base.featureCount} base

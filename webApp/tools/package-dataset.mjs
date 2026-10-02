@@ -2,6 +2,9 @@
 //
 //   node tools/package-dataset.mjs [--input <extract.json>] [--out <dir>] [--osm-additions [<file>]] [--access-roads <file>]
 //
+// --proposed-trails [<file>] packages proposed segments as their own opt-in, preview-only layer. It is refused unless
+// data/web-proposed-trails.manifest.json records a GRANTED rights block with evidence (it records "unresolved" today).
+//
 // --access-roads packages ordinary-road access (TIGER base roads plus endpoint-local service roads) as hash-named base,
 // tile and index files, pinned by the record, so the browser fetches service-road tiles only near a trip's endpoints.
 // --osm-additions also packages the four reviewed OpenStreetMap paths native loads, as their own layer, after verifying
@@ -15,6 +18,7 @@ import {
   osmInputFile,
   packageDir,
   packageFromFiles,
+  proposedInputFile,
 } from "./lib/dataset-package.mjs";
 
 const arg = (name) => {
@@ -31,11 +35,22 @@ const osmInput =
       ? process.argv[osmIndex + 1]
       : osmInputFile;
 
+// `--proposed-trails [<file>]` opens the rights-gated proposed-trails seam; without a granted rights block it refuses.
+const proposedIndex = process.argv.indexOf("--proposed-trails");
+const proposedInput =
+  proposedIndex < 0
+    ? null
+    : process.argv[proposedIndex + 1] &&
+        !process.argv[proposedIndex + 1].startsWith("--")
+      ? process.argv[proposedIndex + 1]
+      : proposedInputFile;
+
 packageFromFiles({
   inputFile: arg("--input") ?? licensedInputFile,
   outDir: arg("--out") ?? packageDir,
   osmInput,
   accessInput: arg("--access-roads") ?? null,
+  proposedInput,
 })
   .then(({ record }) =>
     console.log(

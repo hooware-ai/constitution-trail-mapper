@@ -14,7 +14,9 @@ import {
   committedManifestFile,
   manifestFile,
   committedOsmManifestFile,
+  committedProposedManifestFile,
   osmManifestFile,
+  proposedManifestFile,
   readApprovalRecord,
 } from "./dataset-package.mjs";
 
@@ -96,19 +98,37 @@ async function loadCountyDataset(dir, paths) {
   let body = null;
   try {
     body = await readFile(join(dir, "data", record.content.file));
+    const proposedManifestBytes = record.proposedLayer
+      ? await readFile(paths.proposedManifestFile ?? proposedManifestFile)
+      : null;
     const osmManifestBytes = (record.supplements ?? []).length
       ? await readFile(paths.osmManifestFile ?? osmManifestFile)
       : null;
-    checkPackage(record, body, manifestBytes, osmManifestBytes, (name) => {
-      // Access parts are named by hash and live beside the network; never follow a path out of data/.
-      if (name.includes("/") || name.includes("\\") || name.includes(".."))
-        return undefined;
-      try {
-        return readFileSync(join(dir, "data", name));
-      } catch {
-        return undefined;
-      }
-    });
+    checkPackage(
+      record,
+      body,
+      manifestBytes,
+      osmManifestBytes,
+      (name) => {
+        // Access parts are named by hash and live beside the network; never follow a path out of data/.
+        if (name.includes("/") || name.includes("\\") || name.includes(".."))
+          return undefined;
+        try {
+          return readFileSync(join(dir, "data", name));
+        } catch {
+          return undefined;
+        }
+      },
+      proposedManifestBytes,
+    );
+    if (
+      proposedManifestBytes &&
+      (paths.proposedManifestFile ?? proposedManifestFile) !==
+        committedProposedManifestFile
+    )
+      inconsistencies.push(
+        "dataset was packaged from a proposed-trails manifest other than the committed one",
+      );
     if (
       osmManifestBytes &&
       (paths.osmManifestFile ?? osmManifestFile) !== committedOsmManifestFile
