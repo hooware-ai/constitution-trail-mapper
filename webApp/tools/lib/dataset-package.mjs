@@ -22,6 +22,11 @@ import {
 } from "./canonical-json.mjs";
 
 import {
+  AccessPackageError,
+  buildAccessParts,
+  checkAccessParts,
+} from "./access-package.mjs";
+import {
   SUPPLEMENT_KIND,
   SUPPLEMENT_LAYER_ID,
   SupplementError,
@@ -356,6 +361,9 @@ export async function buildPackage({
   manifestBytes,
   approval,
   supplement = null,
+  // Optional ordinary-road access: split into base roads (loaded with the data) and endpoint-local service-road tiles
+  // (loaded on demand), every part hash-named and pinned by the record. Off unless given.
+  access = null,
 }) {
   const { features, domainsText } = admit(inputText, manifest);
   const input = JSON.parse(inputText);
@@ -369,6 +377,18 @@ export async function buildPackage({
   );
   const contentSha = sha256(body);
   const file = `trails.${contentSha.slice(0, 12)}.json`;
+  let accessParts = null;
+  try {
+    accessParts = access ? buildAccessParts(access.inputText) : null;
+  } catch (error) {
+    if (error instanceof AccessPackageError)
+      throw new AdmissionError(error.message);
+    throw error;
+  }
+  // The identity a saved route remembers moves with the access data it was planned on, not just the trails.
+  const combinedSha = accessParts
+    ? accessIdentity(contentSha, accessParts.descriptor.index.sha256)
+    : null;
   const layerCounts = {};
   for (const feature of features) {
     const layerId = feature.id.split(":")[0];
@@ -383,7 +403,7 @@ export async function buildPackage({
     schema: RECORD_SCHEMA,
     kind: "county",
     id: approval.id,
-    version: `${manifest.reviewedOn}.${contentSha.slice(0, 12)}`,
+    version: `${manifest.reviewedOn}.${(combinedSha ?? contentSha).slice(0, 12)}`,
     label: approval.label,
     content: {
       file,
@@ -418,7 +438,9 @@ export async function buildPackage({
       supplements: admittedSupplement
         ? `Included as a separate layer: ${admittedSupplement.facts.featureCount} reviewed OpenStreetMap paths (ODbL). Not included: ${admittedSupplement.facts.excludedUntilVerified.join(" ")}`
         : approval.omitted.supplements,
-      accessRoads: approval.omitted.accessRoads,
+      accessRoads: accessParts
+        ? `Included: ordinary-road access (${accessParts.descriptor.base.featureCount} base road features, and ${accessParts.descriptor.index.localFeatureCount} endpoint-local service roads loaded only around a trip's start and destination). Sources: U.S. Census Bureau TIGER/Line roads and OpenStreetMap contributors (ODbL). Access to a trail is routed along these roads where they exist and is otherwise shown as a labeled gap, never an invented connection.`
+        : approval.omitted.accessRoads,
     },
     ...(admittedSupplement
       ? {
@@ -430,6 +452,9 @@ export async function buildPackage({
           ],
         }
       : {}),
+    ...(accessParts
+      ? { access: { ...accessParts.descriptor, combinedSha256: combinedSha } }
+      : {}),
     approval: {
       approved: approval.approved === true,
       approvedBy: approval.approvedBy ?? null,
@@ -437,18 +462,24 @@ export async function buildPackage({
       blockers: [...(approval.blockers ?? [])],
     },
   };
-  return { record, body, file };
+  return { record, body, file, accessFiles: accessParts?.files ?? [] };
 }
+
+/** The combined identity of a network and the tile index that pins its access roads. */
+export const accessIdentity = (networkSha256, indexSha256) =>
+  sha256(Buffer.from(`${networkSha256}:${indexSha256}`, "utf8"));
 
 /** Writes the package atomically: a failed run never leaves a half-written or mixed-version directory. */
 export async function writePackage(
-  { record, body, file },
+  { record, body, file, accessFiles = [] },
   outDir = packageDir,
 ) {
   const staging = `${outDir}.staging-${process.pid}`;
   await rm(staging, { recursive: true, force: true });
   await mkdir(staging, { recursive: true });
   await writeFile(join(staging, file), body);
+  for (const part of accessFiles)
+    await writeFile(join(staging, part.file), part.body);
   await writeFile(
     join(staging, "dataset.json"),
     JSON.stringify(record, null, 2) + "\n",
@@ -467,6 +498,8 @@ export async function packageFromFiles({
   // Optional reviewed OpenStreetMap supplement: pass `osmInput` (its normalized file) to include it.
   osmInput = null,
   osmManifestPath = osmManifestFile,
+  // Optional normalized access-road extract (TIGER roads plus endpoint-local service roads).
+  accessInput = null,
 } = {}) {
   let inputBytes;
   try {
@@ -494,12 +527,25 @@ export async function packageFromFiles({
       manifestBytes: osmManifestBytes,
     };
   }
+  let access = null;
+  if (accessInput) {
+    let text;
+    try {
+      text = await readFile(accessInput, "utf8");
+    } catch {
+      throw new AdmissionError(
+        `The access road extract is not present (${accessInput}). Generate it with the native extractor; this tool never contacts a server.`,
+      );
+    }
+    access = { inputText: text };
+  }
   const built = await buildPackage({
     inputText: inputBytes.replace(/^﻿/, ""),
     manifest: JSON.parse(manifestBytes.toString("utf8")),
     manifestBytes,
     approval: await readApprovalRecord(approvalPath),
     supplement,
+    access,
   });
   await writePackage(built, outDir);
   return built;
@@ -514,6 +560,8 @@ export function checkPackage(
   body,
   manifestBytes,
   osmManifestBytes = null,
+  // Returns the bytes of a package file by name (undefined when absent); required when the record has access parts.
+  readPart = undefined,
 ) {
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (record.schema !== RECORD_SCHEMA || record.kind !== "county")
@@ -611,6 +659,27 @@ export function checkPackage(
   }
   if (record.content.featureCount !== features.length + supplementCount)
     refuse("The recorded feature count is wrong.");
+  if (record.access) {
+    if (!readPart)
+      refuse(
+        "The record describes access road parts but none were given to check.",
+      );
+    try {
+      checkAccessParts(record.access, readPart);
+    } catch (error) {
+      if (error instanceof AccessPackageError) refuse(error.message);
+      throw error;
+    }
+    const combined = accessIdentity(
+      record.content.sha256,
+      record.access.index.sha256,
+    );
+    if (record.access.combinedSha256 !== combined)
+      refuse("The access identity does not match the network and its tile index.");
+    if (!record.version.endsWith(`.${combined.slice(0, 12)}`))
+      refuse("The dataset version does not name the combined network and access identity.");
+  } else if (!record.version.endsWith(`.${record.content.sha256.slice(0, 12)}`))
+    refuse("The dataset version does not name the network content.");
   return network;
 }
 
@@ -625,12 +694,26 @@ export async function verifyPackageDir(
   const osmManifestBytes = (record.supplements ?? []).length
     ? await readFile(osmManifestFile)
     : null;
-  const network = checkPackage(record, body, manifestBytes, osmManifestBytes);
   const listing = await readdir(dir);
-  const stray = listing.filter(
-    (name) => name !== "dataset.json" && name !== record.content.file,
+  const present = new Map();
+  for (const name of listing)
+    if (name !== "dataset.json" && name !== record.content.file)
+      present.set(name, await readFile(join(dir, name)));
+  const used = new Map();
+  const readPart = (name) => {
+    const bytes = present.get(name);
+    if (bytes) used.set(name, bytes);
+    return bytes;
+  };
+  const network = checkPackage(
+    record,
+    body,
+    manifestBytes,
+    osmManifestBytes,
+    readPart,
   );
+  const stray = [...present.keys()].filter((name) => !used.has(name));
   if (stray.length)
     refuse(`Unexpected files in the package: ${stray.join(", ")}.`);
-  return { record, body, network };
+  return { record, body, network, accessFiles: [...used] };
 }

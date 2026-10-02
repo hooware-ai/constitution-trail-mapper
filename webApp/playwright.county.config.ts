@@ -14,13 +14,13 @@ export default defineConfig({
     {
       name: "chromium",
       testDir: "tests/county",
-      testIgnore: /osm-supplement/,
+      testIgnore: /osm-supplement|access-tiles/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "mobile-chromium",
       testDir: "tests/county",
-      testIgnore: /osm-supplement/,
+      testIgnore: /osm-supplement|access-tiles/,
       use: { ...devices["Pixel 7"] },
     },
     // The county build that also packages the SYNTHETIC reviewed OpenStreetMap supplement (its own port).
@@ -32,6 +32,22 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         baseURL: `http://127.0.0.1:${port + 2}`,
       },
+    },
+    // The county build that also packages SYNTHETIC ordinary-road access as base roads plus on-demand tiles (port + 3).
+    {
+      name: "access-chromium",
+      testDir: "tests/county",
+      testMatch: /access-tiles/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: `http://127.0.0.1:${port + 3}`,
+      },
+    },
+    {
+      name: "access-mobile",
+      testDir: "tests/county",
+      testMatch: /access-tiles/,
+      use: { ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${port + 3}` },
     },
     {
       name: "osm-mobile",
@@ -56,6 +72,12 @@ export default defineConfig({
     {
       command: `node tests/support/serve-county.mjs --port ${port + 1} --public`,
       url: `http://127.0.0.1:${port + 1}`,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      command: `node tests/support/serve-county.mjs --port ${port + 3} --access`,
+      url: `http://127.0.0.1:${port + 3}`,
       reuseExistingServer: false,
       timeout: 180000,
     },

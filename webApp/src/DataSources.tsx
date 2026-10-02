@@ -74,6 +74,20 @@ export function DataSources({
           <SafeLink href={part.licenseUrl}>{part.license}</SafeLink>.
         </p>
       ))}
+      {record.access && (
+        <p>
+          <strong>Road access:</strong> {record.access.base.featureCount} base
+          road features load with the trail data;{" "}
+          {record.access.index.localFeatureCount} service roads load only for
+          the area around a trip&apos;s start and destination. Sources: U.S.
+          Census Bureau TIGER/Line roads and{" "}
+          <SafeLink href="https://www.openstreetmap.org/copyright">
+            OpenStreetMap contributors (ODbL)
+          </SafeLink>
+          . Where no road connects a point to a trail, access is shown as a
+          labeled gap, never an invented connection.
+        </p>
+      )}
       <Sub>What is not included</Sub>
       <ul>
         {omitted.proposedFeatureIds.length > 0 && (
@@ -83,7 +97,7 @@ export function DataSources({
           </li>
         )}
         <li>{omitted.supplements}</li>
-        <li>{omitted.accessRoads}</li>
+        {!record.access && <li>{omitted.accessRoads}</li>}
       </ul>
       {approval.approved ? (
         <p>

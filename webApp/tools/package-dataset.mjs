@@ -1,7 +1,9 @@
 // Packages the reviewed county trails into webApp/generated/county/ (ignored by Git).
 //
-//   node tools/package-dataset.mjs [--input <extract.json>] [--out <dir>] [--osm-additions [<file>]]
+//   node tools/package-dataset.mjs [--input <extract.json>] [--out <dir>] [--osm-additions [<file>]] [--access-roads <file>]
 //
+// --access-roads packages ordinary-road access (TIGER base roads plus endpoint-local service roads) as hash-named base,
+// tile and index files, pinned by the record, so the browser fetches service-road tiles only near a trip's endpoints.
 // --osm-additions also packages the four reviewed OpenStreetMap paths native loads, as their own layer, after verifying
 // each way against data/verified-trail-additions.manifest.json (geometry hash recomputed). Off by default.
 //
@@ -33,6 +35,7 @@ packageFromFiles({
   inputFile: arg("--input") ?? licensedInputFile,
   outDir: arg("--out") ?? packageDir,
   osmInput,
+  accessInput: arg("--access-roads") ?? null,
 })
   .then(({ record }) =>
     console.log(

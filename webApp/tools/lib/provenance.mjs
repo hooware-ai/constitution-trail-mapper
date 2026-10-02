@@ -3,6 +3,7 @@
 // Nothing here trusts a recorded claim. Eligibility for public release is always RECOMPUTED from the dataset record,
 // the shipped files and the current source state; a provenance.json that says otherwise is rejected as inconsistent.
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { repoRoot, sha256, webRoot, verifyCoreManifest } from "./core.mjs";
@@ -98,7 +99,16 @@ async function loadCountyDataset(dir, paths) {
     const osmManifestBytes = (record.supplements ?? []).length
       ? await readFile(paths.osmManifestFile ?? osmManifestFile)
       : null;
-    checkPackage(record, body, manifestBytes, osmManifestBytes);
+    checkPackage(record, body, manifestBytes, osmManifestBytes, (name) => {
+      // Access parts are named by hash and live beside the network; never follow a path out of data/.
+      if (name.includes("/") || name.includes("\\") || name.includes(".."))
+        return undefined;
+      try {
+        return readFileSync(join(dir, "data", name));
+      } catch {
+        return undefined;
+      }
+    });
     if (
       osmManifestBytes &&
       (paths.osmManifestFile ?? osmManifestFile) !== committedOsmManifestFile

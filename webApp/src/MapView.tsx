@@ -90,7 +90,7 @@ export function MapView({
     const notice = fixture
       ? "Synthetic review geometry · CC0"
       : county
-        ? `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · ${credit("https://creativecommons.org/licenses/by/4.0/", "CC BY 4.0")} · changes: reviewed subset, normalized${osm ? ` · reviewed paths: ${credit("https://www.openstreetmap.org/copyright", "© OpenStreetMap contributors / ODbL")}` : ""}`
+        ? `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · ${credit("https://creativecommons.org/licenses/by/4.0/", "CC BY 4.0")} · changes: reviewed subset, normalized${osm ? ` · OpenStreetMap data: ${credit("https://www.openstreetmap.org/copyright", "© OpenStreetMap contributors / ODbL")}` : ""}`
         : `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · U.S. Census · ${credit("https://www.openstreetmap.org/copyright", "© OSM contributors / ODbL")}`;
     m.attributionControl.addAttribution(notice);
     return () => {

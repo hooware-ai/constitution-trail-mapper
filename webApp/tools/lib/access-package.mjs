@@ -130,10 +130,19 @@ const layerBytes = (id, features) =>
 export function buildAccessParts(inputText) {
   const layers = validated(inputText);
   const baseLayers = layers.filter((layer) => layer.id !== LOCAL_LAYER_ID);
+  // The access graph is built in feature order (it merges nearby nodes first-come), so the original position of every
+  // service road travels with it: the core presents late-arriving tiles in the order a whole-file load would use.
+  // That is only meaningful when service roads come after the base roads, as they do in the native extract.
+  const firstLocal = layers.findIndex((layer) => layer.id === LOCAL_LAYER_ID);
+  if (
+    firstLocal >= 0 &&
+    layers.slice(firstLocal).some((l) => l.id !== LOCAL_LAYER_ID)
+  )
+    refuse("Service roads must follow every base road layer in the extract.");
   const localFeatures = layers
     .filter((layer) => layer.id === LOCAL_LAYER_ID)
     .flatMap((layer) => layer.features)
-    .sort((a, b) => (a.id < b.id ? -1 : 1));
+    .map((feature, ord) => ({ ...feature, ord }));
 
   const baseBody = Buffer.from(JSON.stringify({ layers: baseLayers }), "utf8");
   const baseCount = baseLayers.reduce(
@@ -308,10 +317,23 @@ export function checkAccessParts(descriptor, read) {
     )
       refuse(`Access tile ${key} does not hold what the index says.`);
     const ids = new Set();
+    let previousOrd = -1;
     for (const feature of features) {
       if (ids.has(feature.id))
         refuse(`Access tile ${key} repeats ${feature.id}.`);
       ids.add(feature.id);
+      if (
+        !Number.isInteger(feature.ord) ||
+        feature.ord < 0 ||
+        feature.ord <= previousOrd
+      )
+        refuse(`Access tile ${key} does not list its roads in extract order.`);
+      previousOrd = feature.ord;
+      const earlier = featureById.get(feature.id);
+      if (earlier && JSON.stringify(earlier) !== JSON.stringify(feature))
+        refuse(
+          `Access road ${feature.id} differs between the tiles that hold it.`,
+        );
       seenFeatures.add(feature.id);
       featureById.set(feature.id, feature);
       if (

@@ -33,9 +33,24 @@ export function buildPackage(args: {
     manifest: any;
     manifestBytes: Uint8Array;
   } | null;
-}): Promise<{ record: any; body: Buffer; file: string }>;
+  access?: { inputText: string } | null;
+}): Promise<{
+  record: any;
+  body: Buffer;
+  file: string;
+  accessFiles: { file: string; body: Buffer }[];
+}>;
+export function accessIdentity(
+  networkSha256: string,
+  indexSha256: string,
+): string;
 export function writePackage(
-  built: { record: any; body: Buffer; file: string },
+  built: {
+    record: any;
+    body: Buffer;
+    file: string;
+    accessFiles?: { file: string; body: Buffer }[];
+  },
   outDir?: string,
 ): Promise<string>;
 export function packageFromFiles(options?: {
@@ -45,14 +60,21 @@ export function packageFromFiles(options?: {
   outDir?: string;
   osmInput?: string | null;
   osmManifestPath?: string;
+  accessInput?: string | null;
 }): Promise<{ record: any; body: Buffer; file: string }>;
 export function verifyPackageDir(
   dir?: string,
   manifestPath?: string,
-): Promise<{ record: any; body: Buffer; network: any }>;
+): Promise<{
+  record: any;
+  body: Buffer;
+  network: any;
+  accessFiles: [string, Buffer][];
+}>;
 export function checkPackage(
   record: any,
   body: Uint8Array,
   manifestBytes: Uint8Array,
   osmManifestBytes?: Uint8Array | null,
+  readPart?: (file: string) => Buffer | undefined,
 ): any;

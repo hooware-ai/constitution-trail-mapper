@@ -1,9 +1,12 @@
 // Builds and serves a county-mode artifact from the SYNTHETIC package (tests/support/county-fixture.mjs) on a port
 // this run owns. Nothing here reads or needs the private licensed extract; the data is not county data.
 //
-//   node tests/support/serve-county.mjs --port <n> [--public] [--osm] [--scale <features>] [--build-only]
+//   node tests/support/serve-county.mjs --port <n> [--public] [--osm] [--access] [--scale <features>] [--build-only]
 //
 // --osm also packages the SYNTHETIC reviewed OpenStreetMap supplement (tests/support/osm-fixture.mjs) as its own layer.
+//
+// --access also packages SYNTHETIC ordinary-road access (tests/support/access-fixture.mjs): base roads plus hash-named
+// service-road tiles, loaded on demand.
 //
 // --scale swaps the five-feature package for a synthetic lattice of that many features, for sizing only.
 //
@@ -16,11 +19,15 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeCounty, scaledList } from "./county-fixture.mjs";
 import { makeSupplement } from "./osm-fixture.mjs";
+import { makeAccessExtract } from "./access-fixture.mjs";
 
 const webRoot = fileURLToPath(new URL("../../", import.meta.url));
 const channel = process.argv.includes("--public") ? "public" : "review";
 const withOsm = process.argv.includes("--osm");
-const variant = withOsm ? `${channel}-osm` : channel;
+const withAccess = process.argv.includes("--access");
+const variant = [channel, withOsm ? "osm" : "", withAccess ? "access" : ""]
+  .filter(Boolean)
+  .join("-");
 const work = join(webRoot, "generated", `synthetic-${variant}`);
 const county = join(work, "county");
 const distDir = join(webRoot, `dist-county-${variant}`);
@@ -46,6 +53,11 @@ if (withOsm) {
   files.osmManifest = join(work, "osm-manifest.json");
   await writeFile(files.osmInput, JSON.stringify(supplement.input));
   await writeFile(files.osmManifest, JSON.stringify(supplement.manifest));
+}
+
+if (withAccess) {
+  files.accessInput = join(work, "access-roads.json");
+  await writeFile(files.accessInput, JSON.stringify(makeAccessExtract()));
 }
 
 const env = {
@@ -80,6 +92,7 @@ run("package", [
   "--out",
   county,
   ...(withOsm ? ["--osm-additions", files.osmInput] : []),
+  ...(withAccess ? ["--access-roads", files.accessInput] : []),
 ]);
 run("build", ["npx", "vite", "build"]);
 run("provenance", ["node", "tools/write-provenance.mjs"]);

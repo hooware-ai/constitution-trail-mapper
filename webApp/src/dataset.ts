@@ -47,6 +47,31 @@ export interface SupplementPart {
   /** What the review keeps OUT (known gaps stay gaps; unverified ways are never imported). */
   excludedUntilVerified: string[];
 }
+/** A hash-named file the page may fetch from beside the dataset record: its name, exact size and SHA-256. */
+export interface AccessPartRef {
+  file: string;
+  sha256: string;
+  bytes: number;
+}
+/**
+ * Ordinary-road access, split so a trip downloads only what it needs: the base roads load with the data, the
+ * endpoint-local service roads load as small tiles around a trip's endpoints (see accessTiles.ts). The record pins
+ * every part by hash through the tile index.
+ */
+export interface AccessDescriptor {
+  base: AccessPartRef & { featureCount: number };
+  index: AccessPartRef & {
+    tileCount: number;
+    localFeatureCount: number;
+    tileAssignments: number;
+    tileBytes: number;
+  };
+  cellDegrees: number;
+  windowCells: number;
+  radiusMeters: number;
+  /** sha256(network sha256 + ":" + index sha256): the identity a saved route remembers when access is packaged. */
+  combinedSha256: string;
+}
 export interface DatasetRecord {
   schema: typeof DATASET_RECORD_SCHEMA;
   kind: DatasetKind;
@@ -64,6 +89,8 @@ export interface DatasetRecord {
   source: DatasetSource;
   /** Optional reviewed supplements, each its own layer with its own source, licence and attribution. */
   supplements?: SupplementPart[];
+  /** Optional ordinary-road access parts, pinned by hash. */
+  access?: AccessDescriptor;
   /** What was deliberately left out and why, shown to riders as coverage limits. */
   omitted: {
     proposedFeatureIds: number[];
@@ -106,12 +133,47 @@ const text = (value: unknown): value is string =>
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value > 0;
 
+const PART_FILE = /^[A-Za-z0-9._-]+$/;
+const nonNegative = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
+function validPart(part: unknown): boolean {
+  return (
+    isObject(part) &&
+    typeof part.file === "string" &&
+    PART_FILE.test(part.file) &&
+    !part.file.includes("..") &&
+    typeof part.sha256 === "string" &&
+    SHA256.test(part.sha256) &&
+    part.file.includes(part.sha256.slice(0, 12)) &&
+    count(part.bytes)
+  );
+}
+function validAccess(value: unknown): boolean {
+  if (!isObject(value) || !isObject(value.base) || !isObject(value.index))
+    return false;
+  return (
+    validPart(value.base) &&
+    count(value.base.featureCount) &&
+    validPart(value.index) &&
+    nonNegative(value.index.tileCount) &&
+    nonNegative(value.index.localFeatureCount) &&
+    nonNegative(value.index.tileAssignments) &&
+    nonNegative(value.index.tileBytes) &&
+    value.cellDegrees === 0.01 &&
+    value.windowCells === 1 &&
+    value.radiusMeters === 600 &&
+    typeof value.combinedSha256 === "string" &&
+    SHA256.test(value.combinedSha256)
+  );
+}
+
 export function identityOf(record: DatasetRecord): DatasetIdentity {
   return {
     kind: record.kind,
     id: record.id,
     version: record.version,
-    contentSha256: record.content.sha256,
+    // With access packaged, a saved route is only as good as the roads it was planned on: identity covers both.
+    contentSha256: record.access?.combinedSha256 ?? record.content.sha256,
   };
 }
 
@@ -211,6 +273,11 @@ export function parseDatasetRecord(
     throw new DatasetError(
       "data-corrupt",
       "The trail data approval record is invalid.",
+    );
+  if (value.access !== undefined && !validAccess(value.access))
+    throw new DatasetError(
+      "data-corrupt",
+      "The description of the road access data is invalid.",
     );
   if (value.supplements !== undefined) {
     const parts = value.supplements;

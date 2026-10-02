@@ -280,6 +280,45 @@ test("the audit refuses altered, missing and mis-assigned access parts", () => {
   assert.throws(() => buildAccessParts("{"), AccessPackageError);
 });
 
+test("service roads keep their position in the extract, so late-arriving tiles are presented in whole-file order", () => {
+  const built = buildAccessParts(extract);
+  const ordinal = new Map(service.map((f, i) => [f.id, i]));
+  for (const tile of built.tiles) {
+    const features = JSON.parse(tile.body.toString()).layers[0].features;
+    for (const f of features) assert.equal(f.ord, ordinal.get(f.id));
+    assert.deepEqual(
+      features.map((f: any) => f.ord),
+      [...features.map((f: any) => f.ord)].sort((a, b) => a - b),
+    );
+  }
+  // Out-of-order or repeated ordinals within a tile are refused by the audit.
+  const files = new Map(built.files.map((f) => [f.file, Buffer.from(f.body)]));
+  const crowded = built.tiles.find((t) => t.featureCount > 1);
+  if (crowded) {
+    const parsed = JSON.parse(crowded.body.toString());
+    parsed.layers[0].features.reverse();
+    const body = Buffer.from(JSON.stringify(parsed));
+    files.set(crowded.file, body);
+    assert.throws(
+      () => checkAccessParts(built.descriptor, (file) => files.get(file)),
+      AccessPackageError,
+    );
+  }
+  // Service roads before a base road layer cannot keep a meaningful order, so that extract is refused whole.
+  assert.throws(
+    () =>
+      buildAccessParts(
+        JSON.stringify({
+          layers: [
+            { id: "osm-service", features: [service[0]] },
+            { id: "tiger", features: base },
+          ],
+        }),
+      ),
+    AccessPackageError,
+  );
+});
+
 test("the packager and the browser loader agree on which cell a coordinate is in", () => {
   for (const lat of [40.0, 40.4976, 40.5, 40.51, -33.87, 0, 55.999])
     for (const lon of [-88.9626, -88.95, -88.9, 0, 12.345, -0.0001])
@@ -570,6 +609,85 @@ test(
     const fine = (await session.run(planRequest(start1, finish1))) as any;
     assert.equal(fine.ok, true);
     void loader;
+  },
+);
+
+test(
+  "a failed trip waits for its sibling tile downloads to settle before the next operation is dispatched",
+  { skip },
+  async () => {
+    const s = site();
+    const call = await core();
+    const deps = s.deps(call);
+    const loader = new AccessLoader(s.built.descriptor, deps);
+    initialize(call, await loader.baseText());
+    const events: string[] = [];
+    const originalDispatch = deps.dispatch;
+    deps.dispatch = (request) => {
+      if (request.op === "addAccess") events.push("addAccess");
+      return originalDispatch(request);
+    };
+    const session = new AccessSession(loader, (request) => {
+      events.push(`dispatch ${request.op}`);
+      return call(request);
+    });
+    // Tiles the first trip needs: one holding service road s1 (it will fail its hash), and a sibling held back.
+    const holding = (id: string) =>
+      s.built.tiles.filter((t) =>
+        JSON.parse(t.body.toString()).layers[0].features.some(
+          (f: any) => f.id === id,
+        ),
+      );
+    const victim = holding("osm:s1")[0];
+    const window = requiredCells([start1, finish1], 1).map(
+      ([a, b]) => `${a}_${b}`,
+    );
+    const sibling = s.built.tiles.find(
+      (t) => window.includes(`${t.lat}_${t.lon}`) && t.file !== victim.file,
+    );
+    assert.ok(sibling, "the trip needs a second tile");
+    s.state.tamper.add(victim.file);
+    let release!: () => void;
+    s.state.delay.set(
+      sibling.file,
+      new Promise<void>((resolve) => (release = resolve)),
+    );
+    const failed = session.run(planRequest(start1, finish1)).then(
+      () => events.push("plan resolved"),
+      () => events.push("plan rejected"),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    // The next operation queues behind the failed one; the held sibling is still downloading.
+    const next = session.run({
+      op: "mapPoint",
+      point: finish1,
+      proposed: false,
+      now: NOW,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(
+      events.length,
+      0,
+      "nothing is dispatched or released while a sibling is still downloading",
+    );
+    release();
+    await failed;
+    await next;
+    // The sibling's roads are applied inside the failed operation, then the failure is reported, then the next
+    // operation is dispatched. The sibling never lands after the queue was handed on.
+    const added = events.indexOf("addAccess");
+    assert.ok(added >= 0 && added < events.indexOf("plan rejected"));
+    assert.ok(
+      events.indexOf("plan rejected") < events.indexOf("dispatch mapPoint"),
+    );
+    assert.ok(
+      !events.slice(events.indexOf("dispatch mapPoint")).includes("addAccess"),
+    );
+    // The failed tile was not counted; a retry on the same session still works.
+    assert.ok(!loader.loadedCells.includes(`${victim.lat}_${victim.lon}`));
+    s.state.tamper.clear();
+    const retried = (await session.run(planRequest(start1, finish1))) as any;
+    assert.equal(retried.ok, true);
   },
 );
 

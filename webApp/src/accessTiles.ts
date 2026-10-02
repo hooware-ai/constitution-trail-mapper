@@ -1,27 +1,14 @@
-import { DatasetError } from "./dataset";
+import {
+  DatasetError,
+  type AccessDescriptor,
+  type AccessPartRef,
+} from "./dataset";
 
 // Lazy, hash-verified delivery of the endpoint-local service roads (see tools/lib/access-package.mjs for the format and
 // the equivalence argument). The base roads arrive with the dataset; service-road tiles arrive only for the cells around
 // a trip's endpoints, each verified against the SHA-256 the (pinned) dataset record committed to before the router sees
 // a byte of it. The router then applies its own exact 600 m filter, unchanged.
 
-export interface AccessPartRef {
-  file: string;
-  sha256: string;
-  bytes: number;
-}
-export interface AccessDescriptor {
-  base: AccessPartRef & { featureCount: number };
-  index: AccessPartRef & {
-    tileCount: number;
-    localFeatureCount: number;
-    tileAssignments: number;
-    tileBytes: number;
-  };
-  cellDegrees: number;
-  windowCells: number;
-  radiusMeters: number;
-}
 interface TileEntry extends AccessPartRef {
   lat: number;
   lon: number;
@@ -111,7 +98,7 @@ export class AccessLoader {
   readonly fetched: { file: string; bytes: number }[] = [];
 
   constructor(
-    readonly descriptor: AccessDescriptor,
+    readonly descriptor: Omit<AccessDescriptor, "combinedSha256">,
     private deps: AccessDeps,
   ) {}
 
@@ -132,12 +119,21 @@ export class AccessLoader {
       .map(([lat, lon]) => index.get(cellKey(lat, lon)))
       .filter((tile): tile is TileEntry => !!tile)
       .filter((tile) => !this.loaded.has(cellKey(tile.lat, tile.lon)));
-    for (let at = 0; at < wanted.length; at += MAX_PARALLEL_TILES)
-      await Promise.all(
+    for (let at = 0; at < wanted.length; at += MAX_PARALLEL_TILES) {
+      // Every sibling settles before this call returns or throws. A rejected Promise.all would hand the session back
+      // while a slower sibling is still downloading, and that sibling's addAccess would then land between two other
+      // operations. Waiting costs nothing the next attempt would not have paid, and a verified sibling stays loaded.
+      const results = await Promise.allSettled(
         wanted
           .slice(at, at + MAX_PARALLEL_TILES)
           .map((tile) => this.load(tile)),
       );
+      const failure = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failure) throw failure.reason;
+    }
   }
 
   private load(tile: TileEntry): Promise<void> {

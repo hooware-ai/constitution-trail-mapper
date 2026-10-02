@@ -1189,7 +1189,10 @@ export function App() {
           closures={network?.closures ?? []}
           fixture={fixtureData}
           county={network?.mode === "county"}
-          osm={Boolean(network?.datasetRecord?.supplements?.length)}
+          osm={
+            Boolean(network?.datasetRecord?.supplements?.length) ||
+            (network?.datasetRecord?.access?.index.localFeatureCount ?? 0) > 0
+          }
         />
         <section
           className="panel"

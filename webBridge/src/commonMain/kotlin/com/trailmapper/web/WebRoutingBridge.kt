@@ -15,6 +15,12 @@ class WebRoutingBridge {
     private var features: List<TrailNetworkFeature>? = null
     private var roads: List<AccessNetworkFeature>? = null
     private val endpointLocalRoadIds = mutableSetOf<String>()
+    /**
+     * Position of each endpoint-local road in the original extract, when the caller says. The access graph merges nearby
+     * nodes in feature order, so roads that arrive later (tiles) must be presented in the order a whole-file load would
+     * have used, or an access path could differ by a snapped node. Roads without a position keep arrival order.
+     */
+    private val localOrdinals = mutableMapOf<String, Int>()
     /** Identity of the loaded dataset as declared by the caller; echoed back, never interpreted. */
     private var datasetIdentity: JsonElement = JsonNull
     /** Fixture-only: accept serialized routes that carry no feature identities (hand-built test geometry). */
@@ -53,6 +59,7 @@ class WebRoutingBridge {
         features = null
         roads = null
         endpointLocalRoadIds.clear()
+        localOrdinals.clear()
         datasetIdentity = JsonNull
         trustSerializedRoutes = false
         featureIndex = emptyMap()
@@ -67,7 +74,10 @@ class WebRoutingBridge {
         require(loaded.map { it.id }.toSet().size == loaded.size) { "The trail dataset contains duplicate feature identifiers." }
         features = loaded
         roads = loadedRoads
-        parsedRoads?.filter { it.local }?.forEach { endpointLocalRoadIds += it.feature.id }
+        parsedRoads?.filter { it.local }?.forEach {
+            endpointLocalRoadIds += it.feature.id
+            it.ord?.let { ord -> localOrdinals[it.feature.id] = ord }
+        }
         featureIndex = loaded.associateBy { it.id }
         datasetIdentity = request["dataset"] ?: JsonNull
         trustSerializedRoutes = request.boolean("trustSerializedRoutes")
@@ -115,13 +125,16 @@ class WebRoutingBridge {
         incoming.values.forEach { parsed ->
             val existing = known[parsed.feature.id]
             if (existing == null) fresh += parsed
-            else require(existing == parsed.feature && (existing.id in endpointLocalRoadIds) == parsed.local) {
+            else require(existing == parsed.feature && (existing.id in endpointLocalRoadIds) == parsed.local && localOrdinals[existing.id] == parsed.ord) {
                 "Access road ${parsed.feature.id} is already loaded with different content."
             }
         }
         if (fresh.isNotEmpty()) {
-            roads = current + fresh.map { it.feature }
-            fresh.filter { it.local }.forEach { endpointLocalRoadIds += it.feature.id }
+            fresh.filter { it.local }.forEach {
+                endpointLocalRoadIds += it.feature.id
+                it.ord?.let { ord -> localOrdinals[it.feature.id] = ord }
+            }
+            roads = inExtractOrder(current + fresh.map { it.feature })
             revalidationCache.clear()
             geometryIndexes.clear()
             accessEpoch++
@@ -407,9 +420,15 @@ class WebRoutingBridge {
         put("closures", closureJson(closures))
     }
 
-    private class ParsedAccessFeature(val feature: AccessNetworkFeature, val local: Boolean) {
-        override fun equals(other: Any?) = other is ParsedAccessFeature && feature == other.feature && local == other.local
-        override fun hashCode() = feature.hashCode() * 31 + local.hashCode()
+    private class ParsedAccessFeature(val feature: AccessNetworkFeature, val local: Boolean, val ord: Int?) {
+        override fun equals(other: Any?) = other is ParsedAccessFeature && feature == other.feature && local == other.local && ord == other.ord
+        override fun hashCode() = (feature.hashCode() * 31 + local.hashCode()) * 31 + (ord ?: -1)
+    }
+
+    /** Other roads first in arrival order, then endpoint-local roads in their original extract order (stable). */
+    private fun inExtractOrder(list: List<AccessNetworkFeature>): List<AccessNetworkFeature> {
+        val (local, other) = list.partition { it.id in endpointLocalRoadIds }
+        return other + local.sortedBy { localOrdinals[it.id] ?: Int.MAX_VALUE }
     }
 
     /** Parses access JSON with no side effects; whether a feature is endpoint-local (service roads) travels with it. */
@@ -425,7 +444,7 @@ class WebRoutingBridge {
                         val pair = coordinate.jsonArray
                         MapPoint(pair[1].jsonPrimitive.double, pair[0].jsonPrimitive.double).also(::validatePoint)
                     } },
-                ), local)
+                ), local, feature["ord"]?.jsonPrimitive?.intOrNull)
             }
         }
 
