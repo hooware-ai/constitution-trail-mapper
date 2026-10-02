@@ -104,3 +104,31 @@ test("the credit fits the screen, is not covered by another control and has no a
     .analyze();
   expect(results.violations).toEqual([]);
 });
+
+test("every link in the map credit opens in a new tab without handing over the page, so a tap cannot end a ride", async ({
+  page,
+}) => {
+  await stubTiles(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  const own = page.locator(".leaflet-control-attribution a");
+  // The data credits (McGIS, CC BY 4.0) are there before any tile is on; the OpenStreetMap credit joins them when it is.
+  await expect(own.first()).toBeVisible();
+  await toggle(page).check();
+  await expect(credit(page)).toBeVisible();
+  const links = await own.evaluateAll((anchors) =>
+    anchors.map((a) => ({
+      text: a.textContent,
+      target: a.getAttribute("target"),
+      rel: a.getAttribute("rel"),
+    })),
+  );
+  expect(links.length).toBeGreaterThanOrEqual(3);
+  for (const link of links) {
+    expect(link.target, link.text ?? "").toBe("_blank");
+    expect(link.rel, link.text ?? "").toMatch(/noopener/);
+    expect(link.rel, link.text ?? "").toMatch(/noreferrer/);
+  }
+});
