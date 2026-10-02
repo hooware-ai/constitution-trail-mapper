@@ -28,6 +28,7 @@ import {
   routeNeedsRecalculation,
   type Draft,
   type Endpoint,
+  type MapCues,
   type Network,
   type Point,
   type RouteResult,
@@ -1020,8 +1021,32 @@ export function App() {
       }
       controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));
+      // What changed, in native's words.
+      const meters = (value: number) => `${miles(value)} mi`;
+      success(
+        mode === "destination"
+          ? `Route updated from here: ${meters(result.distance)} to your destination.`
+          : mode === "rejoin"
+            ? `Rejoining the loop ahead: ${meters(result.distance)} to the finish (${meters(
+                Math.max(
+                  0,
+                  ((request.record.route as { totalDistanceMeters?: number })
+                    .totalDistanceMeters ?? 0) - request.riddenMeters,
+                ),
+              )} remained on the planned loop).`
+            : `Heading back to the start: ${meters(result.distance)}.`,
+      );
     } catch (e) {
-      if (token === operation.current) setError(errorText(e));
+      // As in native, a search that finds nothing says so from where the rider is.
+      const text = errorText(e);
+      if (token === operation.current)
+        setError(
+          /^No safe route/.test(text)
+            ? /closure/i.test(text)
+              ? "No safe route from here. Review the official detour guidance."
+              : "No safe route from here. Head back toward the route line."
+            : text,
+        );
     } finally {
       if (token === operation.current) setBusy(false);
     }
@@ -1346,6 +1371,30 @@ export function App() {
     showRoute = ["preview", "navigation", "searching"].includes(screen)
       ? preview
       : null;
+  // The map cues (chevrons, second pass, turn-around signs) come from the shared core for the route being shown. They are an
+  // enhancement: if they cannot be had, the route is drawn as a plain line.
+  const [cues, setCues] = useState<MapCues | null>(null);
+  const shownRoute = showRoute?.route;
+  useEffect(() => {
+    const client = clientRef.current;
+    if (!client || !shownRoute) {
+      setCues(null);
+      return;
+    }
+    let current = true;
+    client
+      .call<MapCues>({ op: "mapCues", route: shownRoute })
+      .then((made) => {
+        if (current)
+          setCues({ pieces: made.pieces, turnarounds: made.turnarounds });
+      })
+      .catch(() => {
+        if (current) setCues(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [shownRoute]);
   const back = () => {
     if (screen === "navigation") {
       stopNavigation();
@@ -1443,6 +1492,8 @@ export function App() {
               : (network?.closures ?? [])
           }
           fitSignal={fitSignal}
+          cues={cues}
+          riddenMeters={screen === "navigation" ? nav.riddenMeters : undefined}
           fixture={fixtureData}
           county={network?.mode === "county"}
           osm={
@@ -1798,6 +1849,17 @@ export function App() {
                     </>
                   )}
                   {preview.summary && <p>{preview.summary}</p>}
+                  {cues &&
+                    (cues.turnarounds.length > 0 ||
+                      cues.pieces.some(
+                        (piece) => piece.repeatsEarlierTravel,
+                      )) && (
+                      <p className="caption">
+                        Chevrons show direction. Double chevrons: second pass,
+                        drawn beside the first. Turn-around signs mark where the
+                        route turns back.
+                      </p>
+                    )}
                   <AccessConnections
                     gaps={preview.accessGaps ?? []}
                     onShow={(id) => setGapFocus({ id })}

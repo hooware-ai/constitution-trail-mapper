@@ -45,6 +45,7 @@ class WebRoutingBridge {
             "reroute" -> reroute(request, now)
             "recalculate" -> recalculate(request, now)
             "reverse" -> reverse(request, now)
+            "mapCues" -> mapCues(request)
             "completedSession" -> completedSession(request)
             "carryRide" -> carryRide(request)
             "addAccess" -> addAccess(request)
@@ -107,6 +108,30 @@ class WebRoutingBridge {
                 put("source", buildJsonObject { put("title", entry.source.title); put("url", entry.source.url) })
             } }))
             put("closures", closureJson(TrailRouteClosureSijko.activeClosures(now)))
+        }
+    }
+
+    /**
+     * What the map draws besides the line, exactly as native computes it (TrailRouteMapCuesSijko): the route as direction-
+     * ordered pieces (a second pass over the same trail already shifted 8 m to the right of travel so both stay visible),
+     * where the route turns back, and the navigation distance at every point so ridden progress can be drawn.
+     */
+    private fun mapCues(request: JsonObject): JsonObject {
+        val cues = TrailRouteMapCuesSijko.cuesFor(request.route())
+        return buildJsonObject {
+            put("pieces", JsonArray(cues.pieces.map { piece -> buildJsonObject {
+                put("points", json.encodeToJsonElement(piece.segment.points))
+                put("type", piece.segment.type.name)
+                put("isRouted", piece.segment.isRouted)
+                put("roles", strings(piece.segment.routeRoles.map { it.name }))
+                put("name", piece.segment.name)
+                put("repeatsEarlierTravel", piece.repeatsEarlierTravel)
+                put("distances", json.encodeToJsonElement(piece.distancesAlongRouteMeters))
+            } }))
+            put("turnarounds", JsonArray(cues.turnarounds.map { turnaround -> buildJsonObject {
+                put("point", json.encodeToJsonElement(turnaround.point))
+                put("distance", turnaround.distanceAlongRouteMeters)
+            } }))
         }
     }
 

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Feature, Point, RouteResult, Closure } from "./types";
+import type { Feature, Point, RouteResult, Closure, MapCues } from "./types";
+import { ChevronLayer } from "./chevrons";
+import { lengthMeters, riddenPolylines } from "./ridden";
 import { gapDistance } from "./gapDistance";
 const routePoints = (route: RouteResult) => [
   ...route.segments.flatMap((segment) => segment.points),
@@ -30,6 +32,8 @@ export function MapView({
   county = false,
   osm = false,
   fitSignal = 0,
+  cues = null,
+  riddenMeters,
 }: {
   features: Feature[];
   route: RouteResult | null;
@@ -46,11 +50,18 @@ export function MapView({
   osm?: boolean;
   /** Increase to refit the map to every drawn trail ("Show all trails"). */
   fitSignal?: number;
+  /** Direction chevrons, second passes and turn-around signs for `route` (computed by the shared core, as for native). */
+  cues?: MapCues | null;
+  /** While navigating: how far along the route the rider has credibly ridden. That part is faded, as in native. */
+  riddenMeters?: number;
 }) {
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
     layers = useRef<L.LayerGroup | null>(null);
   const gapMarkers = useRef(new Map<string, L.Marker>());
+  const chevrons = useRef<ChevronLayer | null>(null);
+  const riddenLayer = useRef<L.LayerGroup | null>(null);
+  const drawRidden = useRef<() => void>(() => {});
   const pick = useRef(onPick),
     [tiles, setTiles] = useState(false),
     [tileError, setTileError] = useState(false);
@@ -66,6 +77,8 @@ export function MapView({
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
     map.current = m;
     layers.current = L.layerGroup().addTo(m);
+    chevrons.current = new ChevronLayer().addTo(m);
+    riddenLayer.current = L.layerGroup().addTo(m);
     // A read-only mirror of the view (zoom and centre) for tests and assistive tooling; it changes nothing.
     const publishView = () => {
       const c = m.getCenter();
@@ -156,9 +169,14 @@ export function MapView({
       }).addTo(g);
       closureMarkers.push({ closure, anchor: path.getCenter() });
     });
-    route?.segments.forEach((s) => {
-      // Kotlin bridge omits estimated access from drawable segments.
-      const roles = s.roles ?? s.routeRoles ?? [];
+    // With cues the route is drawn as the pieces native draws (direction ordered, a second pass beside the first); without
+    // them, as the plain drawable segments. Estimated access is never drawn as a line either way.
+    const drawn = cues
+      ? cues.pieces.filter((piece) => piece.isRouted)
+      : (route?.segments ?? []);
+    drawn.forEach((s) => {
+      const roles =
+        s.roles ?? (s as { routeRoles?: string[] }).routeRoles ?? [];
       const access = s.type === "Access",
         prop = roles.includes("ProposedTrails"),
         shared = roles.includes("SharedRoadways"),
@@ -182,6 +200,23 @@ export function MapView({
         weight: 6,
         dashArray: access ? "8 7" : prop ? "6 7" : shared ? "3 5" : undefined,
       }).addTo(g);
+    });
+    chevrons.current?.setPieces(cues?.pieces ?? []);
+    (cues?.turnarounds ?? []).forEach((turn) => {
+      const label = `Turn around, ${(turn.distance / 1609.344).toFixed(1)} mi into the route`;
+      const marker = L.marker(xy(turn.point), {
+        icon: L.divIcon({
+          className: "turnaround-marker",
+          html: '<span class="turnaround-sign"><span aria-hidden="true">↩</span> Turn around</span>',
+          iconSize: [112, 28],
+          iconAnchor: [56, 14],
+        }),
+        title: label,
+        keyboard: true,
+      })
+        .bindPopup(plain(label))
+        .addTo(g);
+      marker.getElement()?.setAttribute("aria-label", label);
     });
     closureMarkers.forEach(({ closure, anchor }) => {
       const details = document.createElement("div");
@@ -284,7 +319,8 @@ export function MapView({
       marker.on("popupopen", () => marker.closeTooltip());
       gapMarkers.current.set(gap.id, marker);
     });
-  }, [features, route, proposed, closures]);
+    drawRidden.current();
+  }, [features, route, proposed, closures, cues]);
   useEffect(() => {
     const m = map.current;
     if (!m) return;
@@ -302,6 +338,30 @@ export function MapView({
       m.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
   }, [route, features, fixture]);
+  // The ridden overlay is redrawn on top of the route whenever either changes (the route is rebuilt on its own schedule).
+  drawRidden.current = () => {
+    const group = riddenLayer.current;
+    if (!group) return;
+    group.clearLayers();
+    const lines =
+      cues && riddenMeters ? riddenPolylines(cues.pieces, riddenMeters) : [];
+    for (const line of lines)
+      L.polyline(line.map(xy), {
+        color: "#ffffff",
+        weight: 14,
+        opacity: 0.6,
+        interactive: false,
+      }).addTo(group);
+    root.current?.setAttribute(
+      "data-ridden-meters",
+      String(
+        Math.round(lines.reduce((sum, line) => sum + lengthMeters(line), 0)),
+      ),
+    );
+  };
+  useEffect(() => {
+    drawRidden.current();
+  }, [cues, riddenMeters, route]);
   useEffect(() => {
     const m = map.current;
     if (!m || !fitSignal) return;

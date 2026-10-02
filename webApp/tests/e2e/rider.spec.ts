@@ -378,6 +378,11 @@ test("native sustained departure offers a usable mapped reroute", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Reroute", exact: true }).click();
   await expect(
+    page.getByText(
+      /^Route updated from here: [\d.]+ mi to your destination\.$/,
+    ),
+  ).toBeVisible();
+  await expect(
     page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
   ).toBeVisible();
   await page.clock.fastForward(1000);
@@ -427,6 +432,14 @@ for (const choice of ["Rejoin the loop", "Return to start"])
         page.getByRole("button", { name: "Return to start", exact: true }),
       ).toBeVisible();
       await page.getByRole("button", { name: choice, exact: true }).click();
+      // As in native, what changed is said in plain words.
+      await expect(
+        page.getByText(
+          choice === "Return to start"
+            ? /^Heading back to the start: [\d.]+ mi\.$/
+            : /^Rejoining the loop ahead: [\d.]+ mi to the finish \([\d.]+ mi remained on the planned loop\)\.$/,
+        ),
+      ).toBeVisible();
       if (choice === "Return to start")
         await expect(
           page.getByRole("heading", {
@@ -3278,4 +3291,255 @@ test("ridden progress survives a reload after an off-route fix moved the matched
   expect(carried).not.toBeNull();
   expect(carried.carried.distanceMeters).toBeGreaterThan(250);
   expect(carried.carried.distanceMeters).toBeLessThan(350);
+});
+
+const chevronPixels = (page: Page) =>
+  page.evaluate(() => {
+    const canvas = document.querySelector(
+      "canvas.chevron-layer",
+    ) as HTMLCanvasElement | null;
+    if (!canvas) return -1;
+    const data = canvas
+      .getContext("2d")!
+      .getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted++;
+    return painted;
+  });
+
+test("a loop that turns back shows a Turn around sign, a second pass legend and direction chevrons, and passes the accessibility checks", async ({
+  page,
+}) => {
+  const { default: AxeBuilder } = await import("@axe-core/playwright");
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("spinbutton", { name: "Custom miles" }).fill("1");
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  // As native: a labeled sign where the route turns back, with how far into the route it is.
+  const sign = page.locator(".turnaround-marker");
+  await expect(sign).toHaveCount(1);
+  await expect(sign).toContainText("Turn around");
+  await expect(sign).toHaveAttribute(
+    "aria-label",
+    /^Turn around, \d\.\d mi into the route$/,
+  );
+  await expect(
+    page.getByText(
+      "Chevrons show direction. Double chevrons: second pass, drawn beside the first. Turn-around signs mark where the route turns back.",
+    ),
+  ).toBeVisible();
+  // Chevrons are really painted, on a layer hidden from assistive technology.
+  await expect.poll(() => chevronPixels(page)).toBeGreaterThan(50);
+  await expect(page.locator("canvas.chevron-layer")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  // The sign opens its details and is reachable from the keyboard.
+  await sign.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByText(/^Turn around, \d\.\d mi into the route$/),
+  ).toBeVisible();
+  // The popup fades in; the accessibility check must see it as it is when settled, not part way through.
+  await expect(page.locator(".leaflet-popup")).toHaveCSS("opacity", "1");
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+});
+
+test("a route that never turns back has direction chevrons but no turn-around sign and no second-pass sentence", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect.poll(() => chevronPixels(page)).toBeGreaterThan(50);
+  await expect(page.locator(".turnaround-marker")).toHaveCount(0);
+  await expect(page.getByText(/Chevrons show direction/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await choose(page, "Destination", "Review trailhead · South");
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect.poll(() => chevronPixels(page)).toBeGreaterThan(50);
+  await expect(page.locator(".turnaround-marker")).toHaveCount(0);
+});
+
+test("the chevrons follow the map when it is zoomed, and leave with the route", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await choose(page, "Destination", "Review trailhead · South");
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect.poll(() => chevronPixels(page)).toBeGreaterThan(50);
+  const view = () =>
+    page
+      .locator(".leaflet-container")
+      .evaluate((el) => Number(el.getAttribute("data-zoom")));
+  const before = await view();
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect.poll(view).toBe(before + 1);
+  await expect.poll(() => chevronPixels(page)).toBeGreaterThan(50);
+  // Back to the planner: the route is gone, so are its chevrons.
+  await page.getByRole("button", { name: "← Back" }).first().click();
+  await expect.poll(() => chevronPixels(page)).toBe(0);
+});
+
+test("the part of the route already ridden is faded on the map as it is ridden, and a new direction starts clean", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await planLoopPreview(page);
+  const overlay = () =>
+    page
+      .locator(".leaflet-container")
+      .evaluate((el) => Number(el.getAttribute("data-ridden-meters")));
+  // Not navigating: nothing is faded.
+  expect(await overlay()).toBe(0);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const points = await rideRoutePoints(page);
+  await acceptedFix(page, points[0][0], points[0][1]);
+  for (const meters of [80, 160, 240, 300]) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, meters);
+    await acceptedFix(page, lat, lon);
+  }
+  // About 300 m of the route is faded (the overlay follows ridden progress, not the matched position).
+  await expect.poll(overlay).toBeGreaterThan(260);
+  expect(await overlay()).toBeLessThan(340);
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await expect.poll(overlay).toBe(0);
+});
+
+// A reload is the one place a loop's matcher lets a fix land far ahead of the saved progress (reacquiring has no previous
+// position to be continuous with). That is a pending jump: it moves where the rider is MATCHED, never what was RIDDEN, until
+// continued travel from where it landed confirms it.
+async function rideThenReloadAndLandAhead(page: Page, landAt: number) {
+  await page.clock.install();
+  await planLoopPreview(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const points = await rideRoutePoints(page);
+  await acceptedFix(page, points[0][0], points[0][1]);
+  for (const meters of [80, 160, 240, 300]) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, meters);
+    await acceptedFix(page, lat, lon);
+  }
+  const before = await activeRideOf(page);
+  expect(before.riddenMeters).toBeGreaterThan(260);
+  expect(before.riddenMeters).toBeLessThan(330);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  // The first fix after the reload lands more than a kilometre further round the loop.
+  await page.clock.fastForward(1000);
+  const [lat, lon] = pointAlong(points, landAt);
+  await acceptedFix(page, lat, lon);
+  return { points, ridden: before.riddenMeters };
+}
+async function leaveAndRejoin(page: Page) {
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.491, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.492, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.493, -88.99);
+  await page
+    .getByRole("button", { name: "Rejoin the loop", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  return page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.carried-ride.v1"),
+    );
+    return key ? JSON.parse(localStorage.getItem(key)!) : null;
+  });
+}
+
+test("a forward jump that is not confirmed is neither credited as ridden nor carried, across a reload", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const { points, ridden } = await rideThenReloadAndLandAhead(page, 1500);
+  // Matched far ahead, but nothing more was ridden.
+  let stored = await activeRideOf(page);
+  expect(stored.routeProgressMeters).toBeGreaterThan(1300);
+  expect(stored.riddenMeters).toBe(ridden);
+  // One more step beyond the landing point: still short of confirmation (150 m of continued travel).
+  await page.clock.fastForward(1000);
+  const [lat, lon] = pointAlong(points, 1550);
+  await acceptedFix(page, lat, lon);
+  stored = await activeRideOf(page);
+  expect(stored.riddenMeters).toBe(ridden);
+
+  // Reload again with the jump still pending: what is persisted is the ridden value, so it is still not credited.
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  expect((await activeRideOf(page)).riddenMeters).toBe(ridden);
+
+  // Rejoining carries what was really ridden, about 300 m: not the 1.5 km the rider was matched to.
+  const carried = await leaveAndRejoin(page);
+  expect(carried).not.toBeNull();
+  expect(carried.carried.distanceMeters).toBeLessThan(ridden + 30);
+  expect(carried.carried.distanceMeters).toBeGreaterThan(ridden - 30);
+});
+
+test("control: the same jump IS credited once continued travel from where it landed confirms it", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const { points, ridden } = await rideThenReloadAndLandAhead(page, 1500);
+  expect((await activeRideOf(page)).riddenMeters).toBe(ridden);
+  // Continued forward travel: the first step after the landing sets the jump pending (1550); it is confirmed by 150 m or
+  // more of unbroken on-route travel from there, within plausible steps (1620, then 1710).
+  for (const meters of [1550, 1620, 1710]) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, meters);
+    await acceptedFix(page, lat, lon);
+  }
+  await expect
+    .poll(async () => (await activeRideOf(page)).riddenMeters)
+    .toBeGreaterThan(1500);
+  const carried = await leaveAndRejoin(page);
+  expect(carried.carried.distanceMeters).toBeGreaterThan(1500);
 });

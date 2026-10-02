@@ -139,3 +139,20 @@ export function isPoint(p: unknown): p is Point {
     Math.abs(q.longitude) <= 180
   );
 }
+
+/** What the map draws besides the line, as the shared core computes it for native (TrailRouteMapCuesSijko). */
+export type MapCuePiece = {
+  /** Already in the direction of travel; a second pass is already shifted 8 m to the right so both stay visible. */
+  points: Point[];
+  type: string;
+  isRouted: boolean;
+  roles: string[];
+  name: string | null;
+  repeatsEarlierTravel: boolean;
+  /** Navigation distance along the route at each point. */
+  distances: number[];
+};
+export type MapCues = {
+  pieces: MapCuePiece[];
+  turnarounds: { point: Point; distance: number }[];
+};
