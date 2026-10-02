@@ -607,18 +607,16 @@ class WebRoutingBridge {
         fun derives(featureId: String, line: List<MapPoint>): Boolean = derivesFrom(byFeature[featureId] ?: return false, line)
 
         /**
-         * Access roads are anonymous in a connector line, and the planner's route line runs across several graph edges
-         * (and across the short hops that join roads within the access graph's snap tolerance). So each leg is checked on
-         * its own: it lies along some reference segment, or it is a hop no longer than the snap tolerance between two
-         * points that are both on the access geometry. A road that moved or was removed fails on its points.
+         * Access roads are anonymous in a connector line, and the planner's route line runs across several graph edges.
+         * So each leg is checked on its own, and every leg must lie along ONE reference segment of the access graph
+         * the planner built: a road segment, an intersection connector the graph derived (node to road, including the
+         * short hop the graph itself adds between roads within its snap tolerance), or a node-anchored form of a run.
+         * There is no blanket tolerance: a hop between two roads that the graph does not connect has no reference
+         * segment, so an invented bridge, however short, is not accepted. A road that moved or vanished fails likewise.
          */
         fun derivesFromAny(line: List<MapPoint>): Boolean {
             if (line.size == 1) return all.any { near(line[0], it.points) }
-            return line.windowed(size = 2, step = 1).all { (a, b) ->
-                derivesFrom(all, listOf(a, b)) ||
-                    (TrailDistanceSijko.metersBetween(a, b) <= ACCESS_JOIN_METERS &&
-                        all.any { near(a, it.points) } && all.any { near(b, it.points) })
-            }
+            return line.windowed(size = 2, step = 1).all { (a, b) -> derivesFrom(all, listOf(a, b)) }
         }
 
         private fun derivesFrom(references: List<Reference>, line: List<MapPoint>): Boolean {
@@ -749,6 +747,4 @@ private const val TRAVERSAL_PHYSICAL_TOLERANCE_METERS = 5.0
 private const val TRAVERSAL_DEFAULT_ACCURACY_METERS = 25.0
 private const val TRAVERSAL_MAX_ACCURACY_METERS = 50.0
 private const val DERIVED_GEOMETRY_METERS = 0.5
-/** The access graph joins roads whose nodes are within this distance (AccessGraphBuilderSijko's snap tolerance). */
-private const val ACCESS_JOIN_METERS = 8.5
 private const val REVALIDATION_CACHE_LIMIT = 64

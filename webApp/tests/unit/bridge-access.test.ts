@@ -283,3 +283,99 @@ test(
     assert.equal(check(route).status, "current");
   },
 );
+
+// A leg inside an access line is accepted only when the planner's own access graph derives it. The graph does join
+// roads that are close (an intersection connector from a road end onto the interior of another road): that hop is
+// real and must verify. A hop invented between two roads the graph does not connect must not, however short.
+const legMeters = (a: any, b: any) =>
+  Math.hypot(
+    (b.longitude - a.longitude) * Math.cos((a.latitude * Math.PI) / 180),
+    b.latitude - a.latitude,
+  ) * 111320;
+const accessLegs = (route: any) =>
+  route.edges.flatMap((edge: any) =>
+    edge.routeSegments
+      .filter((s: any) => s.isRouted && s.type === "Access")
+      .flatMap((s: any) =>
+        s.points.slice(1).map((q: any, i: number) => legMeters(s.points[i], q)),
+      ),
+  );
+
+test(
+  "control: a short hop the access graph itself derives (a road end joining another road) verifies as current",
+  { skip },
+  async () => {
+    const { init, plan, check } = await engine();
+    init(
+      trail(),
+      access(
+        "tiger",
+        road("tiger:j1", [
+          [
+            [-88.956, 40.4978],
+            [-88.95006, 40.4978],
+          ],
+        ]),
+        road("tiger:j2", [
+          [
+            [-88.95, 40.4975],
+            [-88.95, 40.5],
+          ],
+        ]),
+      ),
+    );
+    const planned = plan();
+    // The control is only meaningful if the planned route really crosses a short graph-derived hop.
+    assert.ok(
+      accessLegs(planned.route).some((m: number) => m > 3 && m < 8),
+      "expected a short connector hop in the planned route",
+    );
+    assert.equal(check(planned.route).status, "current");
+  },
+);
+
+test(
+  "a short out-and-back hop invented between two roads the graph does not connect is stale, not accepted",
+  { skip },
+  async () => {
+    const { init, plan, check } = await engine();
+    // A parallel road about 6 m east of the connecting road, with no node near the hop point.
+    const parallel = road("tiger:parallel", [
+      [
+        [-88.949929, 40.49],
+        [-88.949929, 40.52],
+      ],
+    ]);
+    init(trail(), access("tiger", r1(), r2(), parallel));
+    const route = plan().route;
+    assert.equal(check(route).status, "current");
+
+    // Splice an out-and-back hop at latitude 40.498 (a point on the connecting road) onto the parallel road.
+    const mid = { latitude: 40.498, longitude: -88.95 };
+    const hop = { latitude: 40.498, longitude: -88.949929 };
+    const forged = JSON.parse(JSON.stringify(route));
+    let spliced = false;
+    for (const edge of forged.edges) {
+      for (const segment of edge.routeSegments) {
+        if (!segment.isRouted || segment.type !== "Access") continue;
+        const at = segment.points.findIndex(
+          (p: any, i: number) =>
+            i + 1 < segment.points.length &&
+            Math.min(p.latitude, segment.points[i + 1].latitude) < 40.498 &&
+            Math.max(p.latitude, segment.points[i + 1].latitude) > 40.498 &&
+            Math.abs(p.longitude + 88.95) < 1e-9,
+        );
+        if (at >= 0 && !spliced) {
+          segment.points.splice(at + 1, 0, mid, hop, mid);
+          spliced = true;
+        }
+      }
+    }
+    assert.ok(spliced, "the access line to forge was not found");
+    const verdict = check(forged);
+    assert.equal(verdict.status, "stale");
+    assert.equal(verdict.issues[0].code, "geometry-changed");
+    // The unforged route is still current in the same data.
+    assert.equal(check(route).status, "current");
+  },
+);
