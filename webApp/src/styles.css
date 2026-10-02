@@ -593,12 +593,15 @@ nav button[aria-current="page"] {
 }
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   border-bottom: 1px solid var(--line);
   margin: 22px 0;
 }
 .tabs button {
-  flex: 1;
+  flex: 1 1 6rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 0;
   border-radius: 8px 8px 0 0;
   padding: 8px;
@@ -893,6 +896,10 @@ dialog::backdrop {
   color: white;
   border-radius: 12px;
   font-size: 2rem;
+}
+.brand > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .brand small {
   font-size: 0.72rem;

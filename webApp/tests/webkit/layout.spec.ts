@@ -288,9 +288,9 @@ for (const [percent, wide] of [
     const size = `${(16 * percent) / 100}px`;
     await page.goto("/");
     if (wide)
-      // Stands in for a wider fallback font (the hosted Linux runner has one): every letter 0.3em wider (harsher than the hosted runner).
+      // Stands in for a wider fallback font (the hosted Linux runner has one): every letter 0.4em wider (harsher than the hosted runner).
       await page.addStyleTag({
-        content: "*{letter-spacing:0.3em !important}",
+        content: "*{letter-spacing:0.4em !important}",
       });
     await page.evaluate(
       (px) => (document.documentElement.style.fontSize = px),
