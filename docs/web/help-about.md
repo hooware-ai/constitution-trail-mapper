@@ -13,11 +13,11 @@ The rider-facing Help and about dialog is `webApp/src/Help.tsx` (content helpers
 | Place search | `webApp/src/search.ts`: a handful of public places (the count shown is `places.length`), saved places, never address/business search; map, current-location and saved-place fallbacks; also stated in the chooser | a geocoder or more catalog entries are added |
 | Storage and removal | `LocalRouteStore`, `ActiveRideStore`, `BrowserSessionStore` (localStorage, namespaced per build); Delete on saved items, Clear recents, stopping a ride, browser site data | new stored data or a new "delete everything" control |
 | Export and sharing | the Share dialog: summary link without endpoints; GeoJSON with endpoint areas removed unless the rider ticks the exact-endpoint box | export options change |
-| Requests the app makes | this origin only; the optional basemap (`tile.openstreetmap.org`, off by default, not offered in the synthetic review build); no analytics/ads/trackers | any new third-party request (must be added here and to `hosting/headers.mjs`) |
+| Requests the app makes | this origin only; the optional basemap (`tile.openstreetmap.org`, off by default, not offered in the synthetic review build; when on, a visible OpenStreetMap credit links to https://www.openstreetmap.org/copyright); no analytics/ads/trackers | any new third-party request (must be added here and to `hosting/headers.mjs`) |
 | Sources, licenses, changes, review status | the dataset record (`DataSources`): attribution, license link, change disclosure, review date, extraction time, omissions, approval state | the dataset or its approval changes |
 | Build and data identity | `__TRAIL_BUILD__` (commit, uncommitted-changes flag, routing-core hash) read by Vite when the build is made, plus the dataset record | the build pipeline changes |
 | Phones and browsers | tested only with automated emulation until physical iPhone Safari and Android Chrome runs (#41) are recorded | #41 produces results |
-| Accounts and sync | not implemented; stated as unavailable (#31-#34) | sign-in or sync ships: describe exactly what is uploaded, retention and deletion, before enabling it |
+| Accounts and sync | not implemented; stated as unavailable (#31-#34); deferred: the first launch is guest-first, with browser-local saves | sign-in or sync ships: describe exactly what is uploaded, retention and deletion, before enabling it |
 
 ## Report a problem
 
