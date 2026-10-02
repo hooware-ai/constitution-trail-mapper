@@ -9,4 +9,6 @@ data class AddressAutocompletePrediction(
     val primaryText: String,
     val secondaryText: String,
     val fullText: String,
+    /** Straight-line meters from the proximity point the request was made with, when the provider knows it. */
+    val distanceMeters: Int? = null,
 )

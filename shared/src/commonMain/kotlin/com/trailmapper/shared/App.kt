@@ -12,16 +12,27 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import com.trailmapper.shared.routing.TrailRouteClosureGateSijko
+import com.trailmapper.shared.sijko.SavedTrailRouteDetailSijko
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,10 +43,19 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -108,6 +128,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -115,6 +137,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteSummarySijko
@@ -122,12 +145,19 @@ import com.trailmapper.shared.routing.ExerciseRouteStatus
 import com.trailmapper.shared.routing.TrailRouteKind
 import com.trailmapper.shared.routing.TrailRouteAdvisorySijko
 import com.trailmapper.shared.sijko.AddressPlaceholderVisibilitySijko
+import com.trailmapper.shared.sijko.AddressPredictionRankingSijko
+import com.trailmapper.shared.sijko.ExerciseRouteFormSijko
 import com.trailmapper.shared.sijko.CurrentLocationEndpointAvailabilitySijko
 import com.trailmapper.shared.sijko.LocationPermissionRevokeStatus
 import com.trailmapper.shared.sijko.MapPoint
+import com.trailmapper.shared.sijko.PlannerScrollTargetSijko
 import com.trailmapper.shared.sijko.RouteEndpointTarget
 import com.trailmapper.shared.sijko.RouteSearchAvailabilitySijko
 import com.trailmapper.shared.sijko.SavedItemAccessibilityMessageSijko
+import com.trailmapper.shared.sijko.SavedItemSnackbarSijko
+import com.trailmapper.shared.sijko.SavedItemStatusQueue
+import com.trailmapper.shared.sijko.TrailAccountSheetContent
+import com.trailmapper.shared.sijko.TrailAccountSheetSijko
 import com.trailmapper.shared.sijko.SavedTrailRouteFilterSijko
 import com.trailmapper.shared.sijko.SavedDestinationEditorSaveAvailabilitySijko
 import com.trailmapper.shared.sijko.TrailResourceLinksSijko
@@ -192,6 +222,7 @@ fun App(
                         trailRouteShareProvider = trailRouteShareProvider,
                         onSignInWithGoogle = trailMapperViewModel::signInWithGoogle,
                         onSignOut = trailMapperViewModel::signOut,
+                        onAccountMessageShown = trailMapperViewModel::dismissAccountMessage,
                         onOpenAbout = {
                             navController.navigate(TrailMapperScreen.About.route) {
                                 launchSingleTop = true
@@ -228,6 +259,8 @@ fun App(
                             trailRouteMapPresenter.showTrailRoute(entry.route, TrailRoutePreviewRequest(title = entry.title))
                         },
                         onRemoveRecentRoute = trailMapperViewModel::removeRecentRoute,
+                        onSaveMessageShown = trailMapperViewModel::dismissSaveMessage,
+                        onDestinationMessageShown = trailMapperViewModel::dismissDestinationMessage,
                         onRestoreRecentRoute = trailMapperViewModel::restoreRecentRoute,
                         onClearRecentRoutes = trailMapperViewModel::clearRecentRoutes,
                         onCreateRouteFromDestination = { destination ->
@@ -309,32 +342,6 @@ fun App(
                 }
             }
 
-            appState.saveMessage?.let { message ->
-                AlertDialog(
-                    onDismissRequest = trailMapperViewModel::dismissSaveMessage,
-                    title = { Text("Saved routes") },
-                    text = { Text(message) },
-                    confirmButton = {
-                        TextButton(onClick = trailMapperViewModel::dismissSaveMessage) {
-                            Text("OK")
-                        }
-                    },
-                )
-            }
-
-            appState.accountMessage?.let { message ->
-                AlertDialog(
-                    onDismissRequest = trailMapperViewModel::dismissAccountMessage,
-                    title = { Text("Google account") },
-                    text = { Text(message) },
-                    confirmButton = {
-                        TextButton(onClick = trailMapperViewModel::dismissAccountMessage) {
-                            Text("OK")
-                        }
-                    },
-                )
-            }
-
             appState.pendingNavigationDestination?.let { destination ->
                 AlertDialog(
                     onDismissRequest = trailMapperViewModel::dismissNavigateToDestinationPrompt,
@@ -366,18 +373,6 @@ fun App(
                 )
             }
 
-            appState.destinationMessage?.let { message ->
-                AlertDialog(
-                    onDismissRequest = trailMapperViewModel::dismissDestinationMessage,
-                    title = { Text("Saved destination") },
-                    text = { Text(message) },
-                    confirmButton = {
-                        TextButton(onClick = trailMapperViewModel::dismissDestinationMessage) {
-                            Text("OK")
-                        }
-                    },
-                )
-            }
         }
     }
 }
@@ -394,6 +389,7 @@ private fun TrailMapperHome(
     trailRouteShareProvider: TrailRouteShareProvider,
     onSignInWithGoogle: () -> Unit,
     onSignOut: () -> Unit,
+    onAccountMessageShown: () -> Unit,
     onOpenAbout: () -> Unit,
     onCreateRoute: () -> Unit,
     onCreateExerciseRoute: () -> Unit,
@@ -401,6 +397,8 @@ private fun TrailMapperHome(
     onCreateRouteFromDestination: (SavedDestination) -> Unit,
     onOpenRecentRoute: (RecentTrailRoute) -> Unit,
     onRemoveRecentRoute: (RecentTrailRoute) -> Unit,
+    onSaveMessageShown: () -> Unit,
+    onDestinationMessageShown: () -> Unit,
     onRestoreRecentRoute: (RecentTrailRoute) -> Unit,
     onClearRecentRoutes: () -> Unit,
     onSaveDestination: (String, String, MapPoint) -> Unit,
@@ -418,14 +416,14 @@ private fun TrailMapperHome(
     val keyboardController = LocalSoftwareKeyboardController.current
     var showAddDestinationDialog by rememberSaveable { mutableStateOf(false) }
     var showAccountSheet by remember { mutableStateOf(false) }
-    var editingDestinationId by rememberSaveable { mutableStateOf<String?>(null) }
-    var editingRouteId by rememberSaveable { mutableStateOf<String?>(null) }
+    var savedSegmentName by rememberSaveable { mutableStateOf(SavedSegment.Saved.name) }
+    val savedSegment = SavedSegment.valueOf(savedSegmentName)
     var destinationPendingRename by remember { mutableStateOf<SavedDestination?>(null) }
     var destinationPendingDelete by remember { mutableStateOf<SavedDestination?>(null) }
     var routePendingRename by remember { mutableStateOf<SavedTrailRoute?>(null) }
     var routePendingDelete by remember { mutableStateOf<SavedTrailRoute?>(null) }
     val savedItemSnackbarHostState = remember { SnackbarHostState() }
-    var savedItemStatusMessage by remember { mutableStateOf<String?>(null) }
+    var statusQueue by remember { mutableStateOf(SavedItemStatusQueue()) }
     val homeScope = rememberCoroutineScope()
     var confirmClearRecents by remember { mutableStateOf(false) }
 
@@ -436,6 +434,7 @@ private fun TrailMapperHome(
             val result = savedItemSnackbarHostState.showSnackbar(
                 message = "Removed ${entry.title} from recents",
                 actionLabel = "Undo",
+                duration = SavedItemSnackbarSijko.undoDuration,
             )
             if (result == SnackbarResult.ActionPerformed) onRestoreRecentRoute(entry)
         }
@@ -443,50 +442,29 @@ private fun TrailMapperHome(
     val savedNavigationRoutes = SavedTrailRouteFilterSijko.navigationRoutes(appState.savedRoutes)
     val savedExerciseRoutes = SavedTrailRouteFilterSijko.exerciseRoutes(appState.savedRoutes)
 
-    fun clearSavedItemEditMode() {
-        editingDestinationId = null
-        editingRouteId = null
+    // Status messages show one at a time, each once, so a second never replaces the first.
+    LaunchedEffect(statusQueue.current?.id) {
+        val message = statusQueue.current ?: return@LaunchedEffect
+        savedItemSnackbarHostState.showSnackbar(message.text, duration = SavedItemSnackbarSijko.statusDuration)
+        statusQueue = statusQueue.complete(message.id)
     }
 
-    fun exitSavedItemEditMode() {
-        val editedTitle = editingDestinationId
-            ?.let { destinationId ->
-                appState.savedDestinations.firstOrNull { it.id == destinationId }?.title
-            }
-            ?: editingRouteId?.let { routeId ->
-                appState.savedRoutes.firstOrNull { it.id == routeId }?.title
-            }
-        clearSavedItemEditMode()
-        editedTitle?.let { title ->
-            savedItemStatusMessage = SavedItemAccessibilityMessageSijko.editingExited(title)
+    // Sign-in results appear inside the Account sheet; with it closed they become a brief message on Home.
+    LaunchedEffect(appState.accountMessage, showAccountSheet) {
+        TrailAccountSheetSijko.homeMessageFor(appState.accountMessage, showAccountSheet)?.let { message ->
+            onAccountMessageShown()
+            statusQueue = statusQueue.enqueue(message)
         }
     }
 
-    LaunchedEffect(savedItemStatusMessage) {
-        val message = savedItemStatusMessage ?: return@LaunchedEffect
-        savedItemSnackbarHostState.currentSnackbarData?.dismiss()
-        savedItemSnackbarHostState.showSnackbar(message)
-        if (savedItemStatusMessage == message) {
-            savedItemStatusMessage = null
-        }
-    }
-
-    PlatformBackHandler(
-        enabled = editingDestinationId != null || editingRouteId != null,
-        onBack = ::exitSavedItemEditMode,
-    )
-
-    LaunchedEffect(appState.savedDestinations, appState.savedRoutes) {
-        editingDestinationId?.let { destinationId ->
-            if (appState.savedDestinations.none { destination -> destination.id == destinationId }) {
-                editingDestinationId = null
-            }
-        }
-        editingRouteId?.let { routeId ->
-            if (appState.savedRoutes.none { route -> route.id == routeId }) {
-                editingRouteId = null
-            }
-        }
+    // Routine save and place feedback is a brief message on Home, never an OK dialog.
+    LaunchedEffect(appState.saveMessage, appState.destinationMessage) {
+        val saveMessage = appState.saveMessage
+        val destinationMessage = appState.destinationMessage
+        if (saveMessage == null && destinationMessage == null) return@LaunchedEffect
+        statusQueue = statusQueue.enqueueAll(saveMessage, destinationMessage)
+        if (saveMessage != null) onSaveMessageShown()
+        if (destinationMessage != null) onDestinationMessageShown()
     }
 
     fun openAddDestinationDialog() {
@@ -513,13 +491,12 @@ private fun TrailMapperHome(
     val selectedTab = TrailMapperHomeTab.valueOf(selectedTabName)
 
     fun selectTab(tab: TrailMapperHomeTab) {
-        if (tab != TrailMapperHomeTab.Saved) clearSavedItemEditMode()
         selectedTabName = tab.name
     }
 
     // Back from another top-level tab returns to Plan, the start destination, before leaving the app.
     PlatformBackHandler(
-        enabled = selectedTab != TrailMapperHomeTab.Plan && editingDestinationId == null && editingRouteId == null,
+        enabled = selectedTab != TrailMapperHomeTab.Plan,
         onBack = { selectTab(TrailMapperHomeTab.Plan) },
     )
 
@@ -613,7 +590,10 @@ private fun TrailMapperHome(
                             item {
                                 RecentRoutesHeader(
                                     actionLabel = "See all",
-                                    onAction = { selectTab(TrailMapperHomeTab.Saved) },
+                                    onAction = {
+                                        savedSegmentName = SavedSegment.Recent.name
+                                        selectTab(TrailMapperHomeTab.Saved)
+                                    },
                                 )
                             }
                             items(
@@ -640,7 +620,7 @@ private fun TrailMapperHome(
                     TrailMapperHomeTab.Saved -> LazyColumn(
                         modifier = tabModifier,
                         contentPadding = listPadding,
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         item {
                             Text(
@@ -650,173 +630,123 @@ private fun TrailMapperHome(
                                 modifier = Modifier.semantics { heading() },
                             )
                         }
-                if (appState.recentRoutes.isNotEmpty()) {
-                    item {
-                        RecentRoutesHeader(actionLabel = "Clear recents", onAction = { confirmClearRecents = true })
-                    }
-                    items(
-                        items = appState.recentRoutes,
-                        key = { entry -> "recent-${entry.id}" },
-                    ) { entry ->
-                        RecentTrailRouteRow(
-                            entry = entry,
-                            detail = RecentTrailRouteHistorySijko.detailFor(entry, appState.recentRoutesLoadedAtEpochMillis),
-                            openEnabled = trailRouteMapPresenter.isAvailable,
-                            onOpen = { onOpenRecentRoute(entry) },
-                            onRemove = { removeRecentRoute(entry) },
-                        )
-                    }
-                }
-
-                item {
-                    HomeSectionHeader(
-                        title = "Destinations",
-                        onAdd = ::openAddDestinationDialog,
-                        addContentDescription = "Add saved destination",
-                    )
-                }
-
-                if (appState.isLoadingSavedDestinations) {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        item {
+                            SavedSegmentSwitch(
+                                selected = savedSegment,
+                                savedCount = appState.savedDestinations.size + appState.savedRoutes.size,
+                                recentCount = appState.recentRoutes.size,
+                                onSelect = { segment -> savedSegmentName = segment.name },
+                            )
                         }
-                    }
-                } else if (appState.savedDestinations.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Destinations will appear here after you add one or save one from a route.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    items(
-                        items = appState.savedDestinations,
-                        key = SavedDestination::id,
-                    ) { savedDestination ->
-                        SavedDestinationRow(
-                            savedDestination = savedDestination,
-                            navigationEnabled = trailRouteMapPresenter.isAvailable,
-                            isNavigating = appState.navigatingDestinationId == savedDestination.id,
-                            isEditing = editingDestinationId == savedDestination.id,
-                            onNavigate = { onNavigateToDestination(savedDestination) },
-                            onCreateRoute = { onCreateRouteFromDestination(savedDestination) },
-                            onEnterEditMode = {
-                                editingDestinationId = savedDestination.id
-                                editingRouteId = null
-                                savedItemStatusMessage =
-                                    SavedItemAccessibilityMessageSijko.editing(savedDestination.title)
-                            },
-                            onCancelEditMode = ::exitSavedItemEditMode,
-                            onEdit = { destinationPendingRename = savedDestination },
-                            onDelete = { destinationPendingDelete = savedDestination },
-                        )
-                    }
-                }
-
-                item {
-                    HomeSectionHeader(
-                        title = "Trail navigation routes",
-                        onAdd = onCreateRoute,
-                        addContentDescription = "Create trail navigation route",
-                    )
-                }
-
-                if (appState.isLoadingSavedRoutes) {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        if (savedSegment == SavedSegment.Saved) {
+                            val nothingSaved = appState.savedDestinations.isEmpty() && appState.savedRoutes.isEmpty()
+                            val loading = appState.isLoadingSavedDestinations || appState.isLoadingSavedRoutes
+                            if (nothingSaved && loading) {
+                                item {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                }
+                            } else if (nothingSaved) {
+                                item {
+                                    EmptySavedState(
+                                        onPlanRide = { selectTab(TrailMapperHomeTab.Plan) },
+                                        onAddPlace = ::openAddDestinationDialog,
+                                    )
+                                }
+                            } else {
+                                item {
+                                    HomeSectionHeader(
+                                        title = "Places",
+                                        onAdd = ::openAddDestinationDialog,
+                                        addContentDescription = "Add a place",
+                                    )
+                                }
+                                if (appState.savedDestinations.isEmpty()) {
+                                    item {
+                                        Text(
+                                            text = "Add a place, or save a destination from a route's map.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                                items(
+                                    items = appState.savedDestinations,
+                                    key = { destination -> "place-${destination.id}" },
+                                ) { savedDestination ->
+                                    SavedPlaceRow(
+                                        place = savedDestination,
+                                        navigationEnabled = trailRouteMapPresenter.isAvailable,
+                                        isNavigating = appState.navigatingDestinationId == savedDestination.id,
+                                        onNavigate = { onNavigateToDestination(savedDestination) },
+                                        onPlanRoute = { onCreateRouteFromDestination(savedDestination) },
+                                        onRename = { destinationPendingRename = savedDestination },
+                                        onDelete = { destinationPendingDelete = savedDestination },
+                                    )
+                                }
+                                listOf(
+                                    "Routes" to savedNavigationRoutes,
+                                    "Exercise loops" to savedExerciseRoutes,
+                                ).forEach { (heading, routes) ->
+                                    if (routes.isNotEmpty()) {
+                                        item(key = "section-$heading") {
+                                            HomeSectionHeader(title = heading)
+                                        }
+                                        items(
+                                            items = routes,
+                                            key = { savedRoute -> "route-${savedRoute.id}" },
+                                        ) { savedRoute ->
+                                            SavedRouteRow(
+                                                savedRoute = savedRoute,
+                                                openEnabled = trailRouteMapPresenter.isAvailable,
+                                                sharingEnabled = trailRouteShareProvider.isAvailable,
+                                                onOpen = { trailRouteMapPresenter.showTrailRoute(savedRoute.route) },
+                                                onRename = { routePendingRename = savedRoute },
+                                                onShare = { trailRouteShareProvider.share(savedRoute) },
+                                                onDelete = { routePendingDelete = savedRoute },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            item {
+                                Text(
+                                    text = "Recent routes stay on this phone. Trail Mapper keeps up to 20 for 30 days " +
+                                        "and never backs them up to your Google account.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (appState.recentRoutes.isEmpty()) {
+                                item {
+                                    Text(
+                                        text = "Routes you plan show up here until you save them.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            } else {
+                                items(
+                                    items = appState.recentRoutes,
+                                    key = { entry -> "recent-${entry.id}" },
+                                ) { entry ->
+                                    RecentTrailRouteRow(
+                                        entry = entry,
+                                        detail = RecentTrailRouteHistorySijko.detailFor(entry, appState.recentRoutesLoadedAtEpochMillis),
+                                        openEnabled = trailRouteMapPresenter.isAvailable,
+                                        onOpen = { onOpenRecentRoute(entry) },
+                                        onRemove = { removeRecentRoute(entry) },
+                                    )
+                                }
+                                item {
+                                    TextButton(onClick = { confirmClearRecents = true }) {
+                                        Text("Clear recents", color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
                         }
-                    }
-                } else if (savedNavigationRoutes.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Trail navigation routes will appear here after you find and save one.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    items(
-                        items = savedNavigationRoutes,
-                        key = SavedTrailRoute::id,
-                    ) { savedRoute ->
-                        SavedTrailRouteRow(
-                            savedRoute = savedRoute,
-                            enabled = trailRouteMapPresenter.isAvailable,
-                            sharingEnabled = trailRouteShareProvider.isAvailable,
-                            isEditing = editingRouteId == savedRoute.id,
-                            onOpen = { trailRouteMapPresenter.showTrailRoute(savedRoute.route) },
-                            onShare = { trailRouteShareProvider.share(savedRoute) },
-                            onEnterEditMode = {
-                                editingRouteId = savedRoute.id
-                                editingDestinationId = null
-                                savedItemStatusMessage =
-                                    SavedItemAccessibilityMessageSijko.editing(savedRoute.title)
-                            },
-                            onCancelEditMode = ::exitSavedItemEditMode,
-                            onEdit = { routePendingRename = savedRoute },
-                            onDelete = { routePendingDelete = savedRoute },
-                        )
-                    }
-                }
-
-                item {
-                    HomeSectionHeader(
-                        title = "Exercise routes",
-                        onAdd = onCreateExerciseRoute,
-                        addContentDescription = "Create exercise route",
-                    )
-                }
-
-                if (appState.isLoadingSavedRoutes) {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    }
-                } else if (savedExerciseRoutes.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Exercise routes will appear here after you create and save a loop.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    items(
-                        items = savedExerciseRoutes,
-                        key = SavedTrailRoute::id,
-                    ) { savedRoute ->
-                        SavedTrailRouteRow(
-                            savedRoute = savedRoute,
-                            enabled = trailRouteMapPresenter.isAvailable,
-                            sharingEnabled = trailRouteShareProvider.isAvailable,
-                            isEditing = editingRouteId == savedRoute.id,
-                            onOpen = { trailRouteMapPresenter.showTrailRoute(savedRoute.route) },
-                            onShare = { trailRouteShareProvider.share(savedRoute) },
-                            onEnterEditMode = {
-                                editingRouteId = savedRoute.id
-                                editingDestinationId = null
-                                savedItemStatusMessage =
-                                    SavedItemAccessibilityMessageSijko.editing(savedRoute.title)
-                            },
-                            onCancelEditMode = ::exitSavedItemEditMode,
-                            onEdit = { routePendingRename = savedRoute },
-                            onDelete = { routePendingDelete = savedRoute },
-                        )
-                    }
-                }
                     }
 
                     TrailMapperHomeTab.Explore -> LazyColumn(
@@ -874,14 +804,17 @@ private fun TrailMapperHome(
         TrailAccountSheet(
             account = appState.account,
             isResolvingAccount = appState.isResolvingAccount,
-            onDismiss = { showAccountSheet = false },
-            onSignInWithGoogle = {
+            message = appState.accountMessage,
+            onDismiss = {
                 showAccountSheet = false
-                onSignInWithGoogle()
+                onAccountMessageShown()
             },
-            onSignOut = {
+            onSignInWithGoogle = onSignInWithGoogle,
+            onSignOut = onSignOut,
+            onOpenPrivacy = {
                 showAccountSheet = false
-                onSignOut()
+                onAccountMessageShown()
+                onOpenAbout()
             },
         )
     }
@@ -923,15 +856,15 @@ private fun TrailMapperHome(
             currentTitle = destination.title,
             onDismiss = {
                 destinationPendingRename = null
-                exitSavedItemEditMode()
             },
             onRename = { title ->
                 onRenameSavedDestination(destination.id, title)
                 destinationPendingRename = null
-                clearSavedItemEditMode()
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.renamed(
-                    itemLabel = "Destination",
-                    title = title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.renamed(
+                        itemLabel = "Destination",
+                        title = title,
+                    )
                 )
             },
         )
@@ -943,15 +876,15 @@ private fun TrailMapperHome(
             itemTitle = destination.title,
             onDismiss = {
                 destinationPendingDelete = null
-                exitSavedItemEditMode()
             },
             onDelete = {
                 onDeleteSavedDestination(destination.id)
                 destinationPendingDelete = null
-                clearSavedItemEditMode()
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.deleted(
-                    itemLabel = "Destination",
-                    title = destination.title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.deleted(
+                        itemLabel = "Destination",
+                        title = destination.title,
+                    )
                 )
             },
         )
@@ -963,15 +896,15 @@ private fun TrailMapperHome(
             currentTitle = route.title,
             onDismiss = {
                 routePendingRename = null
-                exitSavedItemEditMode()
             },
             onRename = { title ->
                 onRenameSavedRoute(route.id, title)
                 routePendingRename = null
-                clearSavedItemEditMode()
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.renamed(
-                    itemLabel = "Saved route",
-                    title = title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.renamed(
+                        itemLabel = "Saved route",
+                        title = title,
+                    )
                 )
             },
         )
@@ -983,15 +916,15 @@ private fun TrailMapperHome(
             itemTitle = route.title,
             onDismiss = {
                 routePendingDelete = null
-                exitSavedItemEditMode()
             },
             onDelete = {
                 onDeleteSavedRoute(route.id)
                 routePendingDelete = null
-                clearSavedItemEditMode()
-                savedItemStatusMessage = SavedItemAccessibilityMessageSijko.deleted(
-                    itemLabel = "Saved route",
-                    title = route.title,
+                statusQueue = statusQueue.enqueue(
+                    SavedItemAccessibilityMessageSijko.deleted(
+                        itemLabel = "Saved route",
+                        title = route.title,
+                    )
                 )
             },
         )
@@ -1167,37 +1100,65 @@ private fun TrailMapperTopAppBar(
 private fun TrailAccountSheet(
     account: TrailUserAccount?,
     isResolvingAccount: Boolean,
+    message: String?,
     onDismiss: () -> Unit,
     onSignInWithGoogle: () -> Unit,
     onSignOut: () -> Unit,
+    onOpenPrivacy: () -> Unit,
 ) {
+    val content = TrailAccountSheetSijko.contentFor(account, isResolvingAccount, message)
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Account",
+                text = TrailAccountSheetSijko.TITLE,
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
             )
 
-            when {
-                isResolvingAccount -> {
+            when (content) {
+                is TrailAccountSheetContent.InProgress -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Text(
+                            text = content.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
 
-                account == null -> {
+                is TrailAccountSheetContent.SignedOut -> {
+                    content.problem?.let { problem ->
+                        Text(
+                            text = problem,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
+                    content.notice?.let { notice ->
+                        Text(
+                            text = notice,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
                     Text(
-                        text = "Not signed in",
+                        text = TrailAccountSheetSijko.LOCAL_DATA_NOTE,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1212,50 +1173,59 @@ private fun TrailAccountSheet(
                     }
                 }
 
-                else -> {
+                is TrailAccountSheetContent.SignedIn -> {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TrailAccountProfileImage(
-                            account = account,
+                            account = content.account,
                             contentDescription = null,
                             modifier = Modifier.size(56.dp),
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = account.displayName,
+                                text = content.account.displayName,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = account.email,
+                                text = content.account.email,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
-                    HorizontalDivider()
-                    TextButton(
+                    Text(
+                        text = TrailAccountSheetSijko.LOCAL_DATA_NOTE,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(
                         onClick = onSignOut,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = null,
-                            )
-                            Text("Sign out")
-                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        Text("Sign out")
                     }
+                }
+            }
+
+            if (content !is TrailAccountSheetContent.InProgress) {
+                TextButton(
+                    onClick = onOpenPrivacy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(TrailAccountSheetSijko.PRIVACY_LINK_LABEL)
                 }
             }
         }
@@ -1522,288 +1492,219 @@ private fun TrailResourceRow(
     }
 }
 
+/** Saved shows what was kept on purpose; Recent what was planned lately and not kept. */
+private enum class SavedSegment { Saved, Recent }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SavedDestinationRow(
-    savedDestination: SavedDestination,
-    navigationEnabled: Boolean,
-    isNavigating: Boolean,
-    isEditing: Boolean,
-    onNavigate: () -> Unit,
-    onCreateRoute: () -> Unit,
-    onEnterEditMode: () -> Unit,
-    onCancelEditMode: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
+private fun SavedSegmentSwitch(
+    selected: SavedSegment,
+    savedCount: Int,
+    recentCount: Int,
+    onSelect: (SavedSegment) -> Unit,
 ) {
-    val cardColor = if (isEditing) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val primaryContentColor = if (isEditing) {
-        MaterialTheme.colorScheme.onErrorContainer
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val secondaryContentColor = if (isEditing) {
-        MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val canEnterEditMode = !isEditing
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .savedItemEditMotion(isEditing)
-            .savedItemLongPressOnly(
-                onLongClickLabel = if (canEnterEditMode) {
-                    "Edit ${savedDestination.title}"
-                } else {
-                    null
-                },
-                onLongPress = onEnterEditMode.takeIf { canEnterEditMode },
-            ),
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 1.dp,
-        color = cardColor,
-    ) {
-        Box(modifier = Modifier.heightIn(min = 76.dp)) {
-            if (isEditing) {
-                IconButton(
-                    onClick = onCancelEditMode,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 2.dp, top = 2.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Exit edit mode for ${savedDestination.title}",
-                        tint = primaryContentColor,
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = if (isEditing) 54.dp else 14.dp,
-                        top = 14.dp,
-                        end = 10.dp,
-                        bottom = 14.dp,
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        SavedSegment.entries.forEachIndexed { index, segment ->
+            SegmentedButton(
+                selected = segment == selected,
+                onClick = { onSelect(segment) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = SavedSegment.entries.size),
             ) {
-                if (!isEditing) {
-                    Icon(
-                        imageVector = Icons.Filled.LocationOn,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = savedDestination.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = primaryContentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = savedDestination.address,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = secondaryContentColor,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (isEditing) {
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Rename ${savedDestination.title}",
-                            tint = primaryContentColor,
-                        )
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = "Delete ${savedDestination.title}",
-                            tint = primaryContentColor,
-                        )
-                    }
-                } else {
-                    IconButton(onClick = onCreateRoute) {
-                        Icon(
-                            imageVector = Icons.Filled.Route,
-                            contentDescription = "Create route to ${savedDestination.title}",
-                        )
-                    }
-                    FilledIconButton(
-                        onClick = onNavigate,
-                        enabled = navigationEnabled && !isNavigating,
-                    ) {
-                        if (isNavigating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Navigation,
-                                contentDescription = "Navigate to ${savedDestination.title}",
-                            )
-                        }
-                    }
-                }
+                Text(
+                    when (segment) {
+                        SavedSegment.Saved -> "Saved · $savedCount"
+                        SavedSegment.Recent -> "Recent · $recentCount"
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SavedTrailRouteRow(
-    savedRoute: SavedTrailRoute,
-    enabled: Boolean,
-    sharingEnabled: Boolean,
-    isEditing: Boolean,
-    onOpen: () -> Unit,
-    onShare: () -> Unit,
-    onEnterEditMode: () -> Unit,
-    onCancelEditMode: () -> Unit,
-    onEdit: () -> Unit,
+private fun EmptySavedState(
+    onPlanRide: () -> Unit,
+    onAddPlace: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "Nothing saved yet. Save a route from its map to keep it here.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onPlanRide) { Text("Plan a ride") }
+            TextButton(onClick = onAddPlace) { Text("Add a place") }
+        }
+    }
+}
+
+private class SavedItemAction(
+    val label: String,
+    val destructive: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+/** Every row's secondary actions, in a labeled overflow menu instead of a hidden long press. */
+@Composable
+private fun SavedItemMenu(
+    itemTitle: String,
+    actions: List<SavedItemAction>,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "More actions for $itemTitle")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            actions.forEach { action ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = action.label,
+                            color = if (action.destructive) MaterialTheme.colorScheme.error else Color.Unspecified,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        action.onClick()
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** A saved place: tapping navigates to it from here; planning, renaming and deleting are in its menu. */
+@Composable
+private fun SavedPlaceRow(
+    place: SavedDestination,
+    navigationEnabled: Boolean,
+    isNavigating: Boolean,
+    onNavigate: () -> Unit,
+    onPlanRoute: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val cardColor = if (isEditing) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val primaryContentColor = if (isEditing) {
-        MaterialTheme.colorScheme.onErrorContainer
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val secondaryContentColor = if (isEditing) {
-        MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val canOpen = enabled && !isEditing
-    val canEnterEditMode = !isEditing
-
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .savedItemEditMotion(isEditing)
-            .then(
-                if (canOpen) {
-                    Modifier.combinedClickable(
-                        onClick = onOpen,
-                        onClickLabel = "Open ${savedRoute.title}",
-                        onLongClickLabel = "Edit ${savedRoute.title}",
-                        onLongClick = onEnterEditMode,
-                    )
-                } else {
-                    Modifier.savedItemLongPressOnly(
-                        onLongClickLabel = if (canEnterEditMode) {
-                            "Edit ${savedRoute.title}"
-                        } else {
-                            null
-                        },
-                        onLongPress = onEnterEditMode.takeIf { canEnterEditMode },
-                    )
-                },
-            ),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         tonalElevation = 1.dp,
-        color = cardColor,
     ) {
-        Box(modifier = Modifier.heightIn(min = 76.dp)) {
-            if (isEditing) {
-                IconButton(
-                    onClick = onCancelEditMode,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 2.dp, top = 2.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Exit edit mode for ${savedRoute.title}",
-                        tint = primaryContentColor,
-                    )
-                }
-            }
-
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = if (isEditing) 54.dp else 14.dp,
-                        top = 14.dp,
-                        end = 10.dp,
-                        bottom = 14.dp,
-                    ),
+                    .weight(1f)
+                    .heightIn(min = 64.dp)
+                    .clickable(
+                        enabled = navigationEnabled && !isNavigating,
+                        onClickLabel = "Navigate to ${place.title}",
+                        onClick = onNavigate,
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (!isEditing) {
-                    Icon(
-                        imageVector = if (savedRoute.route.kind == TrailRouteKind.ExerciseLoop) {
-                            Icons.AutoMirrored.Filled.DirectionsBike
-                        } else {
-                            Icons.Filled.Bookmark
-                        },
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                Icon(imageVector = Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = savedRoute.title,
+                        text = place.title,
                         style = MaterialTheme.typography.titleSmall,
-                        color = primaryContentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = savedRoute.summary,
+                        text = "Place · ${place.address}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = secondaryContentColor,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (isEditing) {
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Rename ${savedRoute.title}",
-                            tint = primaryContentColor,
-                        )
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = "Delete ${savedRoute.title}",
-                            tint = primaryContentColor,
-                        )
-                    }
-                } else {
-                    IconButton(
-                        onClick = onShare,
-                        enabled = sharingEnabled,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Share,
-                            contentDescription = "Share ${savedRoute.title}",
+                if (isNavigating) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+            }
+            SavedItemMenu(
+                itemTitle = place.title,
+                actions = listOf(
+                    SavedItemAction("Plan a route here", onClick = onPlanRoute),
+                    SavedItemAction("Rename", onClick = onRename),
+                    SavedItemAction("Delete", destructive = true, onClick = onDelete),
+                ),
+            )
+        }
+    }
+}
+
+/** A saved route or loop: tapping opens its map; renaming, sharing and deleting are in its menu. */
+@Composable
+private fun SavedRouteRow(
+    savedRoute: SavedTrailRoute,
+    openEnabled: Boolean,
+    sharingEnabled: Boolean,
+    onOpen: () -> Unit,
+    onRename: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    // A caution at a glance; opening the route shows the closure and how to recalculate around it.
+    val crossesClosure = remember(savedRoute.route) {
+        TrailRouteClosureGateSijko.blockingAdvisories(savedRoute.route).isNotEmpty()
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 1.dp,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 64.dp)
+                    .clickable(enabled = openEnabled, onClickLabel = "Open map", onClick = onOpen)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = if (savedRoute.route.kind == TrailRouteKind.ExerciseLoop) {
+                        Icons.AutoMirrored.Filled.DirectionsBike
+                    } else {
+                        Icons.Filled.Bookmark
+                    },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = savedRoute.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = SavedTrailRouteDetailSijko.detailFor(savedRoute.route),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (crossesClosure) {
+                        Text(
+                            text = "Reported closure on this route",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
                         )
                     }
                 }
             }
+            SavedItemMenu(
+                itemTitle = savedRoute.title,
+                actions = listOfNotNull(
+                    SavedItemAction("Rename", onClick = onRename),
+                    SavedItemAction("Share", onClick = onShare).takeIf { sharingEnabled },
+                    SavedItemAction("Delete", destructive = true, onClick = onDelete),
+                ),
+            )
         }
     }
 }
@@ -1880,6 +1781,16 @@ private fun ExerciseRoutePlanner(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var showDeveloperOptions by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    ScrollToItemOnArrival(
+        listState = listState,
+        arrival = uiState.searchError,
+        // A repeat failure keeps the earlier result, whose card follows the button item.
+        itemsAfterTarget = PlannerScrollTargetSijko.itemsAfterTarget(
+            revealingButtonItem = true,
+            resultCardShown = uiState.result != null,
+        ),
+    )
 
     // A new loop opens straight onto its map once; the result card stays for reopening it after Back.
     val resultAwaitingMap = uiState.result?.takeIf { uiState.resultAwaitingMap }
@@ -1923,6 +1834,7 @@ private fun ExerciseRoutePlanner(
             scaffoldPadding.calculateLeftPadding(layoutDirection)
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .consumeWindowInsets(scaffoldPadding),
@@ -1966,14 +1878,19 @@ private fun ExerciseRoutePlanner(
             }
 
             item {
-                OutlinedTextField(
-                    value = uiState.targetMilesText,
-                    onValueChange = viewModel::setTargetMilesText,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Target distance") },
-                    suffix = { Text("mi") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                ExerciseStartHint(
+                    startAddress = uiState.startAddress,
+                    startPoint = uiState.startPoint,
+                    isResolving = uiState.isResolvingAutocomplete || uiState.isResolvingLocation || uiState.isResolvingMapPoint,
+                    isSuggestionsOpen = uiState.autocompleteSuggestions.isNotEmpty(),
+                )
+            }
+
+            item {
+                ExerciseDistanceInput(
+                    text = uiState.targetMilesText,
+                    onTextChange = viewModel::setTargetMilesText,
+                    onDone = ::hideInput,
                 )
             }
 
@@ -1983,43 +1900,70 @@ private fun ExerciseRoutePlanner(
                     checked = uiState.proposedTrailsEnabled,
                     onCheckedChange = viewModel::setProposedTrailsEnabled,
                     modifier = Modifier.fillMaxWidth(),
+                    supportingText = TrailMapperAbout.PROPOSED_TRAILS_CAUTION,
                 )
             }
 
             item {
-                Button(
-                    onClick = {
-                        hideInput()
-                        viewModel.findExerciseRoute(
-                            trailNetworkProvider = trailNetworkProvider,
-                            accessNetworkProvider = accessNetworkProvider,
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest,
-                ) {
-                    if (uiState.isFindingRoute) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.DirectionsBike,
-                            contentDescription = null,
-                        )
-                        Text("Create exercise route")
-                    }
-                }
-            }
-
-            uiState.searchError?.let { message ->
-                item {
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
+                val canCreate = ExerciseRouteFormSijko.canCreate(
+                    startAddress = uiState.startAddress,
+                    startPoint = uiState.startPoint,
+                    milesText = uiState.targetMilesText,
+                    isBusy = uiState.isFindingRoute || uiState.hasPendingEndpointRequest,
+                )
+                val createLoop = {
+                    hideInput()
+                    viewModel.findExerciseRoute(
+                        trailNetworkProvider = trailNetworkProvider,
+                        accessNetworkProvider = accessNetworkProvider,
                     )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = createLoop,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = canCreate,
+                    ) {
+                        if (uiState.isFindingRoute) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text("Finding your loop…")
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.DirectionsBike,
+                                contentDescription = null,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Create exercise route")
+                        }
+                    }
+                    ExerciseRouteFormSijko.guidance(
+                        startAddress = uiState.startAddress,
+                        startPoint = uiState.startPoint,
+                        milesText = uiState.targetMilesText,
+                    )?.takeIf { !uiState.isFindingRoute }?.let { hint ->
+                        Text(
+                            text = hint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    uiState.searchError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                        if (canCreate) {
+                            OutlinedButton(onClick = createLoop, modifier = Modifier.fillMaxWidth()) {
+                                Text("Try again")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2044,6 +1988,13 @@ private fun ExerciseRoutePlanner(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
+                            ExerciseRouteFormSijko.parsedMiles(uiState.targetMilesText)?.let { requestedMiles ->
+                                Text(
+                                    text = ExerciseRouteFormSijko.comparisonText(requestedMiles, result.route.totalDistanceMeters),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                             Text(
                                 text = result.summary,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -2182,6 +2133,17 @@ private fun RoutePlanner(
     var showDeveloperOptions by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val listState = rememberLazyListState()
+    // A failed search or a route that cannot open a map appears below Find; scroll so its reason is seen.
+    val failedSearch = uiState.routeNotice?.takeIf { it.route == null }
+    ScrollToItemOnArrival(
+        listState = listState,
+        arrival = failedSearch ?: uiState.lastRoute.takeIf { !trailRouteMapPresenter.isAvailable },
+        itemsAfterTarget = PlannerScrollTargetSijko.itemsAfterTarget(
+            revealingButtonItem = failedSearch != null,
+            resultCardShown = uiState.lastRoute != null && !uiState.isFindingRoute,
+        ),
+    )
 
     LaunchedEffect(
         initialDestinationId,
@@ -2245,6 +2207,7 @@ private fun RoutePlanner(
             scaffoldPadding.calculateLeftPadding(layoutDirection)
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .consumeWindowInsets(scaffoldPadding),
@@ -2294,6 +2257,10 @@ private fun RoutePlanner(
                     },
                 )
             }
+
+            RouteSearchAvailabilitySijko.unresolvedHint(RouteEndpointTarget.Start, uiState.endpoints)
+                ?.takeIf { uiState.autocompleteSuggestions.isEmpty() && !uiState.hasPendingEndpointRequest }
+                ?.let { hint -> item { PlannerFieldHint(hint) } }
 
             item {
                 Row(
@@ -2347,6 +2314,10 @@ private fun RoutePlanner(
                 )
             }
 
+            RouteSearchAvailabilitySijko.unresolvedHint(RouteEndpointTarget.Destination, uiState.endpoints)
+                ?.takeIf { uiState.autocompleteSuggestions.isEmpty() && !uiState.hasPendingEndpointRequest }
+                ?.let { hint -> item { PlannerFieldHint(hint) } }
+
             item {
                 RouteLayer(
                     label = "Proposed trails",
@@ -2355,31 +2326,54 @@ private fun RoutePlanner(
                         routePlannerViewModel.setLayerChecked(TrailRouteLayer.ProposedTrails, it)
                     },
                     modifier = Modifier.fillMaxWidth(),
+                    supportingText = TrailMapperAbout.PROPOSED_TRAILS_CAUTION,
                 )
             }
 
             item {
-                Button(
-                    onClick = {
-                        routePlannerViewModel.findTrailRoute(
-                            trailNetworkProvider = trailNetworkProvider,
-                            accessNetworkProvider = accessNetworkProvider,
+                val canFind = RouteSearchAvailabilitySijko.canSearch(uiState.endpoints) &&
+                    !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest
+                val findRoute = {
+                    routePlannerViewModel.findTrailRoute(
+                        trailNetworkProvider = trailNetworkProvider,
+                        accessNetworkProvider = accessNetworkProvider,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = findRoute,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = canFind,
+                    ) {
+                        if (uiState.isFindingRoute) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Finding your route…")
+                        } else {
+                            Text("Find trail route")
+                        }
+                    }
+                    RouteSearchAvailabilitySijko.guidance(uiState.endpoints)
+                        ?.takeIf { !uiState.isFindingRoute }
+                        ?.let { hint ->
+                            Text(
+                                text = hint,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    // A search that failed or found nothing is explained here, with a way to try again.
+                    uiState.routeNotice?.takeIf { it.route == null }?.let { notice ->
+                        RouteNoticeCard(
+                            notice = notice,
+                            onTryAgain = findRoute.takeIf { canFind && notice.retryable },
                         )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = RouteSearchAvailabilitySijko.canSearch(uiState.endpoints) &&
-                        !uiState.isFindingRoute && !uiState.hasPendingEndpointRequest,
-                ) {
-                    if (uiState.isFindingRoute) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                    } else {
-                        Text("Find Trail Route")
                     }
                 }
             }
 
             uiState.lastRoute
-                ?.takeIf { trailRouteMapPresenter.isAvailable && !uiState.isFindingRoute }
+                ?.takeIf { !uiState.isFindingRoute }
                 ?.let { route ->
                     item {
                         Surface(
@@ -2393,7 +2387,10 @@ private fun RoutePlanner(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
                                     Text(
                                         text = "Route ready",
                                         style = MaterialTheme.typography.titleSmall,
@@ -2403,20 +2400,24 @@ private fun RoutePlanner(
                                         text = TrailRouteSummarySijko.summaryFor(route),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
                                     )
+                                    TrailRouteAdvisorySijko.forRoute(route).forEach { advisory ->
+                                        TrailRouteAdvisoryBanner(advisory, onReview = { externalLinkOpener.open(advisory.sourceUrl) })
+                                    }
                                 }
-                                Button(
-                                    onClick = {
-                                        trailRouteMapPresenter.showTrailRoute(
-                                            route,
-                                            routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
-                                        )
-                                    },
-                                ) {
-                                    Icon(imageVector = Icons.Filled.Map, contentDescription = null)
-                                    Text("Open map")
+                                if (trailRouteMapPresenter.isAvailable) {
+                                    Button(
+                                        onClick = {
+                                            trailRouteMapPresenter.showTrailRoute(
+                                                route,
+                                                routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
+                                            )
+                                        },
+                                    ) {
+                                        Icon(imageVector = Icons.Filled.Map, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Open map")
+                                    }
                                 }
                             }
                         }
@@ -2475,38 +2476,18 @@ private fun RoutePlanner(
         )
     }
 
-    uiState.routeDialog?.let { dialog ->
-        val drawableRoute = dialog.route.takeIf { trailRouteMapPresenter.isAvailable }
+    uiState.routeNotice?.let { notice ->
+        val drawableRoute = notice.route.takeIf { trailRouteMapPresenter.isAvailable }
         if (drawableRoute != null) {
             // Nothing asks the rider to save first; saving and sharing happen on the map.
-            LaunchedEffect(dialog) {
-                routePlannerViewModel.dismissRouteDialog()
+            LaunchedEffect(notice) {
+                routePlannerViewModel.dismissRouteNotice()
                 trailRouteMapPresenter.showTrailRoute(
                     drawableRoute,
                     routePreviewRequest(uiState.endpoints.destination, uiState.endpoints.destinationPoint),
                 )
             }
-            return@let
         }
-        AlertDialog(
-            onDismissRequest = routePlannerViewModel::dismissRouteDialog,
-            title = { Text(dialog.title) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(dialog.message)
-                    dialog.route?.let { route ->
-                        TrailRouteAdvisorySijko.forRoute(route).forEach { advisory ->
-                            TrailRouteAdvisoryBanner(advisory, onReview = { externalLinkOpener.open(advisory.sourceUrl) })
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = routePlannerViewModel::dismissRouteDialog) {
-                    Text("OK")
-                }
-            },
-        )
     }
 
     if (showDeveloperOptions && developerOptionsActions != null) {
@@ -2760,9 +2741,13 @@ private fun AddressAutocompletePanel(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    if (suggestion.secondaryText.isNotBlank()) {
+                    val rowDetail = listOfNotNull(
+                        suggestion.secondaryText.takeIf(String::isNotBlank),
+                        AddressPredictionRankingSijko.distanceText(suggestion),
+                    ).joinToString(" · ")
+                    if (rowDetail.isNotEmpty()) {
                         Text(
-                            text = suggestion.secondaryText,
+                            text = rowDetail,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -2793,12 +2778,137 @@ private fun AddressAutocompletePanel(
     }
 }
 
+/**
+ * Scrolls a planner's list to the item [itemsAfterTarget] places from its end when [arrival] appears. It
+ * waits for the arrival to lay out and counts items rather than looking at the visible ones, so it works
+ * when the target is off screen. The button item, which holds a failed search's reason and Try again, is
+ * followed by at most a result card.
+ */
+@Composable
+private fun ScrollToItemOnArrival(
+    listState: LazyListState,
+    arrival: Any?,
+    itemsAfterTarget: Int,
+) {
+    LaunchedEffect(arrival) {
+        if (arrival == null) return@LaunchedEffect
+        withFrameNanos { }
+        val itemCount = snapshotFlow { listState.layoutInfo.totalItemsCount }.first { count -> count > 0 }
+        listState.animateScrollToItem(PlannerScrollTargetSijko.targetIndex(itemCount, itemsAfterTarget))
+    }
+}
+
+/** Explains, next to the field, why typed text is not yet a place the router can use. */
+@Composable
+private fun PlannerFieldHint(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+/** A failed or empty search, shown where the rider is looking instead of in an OK dialog. */
+@Composable
+private fun RouteNoticeCard(
+    notice: RouteNotice,
+    onTryAgain: (() -> Unit)?,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = notice.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Text(
+                text = notice.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            if (onTryAgain != null) {
+                OutlinedButton(onClick = onTryAgain) { Text("Try again") }
+            }
+        }
+    }
+}
+
+/** Says what is wrong with a Start that was typed but never resolved, before the rider hits a disabled button. */
+@Composable
+private fun ExerciseStartHint(
+    startAddress: String,
+    startPoint: MapPoint?,
+    isResolving: Boolean,
+    isSuggestionsOpen: Boolean,
+) {
+    if (startAddress.isBlank() || startPoint != null || isResolving || isSuggestionsOpen) return
+    Text(
+        text = "Choose a suggestion, your current location, or a point on the map so the loop starts where you mean.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+/** Common loop lengths in one tap, plus a custom field that states its unit and range. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExerciseDistanceInput(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onDone: () -> Unit,
+) {
+    val error = ExerciseRouteFormSijko.distanceError(text)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Distance",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.semantics { heading() },
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ExerciseRouteFormSijko.PRESET_MILES.forEach { miles ->
+                FilterChip(
+                    selected = ExerciseRouteFormSijko.isPresetSelected(text, miles),
+                    onClick = { onTextChange(miles.toString()) },
+                    label = { Text("$miles mi") },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
+        }
+        OutlinedTextField(
+            value = text,
+            onValueChange = onTextChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Or enter a distance") },
+            suffix = { Text("mi") },
+            supportingText = { Text(error ?: "From ${ExerciseRouteFormSijko.DISTANCE_RANGE_TEXT} mi") },
+            isError = error != null,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onDone() }),
+        )
+    }
+}
+
 @Composable
 private fun RouteLayer(
     label: String,
     checked: Boolean,
     modifier: Modifier = Modifier,
     onCheckedChange: ((Boolean) -> Unit)? = null,
+    supportingText: String? = null,
 ) {
     Row(
         modifier = modifier.heightIn(min = 48.dp),
@@ -2810,10 +2920,19 @@ private fun RouteLayer(
             enabled = onCheckedChange != null,
             modifier = Modifier.size(48.dp),
         )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            supportingText?.let { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

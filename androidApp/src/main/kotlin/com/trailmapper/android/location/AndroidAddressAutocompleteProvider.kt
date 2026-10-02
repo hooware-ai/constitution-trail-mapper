@@ -11,6 +11,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.AutocompletePrediction
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
+import com.google.android.libraries.places.api.model.CircularBounds
 import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.model.RectangularBounds
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
@@ -37,14 +38,22 @@ class AndroidAddressAutocompleteProvider(
     override suspend fun predictions(
         query: String,
         target: RouteEndpointTarget,
+        proximity: MapPoint?,
     ): List<AddressAutocompletePrediction> {
         val client = placesClient ?: return emptyList()
-        val request = FindAutocompletePredictionsRequest.builder()
+        val builder = FindAutocompletePredictionsRequest.builder()
             .setQuery(query.trim())
             .setCountries(UNITED_STATES_COUNTRY_CODE)
-            .setLocationBias(BLOOMINGTON_NORMAL_BOUNDS)
             .setSessionToken(sessionTokenFor(target))
-            .build()
+        if (proximity != null) {
+            // Bias toward, and report distance from, where the ride starts.
+            val origin = LatLng(proximity.latitude, proximity.longitude)
+            builder.setOrigin(origin)
+                .setLocationBias(CircularBounds.newInstance(origin, PROXIMITY_BIAS_RADIUS_METERS))
+        } else {
+            builder.setLocationBias(BLOOMINGTON_NORMAL_BOUNDS)
+        }
+        val request = builder.build()
 
         return client.findAutocompletePredictions(request)
             .await()
@@ -120,6 +129,7 @@ private fun AutocompletePrediction.toSharedPrediction(): AddressAutocompletePred
         primaryText = getPrimaryText(null).toString(),
         secondaryText = getSecondaryText(null).toString(),
         fullText = getFullText(null).toString(),
+        distanceMeters = distanceMeters,
     )
 }
 
@@ -138,6 +148,9 @@ private fun Context.mapsApiKey(): String {
 
 private const val MAPS_API_KEY_METADATA_NAME = "com.google.android.geo.API_KEY"
 private const val UNITED_STATES_COUNTRY_CODE = "US"
+
+/** Roughly the Bloomington-Normal area, centered on the rider instead of the town. */
+private const val PROXIMITY_BIAS_RADIUS_METERS = 16_000.0
 
 private val BLOOMINGTON_NORMAL_BOUNDS = RectangularBounds.newInstance(
     LatLng(40.35, -89.30),

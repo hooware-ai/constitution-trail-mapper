@@ -4,6 +4,7 @@
  */
 package com.trailmapper.shared
 
+import com.trailmapper.shared.sijko.MapPoint
 import com.trailmapper.shared.sijko.RouteEndpointTarget
 
 object NoAddressAutocompleteProvider : AddressAutocompleteProvider {
@@ -12,6 +13,7 @@ object NoAddressAutocompleteProvider : AddressAutocompleteProvider {
     override suspend fun predictions(
         query: String,
         target: RouteEndpointTarget,
+        proximity: MapPoint?,
     ): List<AddressAutocompletePrediction> = emptyList()
 
     override suspend fun resolvePrediction(

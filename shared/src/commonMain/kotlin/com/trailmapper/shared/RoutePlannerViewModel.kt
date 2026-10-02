@@ -14,6 +14,8 @@ import com.trailmapper.shared.routing.TrailRoute
 import com.trailmapper.shared.routing.TrailRouteSummarySijko
 import com.trailmapper.shared.routing.TrailNetworkFeature
 import com.trailmapper.shared.sijko.AddressAutocompleteQuerySijko
+import com.trailmapper.shared.sijko.AddressPredictionRankingSijko
+import com.trailmapper.shared.sijko.AutocompleteProximitySijko
 import com.trailmapper.shared.sijko.CurrentLocationAddressApplySijko
 import com.trailmapper.shared.sijko.CurrentLocationEndpointAvailabilitySijko
 import com.trailmapper.shared.sijko.CurrentLocationResultMessageSijko
@@ -36,6 +38,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,11 +53,26 @@ internal class RoutePlannerViewModel : ViewModel() {
     )
     val uiState: StateFlow<RoutePlannerUiState> = _uiState
 
+    init {
+        // Start can resolve at any time (current location, map, a selection); Destination suggestions
+        // measured from the old Start must not outlive it.
+        viewModelScope.launch {
+            _uiState
+                .map { state -> state.endpoints.startPoint }
+                .distinctUntilChanged()
+                .collect { refreshDestinationSuggestionsForNewStart() }
+        }
+    }
+
     private var currentLocationJob: Job? = null
     private var mapPointJob: Job? = null
     private var routeSearchJob: Job? = null
     private var routeRequestVersion = 0L
     private var autocompleteJob: Job? = null
+    private var autocompleteProvider: AddressAutocompleteProvider? = null
+
+    /** Set while the rider's tapped suggestion is being resolved; a Start change must not disturb it. */
+    private var selectionJob: Job? = null
     private var currentLocationRequestTarget: RouteEndpointTarget? = null
     private var mapPointRequestTarget: RouteEndpointTarget? = null
     private var cachedAccessGraph: TrailGraph? = null
@@ -142,7 +161,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 autocompleteTarget = null,
                 autocompleteSuggestions = emptyList(),
                 autocompleteError = null,
-                routeDialog = null,
+                routeNotice = null,
             )
         }
     }
@@ -287,6 +306,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 }
             }
         }
+        selectionJob = autocompleteJob
     }
 
     fun findTrailRoute(
@@ -304,9 +324,10 @@ internal class RoutePlannerViewModel : ViewModel() {
         if (startPoint == null || destinationPoint == null) {
             _uiState.update {
                 it.copy(
-                    routeDialog = RouteMessageDialog(
-                        title = "Choose points first",
-                        message = "Trail routing needs map or current-location points for both start and destination. Typed addresses will route after address geocoding is wired.",
+                    routeNotice = RouteNotice(
+                        title = "Choose both points",
+                        message = "Choose a start and a destination from a suggestion or a point on the map. Your current location works for the start.",
+                        retryable = false,
                     ),
                 )
             }
@@ -317,14 +338,14 @@ internal class RoutePlannerViewModel : ViewModel() {
             _uiState.update {
                 it.copy(
                     isFindingRoute = true,
-                    routeDialog = null,
+                    routeNotice = null,
                 )
             }
 
             try {
                 val loadResult = trailNetworkProvider.loadTrailNetwork()
                 currentCoroutineContext().ensureActive()
-                val routeDialog = when (loadResult) {
+                val routeNotice = when (loadResult) {
                     is TrailNetworkLoadResult.Success -> {
                         val outcome = findTrailRoute(
                             features = loadResult.features,
@@ -336,14 +357,15 @@ internal class RoutePlannerViewModel : ViewModel() {
                         val route = outcome.route
                         val closure = outcome.blockingClosures.firstOrNull()
                         if (route == null && closure != null) {
-                            RouteMessageDialog(title = closure.title, message = closure.guidance)
+                            RouteNotice(title = closure.title, message = closure.guidance, retryable = false)
                         } else if (route == null) {
-                            RouteMessageDialog(
+                            RouteNotice(
                                 title = "No trail route found",
                                 message = "No approved trail route was found within the current access-distance limit. Try points closer to mapped trail segments.",
+                                retryable = false,
                             )
                         } else {
-                            RouteMessageDialog(
+                            RouteNotice(
                                 title = "Trail route found",
                                 message = TrailRouteSummarySijko.summaryFor(route),
                                 route = route,
@@ -351,13 +373,13 @@ internal class RoutePlannerViewModel : ViewModel() {
                         }
                     }
                     TrailNetworkLoadResult.Unavailable -> {
-                        RouteMessageDialog(
+                        RouteNotice(
                             title = "Trail data unavailable",
                             message = "This build does not have trail-network route data available.",
                         )
                     }
                     is TrailNetworkLoadResult.Error -> {
-                        RouteMessageDialog(
+                        RouteNotice(
                             title = "Trail data error",
                             message = loadResult.message,
                         )
@@ -369,9 +391,9 @@ internal class RoutePlannerViewModel : ViewModel() {
                 }
                 _uiState.update {
                     it.copy(
-                        routeDialog = routeDialog,
+                        routeNotice = routeNotice,
                         isFindingRoute = false,
-                        lastRoute = routeDialog.route,
+                        lastRoute = routeNotice.route,
                     )
                 }
             } catch (exception: CancellationException) {
@@ -384,7 +406,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isFindingRoute = false,
-                        routeDialog = RouteMessageDialog(
+                        routeNotice = RouteNotice(
                             title = "Route search error",
                             message = exception.message ?: "Trail route search failed.",
                         ),
@@ -402,8 +424,8 @@ internal class RoutePlannerViewModel : ViewModel() {
         _uiState.update { it.copy(mapPointError = null) }
     }
 
-    fun dismissRouteDialog() {
-        _uiState.update { it.copy(routeDialog = null) }
+    fun dismissRouteNotice() {
+        _uiState.update { it.copy(routeNotice = null) }
     }
 
     private fun resolveCurrentLocation(
@@ -468,7 +490,7 @@ internal class RoutePlannerViewModel : ViewModel() {
                 locationError = null,
                 mapPointError = null,
                 autocompleteError = null,
-                routeDialog = null,
+                routeNotice = null,
             )
         }
     }
@@ -479,6 +501,7 @@ internal class RoutePlannerViewModel : ViewModel() {
         provider: AddressAutocompleteProvider,
     ) {
         autocompleteJob?.cancel()
+        autocompleteProvider = provider
         if (!provider.isAvailable || !AddressAutocompleteQuerySijko.shouldSearch(query)) {
             _uiState.update {
                 it.copy(
@@ -491,22 +514,30 @@ internal class RoutePlannerViewModel : ViewModel() {
 
         autocompleteJob = viewModelScope.launch {
             delay(AUTOCOMPLETE_DEBOUNCE_MILLIS)
+            val proximity = AutocompleteProximitySijko.anchorFor(target, _uiState.value.endpoints)
             _uiState.update {
                 it.copy(
                     autocompleteTarget = target,
                     isResolvingAutocomplete = true,
                     autocompleteError = null,
+                    autocompleteAnchor = proximity,
                 )
             }
             try {
-                val predictions = provider.predictions(query, target)
+                val predictions = AddressPredictionRankingSijko.rankNearestFirst(
+                    provider.predictions(query, target, proximity),
+                )
                 currentCoroutineContext().ensureActive()
                 _uiState.update { state ->
-                    if (state.autocompleteTarget == target) {
+                    val stillMeasuredFromStart = AutocompleteProximitySijko.anchorFor(target, state.endpoints) == proximity
+                    if (state.autocompleteTarget == target && stillMeasuredFromStart) {
                         state.copy(
                             autocompleteSuggestions = predictions,
                             isResolvingAutocomplete = false,
                         )
+                    } else if (state.autocompleteTarget == target) {
+                        // Start moved while this was in flight; a refresh for the new Start is on its way.
+                        state
                     } else {
                         state.copy(isResolvingAutocomplete = false)
                     }
@@ -526,10 +557,34 @@ internal class RoutePlannerViewModel : ViewModel() {
         }
     }
 
+    /** Drops Destination suggestions measured from a Start that has changed and searches again for the new one. */
+    private fun refreshDestinationSuggestionsForNewStart() {
+        val state = _uiState.value
+        if (state.autocompleteTarget != RouteEndpointTarget.Destination) return
+        if (selectionJob?.isActive == true) return
+        if (!state.isResolvingAutocomplete && state.autocompleteSuggestions.isEmpty()) return
+        val anchor = AutocompleteProximitySijko.anchorFor(RouteEndpointTarget.Destination, state.endpoints)
+        if (state.autocompleteAnchor == anchor) return
+
+        // A destination the rider already chose is theirs; only the suggestions change.
+        val provider = autocompleteProvider
+        if (provider == null || state.endpoints.destinationPoint != null) {
+            autocompleteJob?.cancel()
+            _uiState.update { it.copy(autocompleteSuggestions = emptyList(), isResolvingAutocomplete = false) }
+            return
+        }
+        _uiState.update { it.copy(autocompleteSuggestions = emptyList()) }
+        requestAutocompletePredictions(
+            target = RouteEndpointTarget.Destination,
+            query = state.endpoints.destination,
+            provider = provider,
+        )
+    }
+
     private fun invalidateRoute() {
         routeSearchJob?.cancel()
         routeRequestVersion += 1
-        _uiState.update { it.copy(isFindingRoute = false, routeDialog = null, lastRoute = null) }
+        _uiState.update { it.copy(isFindingRoute = false, routeNotice = null, lastRoute = null) }
     }
 
     private fun cancelEndpointWork(target: RouteEndpointTarget? = null) {
@@ -544,6 +599,7 @@ internal class RoutePlannerViewModel : ViewModel() {
             mapPointRequestTarget = null
         }
         autocompleteJob?.cancel()
+        selectionJob = null
         _uiState.update {
             it.copy(
                 resolvingLocationTarget = if (cancelLocation) null else it.resolvingLocationTarget,
