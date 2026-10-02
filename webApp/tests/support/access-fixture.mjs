@@ -56,3 +56,19 @@ export function makeAccessExtract() {
     ],
   };
 }
+
+// The trail the shared guide's reported closure cuts (id 54:1305, from 40.507656,-88.984202 to 40.509023,-88.984155). The
+// access build carries a synthetic trail with that id and those vertices, so the closure has real geometry to draw and
+// the map's closure-areas switch has something to switch. In the other builds the closure has no loaded trail and is not drawn.
+export const closureTrailEntry = [
+  "54:1305",
+  "Synthetic Uptown trail",
+  ["TrailBranches"],
+  [
+    [
+      [-88.984202, 40.507656],
+      [-88.984178, 40.508339],
+      [-88.984155, 40.509023],
+    ],
+  ],
+];

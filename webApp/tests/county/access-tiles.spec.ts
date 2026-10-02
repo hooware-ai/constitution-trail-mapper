@@ -110,8 +110,11 @@ test("a tile that cannot be downloaded is reported, and the next attempt succeed
   await expect(
     page.getByRole("heading", { name: "Route preview", exact: true }),
   ).toHaveCount(0);
+  // A failed download is retryable, so the failure offers Try again; once back online that very button succeeds.
+  const retry = page.getByRole("button", { name: "Try again", exact: true });
+  await expect(retry).toBeVisible();
   await page.unroute("**/data/access-tile.*");
-  await findRoute(page).click();
+  await retry.click();
   await expect(
     page.getByRole("heading", { name: "Route preview", exact: true }),
   ).toBeVisible();
@@ -169,6 +172,30 @@ test("Help and the map credit say where the road data came from, with no accessi
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
   expect(results.violations).toEqual([]);
+});
+
+test("Explore draws the reported closure and its switch hides and shows it", async ({
+  page,
+}) => {
+  await seedPlaces(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Explore", exact: true })
+    .click();
+  const closures = page.getByRole("checkbox", {
+    name: /Reported closure areas/,
+  });
+  const markers = page.locator(".closure-marker");
+  await expect(closures).toBeChecked();
+  await expect(markers).toHaveCount(1);
+  await closures.uncheck();
+  await expect(markers).toHaveCount(0);
+  await closures.check();
+  await expect(markers).toHaveCount(1);
 });
 
 test("control: the same journey on the build WITHOUT access data cannot be navigated", async ({

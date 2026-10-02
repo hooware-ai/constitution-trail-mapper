@@ -114,6 +114,17 @@ Two questions were folded into one number and are now kept apart (`node tools/na
 1. **Does the core find a route?** Yes for every catalog pair and loop (27 of 27 in the delivery check above).
 2. **May the rider start navigation on it?** Native: unless a blocking closure applies. Web: also not with an estimated access gap, a Proposed trail, or a stale network. Catalog places are street addresses, not trail vertices, so every catalog route begins or ends with an estimated (straight, unverified) access segment; native would show it dotted and allow Start, the web refuses by policy. That is the entire reason for zero navigable results; it is **not** evidence about native safety behavior and was previously misdescribed.
 
+**Result (`node tools/navigation-equivalence.mjs`, real county and access assets; the same for the web data and the native data at default layers):**
+
+| Sample                                                  | Core finds a route | Native could start | Web can start | Web refuses, reason                      |
+| ------------------------------------------------------- | ------------------ | ------------------ | ------------- | ---------------------------------------- |
+| 15 catalog place pairs                                  | 15                 | 15                 | **0**         | 15 x estimated access gap                |
+| 12 seeded trail-vertex pairs (positive controls)        | 9                  | 9                  | **3**         | 6 x estimated access gap (3 found none)  |
+| Endpoint about 250 m off the network (negative control) | yes                | yes                | no            | estimated access gap, 31 m in 2 segments |
+| Endpoint about 800 m off the network (negative control) | yes                | yes                | no            | estimated access gap, 20 m in 2 segments |
+
+So the web can and does start navigation on routes whose access is fully mapped (3 positive controls), and refuses every route that carries an unverified straight access segment, which is every catalog route. Closure blocking is common to both rules and is covered by the shared Kotlin tests and the web's recalculate flow; no catalog route crosses an active closure today, so it does not appear in this table. **Decision for the architect:** keep the stricter web rule (the standing "unverified connections are never navigable" policy) or align with native's rule for estimated access. Nothing here changes it.
+
 The tool reports, per configuration, route availability, native-startable, web-startable, the web's blocking reasons, positive controls (trail vertex to trail vertex: navigable on both rules), and negative controls (an endpoint 250 m and 800 m off the network: native-startable, web-blocked with the measured gap).
 
 ## Implementation plan and checkpoints

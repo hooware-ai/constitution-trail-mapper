@@ -42,6 +42,7 @@ class WebRoutingBridge {
             "snapshot" -> snapshot(request, now)
             "reroute" -> reroute(request, now)
             "recalculate" -> recalculate(request, now)
+            "reverse" -> reverse(request, now)
             "addAccess" -> addAccess(request)
             else -> error("Unknown routing operation.")
         }
@@ -103,6 +104,17 @@ class WebRoutingBridge {
             } }))
             put("closures", closureJson(TrailRouteClosureSijko.activeClosures(now)))
         }
+    }
+
+    /**
+     * The same exercise loop ridden the other way, exactly as the shared core reverses it (traversal order and geometry;
+     * distances, costs and direction-independent traversal keys unchanged). It is described afresh, so closures, the
+     * network check and the turn instructions are recomputed for the reversed direction. Only loops can be reversed.
+     */
+    private fun reverse(request: JsonObject, now: Long): JsonObject {
+        val route = request.route()
+        require(route.kind == TrailRouteKind.ExerciseLoop) { "Only an exercise loop can be ridden in reverse." }
+        return describe(TrailRouteReverseSijko.reversed(route), now)
     }
 
     /**

@@ -7,11 +7,13 @@ import {
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { DataSources } from "./DataSources";
+import { loopComparison, loopHeading } from "./loopSummary";
 import { HelpDialog } from "./Help";
 import { AccessConnections } from "./AccessConnections";
 import {
   type DialogNotice,
   EndpointField,
+  DirectionControl,
   Legend,
   Modal,
   PlaceChooser,
@@ -109,6 +111,18 @@ const errorText = (error: unknown) =>
   error instanceof Error
     ? error.message
     : "Something went wrong. Please try again.";
+/**
+ * True when asking again can give a different answer: a download, a connection, a timeout or a replaced worker. A search
+ * that found no route is not retryable, since the same question has the same answer (native: `RouteNotice.retryable`).
+ */
+const retryable = (error: unknown) =>
+  ["data-unavailable", "data-missing", "data-corrupt"].includes(
+    (error as { code?: string } | null)?.code ?? "",
+  ) ||
+  (error instanceof Error &&
+    /took too long|cancelled|stopped unexpectedly|connection|could not be downloaded/i.test(
+      error.message,
+    ));
 const routeOkay = (value: RouteResult & { error?: string }): RouteResult => {
   if (!value.route || !Array.isArray(value.segments))
     throw new Error(
@@ -159,7 +173,11 @@ export function App() {
       if (epoch === dialogEpoch.current) setDialogNotice(notice);
     });
   }
-  const [error, setError] = useState(""),
+  const [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
+    [showClosures, setShowClosures] = useState(true),
+    [fitSignal, setFitSignal] = useState(0),
+    [retryPlan, setRetryPlan] = useState(false),
+    [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
     [unreadableSaved, setUnreadableSaved] = useState<
       false | "aside" | "pending"
@@ -353,6 +371,7 @@ export function App() {
         if (restored.state) {
           const token = ++operation.current;
           const ride = restored.state;
+          setReverseOf(null);
           setSelected(ride.record);
           setDraft(ride.record.draft as Draft);
           restoreScreen("preview");
@@ -390,6 +409,7 @@ export function App() {
         } else if (previousSession.state) {
           const restoredSession = previousSession.state;
           setDraft(restoredSession.draft);
+          setReverseOf(null);
           setSelected(restoredSession.selected);
           setOrigin(restoredSession.origin);
           setSavedTab(restoredSession.savedTab);
@@ -597,6 +617,7 @@ export function App() {
     setDraft({ ...emptyDraft(), mode });
     setPreview(null);
     setSelected(null);
+    setReverseOf(null);
     setOrigin("planner");
     go("planner");
   }
@@ -699,6 +720,7 @@ export function App() {
     if (!clientRef.current || !draft.start) return;
     const token = ++operation.current;
     setError("");
+    setRetryPlan(false);
     setBusy(true);
     setScreen("searching");
     try {
@@ -715,6 +737,7 @@ export function App() {
       if (token !== operation.current) return;
       const record = makeRecord(result, draft);
       setPreview(result);
+      setReverseOf(null);
       setSelected(record);
       setOrigin("planner");
       setScreen("preview");
@@ -722,6 +745,7 @@ export function App() {
     } catch (e) {
       if (token === operation.current) {
         setError(errorText(e));
+        setRetryPlan(retryable(e));
         setScreen("planner");
       }
     } finally {
@@ -732,6 +756,7 @@ export function App() {
     if (!clientRef.current) return;
     setGapFocus(null);
     const token = ++operation.current;
+    setReverseOf(null);
     setSelected(record);
     setPreview(null);
     setDraft(record.draft as Draft);
@@ -810,6 +835,7 @@ export function App() {
       if (token !== operation.current) return;
       const replacement = makeRecord(result, draft, selected.title);
       setPreview(result);
+      setReverseOf(null);
       setSelected(replacement);
       applyStore(
         storeRef.current!.replace(before.key, replacement),
@@ -872,10 +898,45 @@ export function App() {
         mode === "return" ? "Returning to start" : request.record.title,
       );
       setPreview(result);
+      setReverseOf(null);
       setSelected(record);
       snapshotState.current = undefined;
       controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));
+    } catch (e) {
+      if (token === operation.current) setError(errorText(e));
+    } finally {
+      if (token === operation.current) setBusy(false);
+    }
+  }
+  /**
+   * Ride this loop the other way, as native does: a fresh description of the reversed route replaces what is shown and
+   * what is navigated, an active ride starts over (progress belongs to one direction, so an early turnaround cannot
+   * complete the reversed loop), and the planned direction stays the one that is saved.
+   */
+  async function reverseDirection() {
+    if (!selected || !clientRef.current || preview?.kind !== "ExerciseLoop")
+      return;
+    const token = ++operation.current;
+    setBusy(true);
+    setError("");
+    try {
+      const result = routeOkay(
+        await clientRef.current.call<RouteResult>({
+          op: "reverse",
+          route: selected.route,
+          now: Date.now(),
+        }),
+      );
+      if (token !== operation.current) return;
+      const record = makeRecord(result, draft, selected.title);
+      const planned = reverseOf ?? selected;
+      setPreview(result);
+      setSelected(record);
+      // Reversing back is the planned direction again.
+      setReverseOf(reverseOf ? null : planned);
+      snapshotState.current = undefined;
+      if (nav.record) controllerRef.current?.start(record);
     } catch (e) {
       if (token === operation.current) setError(errorText(e));
     } finally {
@@ -1083,7 +1144,8 @@ export function App() {
     return () => cancelAnimationFrame(frame);
   }, [screen, network]);
   const isSaved =
-      !!selected && library.saved.some((item) => item.key === selected.key),
+      !!selected &&
+      library.saved.some((item) => item.key === (reverseOf ?? selected).key),
     isPlanner = draft.mode === "loop",
     validMiles =
       Number.isFinite(draft.miles) && draft.miles >= 0.5 && draft.miles <= 100;
@@ -1187,7 +1249,12 @@ export function App() {
           picking={screen === "map-picker"}
           onPick={chooseMap}
           position={nav.fix ?? undefined}
-          closures={network?.closures ?? []}
+          closures={
+            screen === "explore" && !showClosures
+              ? []
+              : (network?.closures ?? [])
+          }
+          fitSignal={fitSignal}
           fixture={fixtureData}
           county={network?.mode === "county"}
           osm={
@@ -1247,7 +1314,19 @@ export function App() {
           {error && !(routingDown && error === ROUTING_UNAVAILABLE_MESSAGE) && (
             <div className="error" role="alert">
               <p>{error}</p>
-              <button onClick={() => setError("")}>Dismiss</button>
+              {retryPlan && screen === "planner" && canPlan && !busy && (
+                <button className="primary" onClick={() => void plan()}>
+                  Try again
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setError("");
+                  setRetryPlan(false);
+                }}
+              >
+                Dismiss
+              </button>
             </div>
           )}
           {locationRequest && (
@@ -1400,7 +1479,7 @@ export function App() {
                 <fieldset>
                   <legend>Target distance</legend>
                   <div className="distance-presets">
-                    {[3, 5, 10, 15].map((value) => (
+                    {[3, 5, 8, 10].map((value) => (
                       <button
                         key={value}
                         aria-pressed={draft.miles === value}
@@ -1515,6 +1594,21 @@ export function App() {
                       ? ` · ${miles(preview.retracedDistance)} mi retraced`
                       : null}
                   </p>
+                  {preview.kind === "ExerciseLoop" && (
+                    <>
+                      <p>
+                        <strong>{loopHeading(preview.targetMatched)}</strong>
+                      </p>
+                      {typeof preview.requestedDistance === "number" && (
+                        <p className="route-details">
+                          {loopComparison(
+                            preview.requestedDistance,
+                            preview.distance,
+                          )}
+                        </p>
+                      )}
+                    </>
+                  )}
                   {preview.summary && <p>{preview.summary}</p>}
                   <AccessConnections
                     gaps={preview.accessGaps ?? []}
@@ -1584,6 +1678,13 @@ export function App() {
                     the page. There is no background tracking or offline
                     navigation.
                   </p>
+                  {preview.kind === "ExerciseLoop" && (
+                    <DirectionControl
+                      reversed={reverseOf !== null}
+                      busy={busy || checking}
+                      onReverse={() => void reverseDirection()}
+                    />
+                  )}
                   <button
                     className="primary wide"
                     aria-describedby="foreground-note"
@@ -1607,7 +1708,7 @@ export function App() {
                         if (isSaved) {
                           setSavedTab("saved");
                           go("saved");
-                        } else if (selected) saveRecord(selected);
+                        } else if (selected) saveRecord(reverseOf ?? selected);
                       }}
                     >
                       {isSaved ? "Saved · View" : "Save"}
@@ -1697,6 +1798,13 @@ export function App() {
                   ? ` · location accuracy ${Math.round(nav.fix.accuracy)} m`
                   : ""}
               </p>
+              {preview?.kind === "ExerciseLoop" && (
+                <DirectionControl
+                  reversed={reverseOf !== null}
+                  busy={busy}
+                  onReverse={() => void reverseDirection()}
+                />
+              )}
               {nav.phase === "off-route" && (
                 <div className="reroute-actions">
                   <h2>Choose what comes next</h2>
@@ -1938,7 +2046,33 @@ export function App() {
                 label="Show proposed trails"
                 description="Planned paths may not be built or usable."
               />
-              <Legend />
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={showClosures}
+                  onChange={(e) => setShowClosures(e.target.checked)}
+                />
+                <span>
+                  Reported closure areas
+                  <small>
+                    Dashed amber lines are approximate work corridors, not exact
+                    closure limits. Tap a marker for the official notice.
+                  </small>
+                </span>
+              </label>
+              <Legend
+                verified={network.features.some((f) =>
+                  f.id.startsWith("verified-osm:way:"),
+                )}
+              />
+              <div className="actions">
+                <button onClick={() => setFitSignal((n) => n + 1)}>
+                  Show all trails
+                </button>
+                <SafeLink href="https://mcleangis.maps.arcgis.com/apps/instant/sidebar/index.html?appid=d98c151296fd4b03860af8f4df7787a4">
+                  County map
+                </SafeLink>
+              </div>
               <p>
                 {network.features.length} mapped trail features in this dataset.
               </p>

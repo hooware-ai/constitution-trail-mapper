@@ -29,6 +29,7 @@ export function MapView({
   fixture,
   county = false,
   osm = false,
+  fitSignal = 0,
 }: {
   features: Feature[];
   route: RouteResult | null;
@@ -43,6 +44,8 @@ export function MapView({
   county?: boolean;
   /** The packaged data includes the reviewed OpenStreetMap supplement: credit it (ODbL) beside the county license. */
   osm?: boolean;
+  /** Increase to refit the map to every drawn trail ("Show all trails"). */
+  fitSignal?: number;
 }) {
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
@@ -109,15 +112,18 @@ export function MapView({
         f.paths.forEach((path) => {
           const proposed = f.status === "Proposed",
             shared = f.roles.includes("SharedRoadways"),
-            park = f.roles.includes("ParkConnectors");
+            park = f.roles.includes("ParkConnectors"),
+            verified = f.id.startsWith("verified-osm:way:");
           L.polyline(path.map(xy), {
             color: proposed
               ? "#7851a9"
-              : shared
-                ? "#68718b"
-                : park
-                  ? "#63a375"
-                  : "#08725f",
+              : verified
+                ? "#b01767"
+                : shared
+                  ? "#68718b"
+                  : park
+                    ? "#63a375"
+                    : "#08725f",
             weight: route ? 2 : 4,
             opacity: route ? 0.5 : 0.85,
             dashArray: proposed ? "6 7" : shared ? "3 5" : undefined,
@@ -285,6 +291,21 @@ export function MapView({
       m.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
   }, [route, features, fixture]);
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !fitSignal) return;
+    const pts = features
+      .filter((f) => proposed || f.status !== "Proposed")
+      .flatMap((f) => f.paths.flat());
+    if (pts.length)
+      m.fitBounds(L.latLngBounds(pts.map(xy)), {
+        padding: [32, 32],
+        maxZoom: 16,
+        animate: false,
+      });
+    // Only an explicit request refits; later data or toggle changes must not move the rider's view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitSignal]);
   useEffect(() => {
     const gap = route?.accessGaps?.find((item) => item.id === gapFocus?.id);
     const m = map.current;

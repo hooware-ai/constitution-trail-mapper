@@ -233,7 +233,7 @@ export function RouteRow({
     </li>
   );
 }
-export function Legend() {
+export function Legend({ verified = false }: { verified?: boolean }) {
   return (
     <div className="legend" aria-label="Map key">
       <span>
@@ -252,6 +252,12 @@ export function Legend() {
         <i className="shared" />
         Shared roadway
       </span>
+      {verified && (
+        <span>
+          <i className="verified" />
+          Verified addition
+        </span>
+      )}
       <span>
         <i className="proposed" />
         Proposed · not built
@@ -316,5 +322,25 @@ export function ProposedChoice({
         <small>{why}</small>
       </span>
     </label>
+  );
+}
+
+/** Native's direction control for an exercise loop: which way it is being ridden, and a switch. */
+export function DirectionControl({
+  reversed,
+  busy,
+  onReverse,
+}: {
+  reversed: boolean;
+  busy: boolean;
+  onReverse: () => void;
+}) {
+  return (
+    <div className="direction-control">
+      <span>{reversed ? "Riding in reverse" : "Planned direction"}</span>
+      <button disabled={busy} onClick={onReverse}>
+        Reverse direction
+      </button>
+    </div>
   );
 }

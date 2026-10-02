@@ -20,9 +20,9 @@ import { spawnSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeCounty, scaledList } from "./county-fixture.mjs";
+import { DEFAULT_LIST, makeCounty, scaledList } from "./county-fixture.mjs";
 import { makeSupplement } from "./osm-fixture.mjs";
-import { makeAccessExtract } from "./access-fixture.mjs";
+import { closureTrailEntry, makeAccessExtract } from "./access-fixture.mjs";
 import { makeProposed } from "./proposed-fixture.mjs";
 
 const webRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -46,8 +46,13 @@ const windows = process.platform === "win32";
 await rm(work, { recursive: true, force: true });
 await mkdir(work, { recursive: true });
 const scaleArg = process.argv.indexOf("--scale");
+// The access build also carries the trail the reported closure cuts, so the closure can be drawn (access-fixture.mjs).
 const synthetic = makeCounty(
-  scaleArg > 0 ? { list: scaledList(Number(process.argv[scaleArg + 1])) } : {},
+  scaleArg > 0
+    ? { list: scaledList(Number(process.argv[scaleArg + 1])) }
+    : process.argv.includes("--access")
+      ? { list: [...DEFAULT_LIST, closureTrailEntry] }
+      : {},
 );
 const files = {
   input: join(work, "extract.json"),

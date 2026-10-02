@@ -407,6 +407,9 @@ header .quiet {
   border-top-width: 3px;
   border-top-style: dashed;
 }
+.legend .verified {
+  border-color: #b01767;
+}
 .legend .proposed {
   border-color: #7851a9;
   border-top-style: dashed;
@@ -1362,4 +1365,13 @@ dialog::backdrop {
   border-radius: 8px;
   padding: 12px 14px;
   margin: 12px 0;
+}
+
+.direction-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 0.9rem;
 }

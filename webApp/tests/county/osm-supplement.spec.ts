@@ -122,6 +122,23 @@ test("a destination only the reviewed OpenStreetMap path reaches can be planned,
   await expect(help).toContainText("do not bridge it");
 });
 
+test("Explore marks the reviewed additions in the map key, as native does", async ({
+  page,
+}) => {
+  await seedPlaces(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Explore", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Map key").getByText("Verified addition"),
+  ).toBeVisible();
+});
+
 test("the supplement changes the data identity a saved route remembers, and no accessibility violation appears in the data section", async ({
   page,
 }) => {

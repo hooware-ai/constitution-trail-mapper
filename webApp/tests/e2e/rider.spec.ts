@@ -134,6 +134,13 @@ test("exercise validation, recent route retention UI, proposed opt in and map se
   await expect(
     page.getByRole("heading", { name: "Route preview" }),
   ).toBeVisible();
+  // As in native, a loop says whether the target was met and what was asked against what was found.
+  await expect(
+    page.getByText("Exercise loop ready", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Requested 5 mi · Found [\d.]+ mi$/),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Trail Mapper home" }).click();
   await expect(
     page.getByRole("heading", { name: "Recent", exact: true }),
@@ -2367,4 +2374,158 @@ test("reopening a route refreshes the status time an export reports", async ({
     opened.getTime() + 23 * 3600 * 1000,
   );
   expect(file.routeContext.statusAgeSeconds).toBeLessThan(120);
+});
+
+test("a loop the network cannot reach is labeled the closest available loop, with the requested and found distances", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("spinbutton", { name: "Custom miles" }).fill("40");
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Closest available loop", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Requested 40 mi · Found [\d.]+ mi$/),
+  ).toBeVisible();
+  // The presets are native's: 3, 5, 8 and 10 miles.
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  for (const miles of [3, 5, 8, 10])
+    await expect(
+      page.getByRole("button", { name: `${miles} mi`, exact: true }),
+    ).toBeVisible();
+});
+
+test("Explore offers native's map controls: closure areas switch, Show all trails and the county map", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Explore", exact: true })
+    .click();
+  const closures = page.getByRole("checkbox", {
+    name: /Reported closure areas/,
+  });
+  await expect(closures).toBeChecked();
+  await expect(page.getByText(/approximate work corridors/)).toBeVisible();
+  await closures.uncheck();
+  await expect(closures).not.toBeChecked();
+  await closures.check();
+  await expect(closures).toBeChecked();
+  // Show all trails refits the map to the drawn trails and does not leave the page.
+  const zoomBefore = await page.evaluate(
+    () =>
+      document.querySelector(".leaflet-container")?.getBoundingClientRect()
+        .width,
+  );
+  await page
+    .getByRole("button", { name: "Show all trails", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Trails around you" }),
+  ).toBeVisible();
+  expect(zoomBefore).toBeGreaterThan(0);
+  const county = page.getByRole("link", { name: /County map/ });
+  await expect(county).toHaveAttribute(
+    "href",
+    /^https:\/\/mcleangis\.maps\.arcgis\.com\//,
+  );
+  await expect(county).toHaveAttribute("target", "_blank");
+  await expect(county).toHaveAttribute("rel", /noopener/);
+});
+
+const libraryOf = (page: Page) =>
+  page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.library.v1"),
+    )!;
+    return JSON.parse(localStorage.getItem(key)!);
+  });
+
+test("a loop can be ridden in reverse and back, and Save keeps the planned direction", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Planned direction", { exact: true }),
+  ).toBeVisible();
+  const planned = (await libraryOf(page)).recent[0];
+  const firstLeg = (record: any) => record.route.segments[0].points.slice(0, 2);
+
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  // Reversing is not a new plan: nothing new enters the recent routes.
+  expect((await libraryOf(page)).recent).toHaveLength(1);
+  // Save stores the planned direction, as native does.
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const saved = (await libraryOf(page)).saved[0];
+  expect(saved.key).toBe(planned.key);
+  expect(firstLeg(saved)).toEqual(firstLeg(planned));
+
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Planned direction", { exact: true }),
+  ).toBeVisible();
+});
+
+test("only a loop offers reverse; a point-to-point route does not", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await choose(page, "Destination", "Review trailhead · South");
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reverse direction" }),
+  ).toHaveCount(0);
+});
+
+test("reversing during a ride starts that ride over in the new direction", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await acceptedFix(page, 40.51, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  // Progress belongs to one direction: the ride starts over and needs a fresh fix.
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.51, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
 });

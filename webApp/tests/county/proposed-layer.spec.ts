@@ -73,6 +73,10 @@ test("the proposed layer is off by default: without the opt-in the proposed end 
   const noRoute = page.getByText(/No safe route|No route|could not be found/i);
   await expect(start.or(noRoute).first()).toBeVisible({ timeout: 15000 });
   if (await start.count()) await expect(start).toBeDisabled();
+  // A search that found nothing gives the same answer if asked again, so it does not offer Try again.
+  await expect(
+    page.getByRole("button", { name: "Try again", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("with the explicit opt-in the proposed segments are routed as a preview that cannot start navigation", async ({

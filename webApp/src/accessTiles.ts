@@ -55,6 +55,7 @@ const ACCESS_OPS = new Set([
   "recalculate",
   "inspect",
   "snapshot",
+  "reverse",
 ]);
 export const needsAccess = (request: { op?: unknown }) =>
   typeof request.op === "string" && ACCESS_OPS.has(request.op);

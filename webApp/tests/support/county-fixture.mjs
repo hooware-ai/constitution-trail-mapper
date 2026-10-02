@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { canonicalSha256 } from "../../tools/lib/canonical-json.mjs";
 
 const hex = (seed) => createHash("sha256").update(seed).digest("hex");
-const LIST = [
+export const DEFAULT_LIST = [
   // id, name, roles, paths (lon,lat)
   [
     "54:9001",
@@ -136,7 +136,7 @@ const rawAttributes = (id, name) => ({
 export function makeCounty({
   reviewedOn = "2026-01-01",
   excluded = [9999],
-  list = LIST,
+  list = DEFAULT_LIST,
 } = {}) {
   const entries = list.map(([id, name, roles, paths]) => {
     const [layer, objectId] = id.split(":").map(Number);
