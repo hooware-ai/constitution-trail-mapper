@@ -1,5 +1,7 @@
 package com.trailmapper.web
 
+import com.trailmapper.shared.CarriedExerciseRide
+import com.trailmapper.shared.CompletedExerciseSession
 import com.trailmapper.shared.LocalTrailGuide
 import com.trailmapper.shared.routing.*
 import com.trailmapper.shared.sijko.MapPoint
@@ -43,6 +45,8 @@ class WebRoutingBridge {
             "reroute" -> reroute(request, now)
             "recalculate" -> recalculate(request, now)
             "reverse" -> reverse(request, now)
+            "completedSession" -> completedSession(request)
+            "carryRide" -> carryRide(request)
             "addAccess" -> addAccess(request)
             else -> error("Unknown routing operation.")
         }
@@ -104,6 +108,50 @@ class WebRoutingBridge {
             } }))
             put("closures", closureJson(TrailRouteClosureSijko.activeClosures(now)))
         }
+    }
+
+    /** The rider's completed loops (newest first, browser-local), which make recently ridden edges cost more. */
+    private fun completedSessions(request: JsonObject): List<CompletedExerciseSession> {
+        val value = request["completedSessions"]?.takeIf { it != JsonNull } ?: return emptyList()
+        val sessions = json.decodeFromJsonElement<List<CompletedExerciseSession>>(value)
+        require(sessions.size <= MAX_COMPLETED_SESSIONS) { "Too many completed exercise sessions." }
+        sessions.forEach { session ->
+            require(session.completedAtEpochMillis >= 0 && session.completedDistanceMeters.isFinite() && session.completedDistanceMeters >= 0.0) { "Invalid completed exercise session." }
+        }
+        return sessions
+    }
+
+    /**
+     * The history record for a finished loop, built as native builds it (CompletedExerciseSessionFactorySijko): only an
+     * exercise loop with traversal edges counts; what was ridden of earlier routes before a rejoin is included; the key
+     * is direction independent. A route that cannot support overlap scoring returns no session.
+     */
+    private fun completedSession(request: JsonObject): JsonObject {
+        val route = request.route()
+        val completedAt = request.getValue("completedAt").jsonPrimitive.long
+        val carried = request["carried"]?.takeIf { it != JsonNull }?.let { json.decodeFromJsonElement<CarriedExerciseRide>(it) } ?: CarriedExerciseRide()
+        if (route.kind != TrailRouteKind.ExerciseLoop || route.traversalEdges.isEmpty() || completedAt < 0L) {
+            return buildJsonObject { put("session", JsonNull) }
+        }
+        val edges = carried.traversalEdges + route.traversalEdges
+        val key = ExerciseRouteKeySijko.keyFor(edges)
+        val session = CompletedExerciseSession(
+            id = "$completedAt:$key",
+            routeKey = key,
+            completedAtEpochMillis = completedAt,
+            completedDistanceMeters = carried.distanceMeters + route.totalDistanceMeters,
+            traversalEdges = edges,
+        )
+        return buildJsonObject { put("session", json.encodeToJsonElement(session)) }
+    }
+
+    /** What has been ridden of [route] up to [progress], added to what earlier routes of the same ride already carried. */
+    private fun carryRide(request: JsonObject): JsonObject {
+        val route = request.route()
+        val progress = request.getValue("progress").jsonPrimitive.double
+        require(progress.isFinite() && progress >= 0.0) { "Invalid navigation progress." }
+        val carried = request["carried"]?.takeIf { it != JsonNull }?.let { json.decodeFromJsonElement<CarriedExerciseRide>(it) } ?: CarriedExerciseRide()
+        return buildJsonObject { put("carried", json.encodeToJsonElement(carried.plusRiddenPart(route, progress))) }
     }
 
     /**
@@ -194,7 +242,7 @@ class WebRoutingBridge {
             val meters = request.getValue("miles").jsonPrimitive.double * 1609.344
             require(ExerciseRouteTargetSijko.isValid(meters)) { "Exercise distance must be between 0.5 and 100 miles." }
             val graph = accessRoads(listOf(start))?.let { AccessGraphBuilderSijko.buildGraph(ExerciseRouteAccessNetworkFilterSijko.nearbyFeatures(it, start, meters)) }
-            ExerciseRouteCalculationSijko.findRoute(network, layers, start, meters, emptyList(), graph, now)?.route
+            ExerciseRouteCalculationSijko.findRoute(network, layers, start, meters, completedSessions(request), graph, now)?.route
                 ?: return noRoute(TrailRouteClosureSijko.openFeatures(TrailFeatureFilterSijko.enabledFeatures(network, layers), now).appliedClosures)
         }
         if (route.totalDistanceMeters <= 0.01 || route.segments.none { it.isRouted && it.points.size >= 2 }) return noRoute(emptyList())
@@ -350,6 +398,11 @@ class WebRoutingBridge {
         val credible = TrailRouteDeviationSijko.isCredible(fix, now) && (fix.accuracyMeters ?: -1.0) >= 0.0
         val verified = if (credible && !resuming) ExerciseRouteCompletionSijko.verifiedProgressMeters(state.verifiedProgress, state.maximumProgress, snapshot) else state.verifiedProgress
         val departed = credible && !resuming && ExerciseRouteCompletionSijko.hasDeparted(route, snapshot, state.departed) || state.departed
+        // Ridden progress is what a rejoin and a carried ride are measured from, exactly as in native: a position an
+        // off-route fix projects onto never counts. The first evaluation of a ride starts from the saved progress.
+        val hasState = request["state"]?.takeIf { it != JsonNull } != null
+        val previousRidden = TrailRouteRiddenProgress(if (hasState) state.ridden else progress, state.pendingJump)
+        val riddenNow = if (credible && !resuming && !ambiguous) TrailRouteRiddenProgressSijko.next(previousRidden, snapshot) else previousRidden
         val nextState = BrowserNavigationState(
             maximumProgress = when {
                 !credible -> state.maximumProgress
@@ -363,12 +416,14 @@ class WebRoutingBridge {
             streakStartPoint = deviation.streakStartPoint, streakFixCount = deviation.streakFixCount,
             returnFixCount = deviation.returnFixCount, lastCredibleFixMillis = deviation.lastCredibleFixMillis,
             lastPoint = if (credible && !ambiguous) point else state.lastPoint,
+            ridden = riddenNow.riddenMeters, pendingJump = riddenNow.pendingJumpMeters,
         )
         val arrived = credible && !resuming && !ambiguous && if (route.kind == TrailRouteKind.ExerciseLoop) {
             ExerciseRouteCompletionSijko.shouldComplete(route, snapshot, departed, false, verified)
         } else snapshot.remainingDistanceMeters <= 25.0 && snapshot.distanceFromRouteMeters <= 35.0
         return buildJsonObject {
             put("progress", if (credible && !ambiguous) snapshot.distanceAlongRouteMeters else progress)
+            put("ridden", riddenNow.riddenMeters)
             put("ambiguous", ambiguous)
             put("remaining", snapshot.remainingDistanceMeters)
             put("distanceFromRoute", snapshot.distanceFromRouteMeters)
@@ -418,7 +473,7 @@ class WebRoutingBridge {
     private fun recalculate(request: JsonObject, now: Long): JsonObject {
         val route = request.route()
         val access = accessRoads(TrailRouteClosureGateSijko.accessEndpoints(route))?.let(TrailRouteRerouteAccess::Roads) ?: TrailRouteRerouteAccess.NotAvailable
-        return when (val result = TrailRouteClosureGateSijko.recalculate(requireNetwork(), route, access, nowEpochMillis = now)) {
+        return when (val result = TrailRouteClosureGateSijko.recalculate(requireNetwork(), route, access, completedSessions(request), nowEpochMillis = now)) {
             is TrailRouteRecalculationOutcome.Replacement -> describe(result.route, now)
             is TrailRouteRecalculationOutcome.NoSafeRoute -> noRoute(result.blockingClosures)
             TrailRouteRecalculationOutcome.RoadDataFailed -> error("Road access data failed to load.")
@@ -767,6 +822,9 @@ private data class BrowserNavigationState(
     val lastCredibleFixMillis: Long? = null,
     /** Position of the last accepted loop fix, used to tell an unchanged location from real movement. */
     val lastPoint: MapPoint? = null,
+    /** How far along the route the rider has credibly ridden (native's TrailRouteRiddenProgressSijko): on-route, forward, no unconfirmed jumps. */
+    val ridden: Double = 0.0,
+    val pendingJump: Double? = null,
 )
 
 private const val TRAVERSAL_BACKTRACK_METERS = 60.0
@@ -778,4 +836,6 @@ private const val TRAVERSAL_PHYSICAL_TOLERANCE_METERS = 5.0
 private const val TRAVERSAL_DEFAULT_ACCURACY_METERS = 25.0
 private const val TRAVERSAL_MAX_ACCURACY_METERS = 50.0
 private const val DERIVED_GEOMETRY_METERS = 0.5
+/** Native keeps the newest 100 completed sessions (CompletedExerciseSessionHistorySijko.MAX_SESSION_COUNT). */
+private const val MAX_COMPLETED_SESSIONS = 100
 private const val REVALIDATION_CACHE_LIMIT = 64

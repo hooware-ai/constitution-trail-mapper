@@ -19,6 +19,11 @@ export interface RouteRecord {
   draft: unknown;
   /** The data the route was planned on. Absent on routes saved before datasets were identified. */
   dataset?: RouteDataset;
+  /**
+   * Set only while a loop is being ridden in reverse: the key of the planned route this one is the reverse of. It lets a
+   * reload show the right direction and keep Save on the planned one; it is checked against a fresh reversal on restore.
+   */
+  plannedKey?: string;
 }
 export interface RouteDataset {
   kind: string;
@@ -83,6 +88,7 @@ function isRoute(value: unknown): value is RouteRecord {
     value.usedAt >= 0 &&
     object(value.route) &&
     isDraft(value.draft) &&
+    (value.plannedKey === undefined || text(value.plannedKey)) &&
     (value.dataset === undefined ||
       (object(value.dataset) &&
         text(value.dataset.kind) &&
@@ -537,6 +543,146 @@ export class ActiveRideStore {
       return { ok: true, state: null };
     } catch (error) {
       return { ok: false, state: this.read().state, error: writeIssue(error) };
+    }
+  }
+}
+
+// ---- ride history: what a finished loop leaves behind, and what a rejoin carries ------------------------------------------
+//
+// Browser-local only, like everything else here: it is never synced to an account. The shapes are the shared core's own
+// (CompletedExerciseSession and CarriedExerciseRide); only their outer fields are checked here, because the core refuses
+// a malformed history when it is used.
+export const COMPLETED_SESSIONS_KEY = "trail-mapper.web.completed-sessions.v1";
+export const CARRIED_RIDE_KEY = "trail-mapper.web.carried-ride.v1";
+/** Native keeps the newest 100 (CompletedExerciseSessionHistorySijko.MAX_SESSION_COUNT). */
+export const MAX_COMPLETED_SESSIONS = 100;
+export interface CompletedSession {
+  id: string;
+  routeKey: string;
+  completedAtEpochMillis: number;
+  completedDistanceMeters: number;
+  traversalEdges: unknown[];
+}
+const isSession = (value: unknown): value is CompletedSession =>
+  object(value) &&
+  text(value.id) &&
+  text(value.routeKey) &&
+  finite(value.completedAtEpochMillis) &&
+  value.completedAtEpochMillis >= 0 &&
+  finite(value.completedDistanceMeters) &&
+  value.completedDistanceMeters >= 0 &&
+  Array.isArray(value.traversalEdges);
+/** Newest first, one per id, at most the newest 100 (native's rule, applied the same way). */
+export const newestSessionsFirst = (
+  sessions: CompletedSession[],
+): CompletedSession[] => {
+  const seen = new Set<string>();
+  return [...sessions]
+    .sort((a, b) => b.completedAtEpochMillis - a.completedAtEpochMillis)
+    .filter((session) => !seen.has(session.id) && !!seen.add(session.id))
+    .slice(0, MAX_COMPLETED_SESSIONS);
+};
+export class CompletedSessionStore {
+  constructor(private storage: StoragePort) {}
+  read(): StoreResult<CompletedSession[]> {
+    let raw: string | null;
+    try {
+      raw = this.storage.getItem(COMPLETED_SESSIONS_KEY);
+    } catch {
+      return { ok: false, state: [], error: "unavailable" };
+    }
+    if (!raw) return { ok: true, state: [] };
+    try {
+      const value: unknown = JSON.parse(raw);
+      if (object(value) && value.version !== 1)
+        return { ok: false, state: [], error: "unsupported-version" };
+      if (
+        !object(value) ||
+        !Array.isArray(value.sessions) ||
+        !value.sessions.every(isSession)
+      )
+        throw new Error("invalid");
+      return { ok: true, state: newestSessionsFirst(value.sessions) };
+    } catch {
+      return { ok: false, state: [], error: "corrupt" };
+    }
+  }
+  /** Records one finished loop. A history that cannot be read is never overwritten: it is left for the rider to resolve. */
+  record(session: unknown): StoreResult<CompletedSession[]> {
+    const current = this.read();
+    if (!current.ok) return current;
+    if (!isSession(session))
+      return { ok: false, state: current.state, error: "corrupt" };
+    const next = newestSessionsFirst([
+      session,
+      ...current.state.filter((existing) => existing.id !== session.id),
+    ]);
+    try {
+      this.storage.setItem(
+        COMPLETED_SESSIONS_KEY,
+        JSON.stringify({ version: 1, sessions: next }),
+      );
+      return { ok: true, state: next };
+    } catch (error) {
+      return { ok: false, state: current.state, error: writeIssue(error) };
+    }
+  }
+  clear(): StoreResult<CompletedSession[]> {
+    try {
+      this.storage.removeItem(COMPLETED_SESSIONS_KEY);
+      return { ok: true, state: [] };
+    } catch (error) {
+      return { ok: false, state: this.read().state, error: writeIssue(error) };
+    }
+  }
+}
+
+/** What was ridden of earlier routes before a rejoin, tied to the route now being ridden so it can never be misapplied. */
+export interface CarriedRide {
+  recordKey: string;
+  carried: { distanceMeters: number; traversalEdges: unknown[] };
+}
+export class CarriedRideStore {
+  constructor(private storage: StoragePort) {}
+  read(): CarriedRide | null {
+    try {
+      const raw = this.storage.getItem(CARRIED_RIDE_KEY);
+      if (!raw) return null;
+      const value: unknown = JSON.parse(raw);
+      if (
+        object(value) &&
+        value.version === 1 &&
+        text(value.recordKey) &&
+        object(value.carried) &&
+        finite(value.carried.distanceMeters) &&
+        value.carried.distanceMeters >= 0 &&
+        Array.isArray(value.carried.traversalEdges)
+      )
+        return {
+          recordKey: value.recordKey,
+          carried: value.carried as CarriedRide["carried"],
+        };
+    } catch {
+      /* unreadable: treated as nothing carried */
+    }
+    return null;
+  }
+  write(ride: CarriedRide): boolean {
+    try {
+      this.storage.setItem(
+        CARRIED_RIDE_KEY,
+        JSON.stringify({ version: 1, ...ride }),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  clear(): void {
+    try {
+      this.storage.removeItem(CARRIED_RIDE_KEY);
+    } catch {
+      /* nothing to clear */
     }
   }
 }

@@ -49,6 +49,8 @@ export interface NavigationState {
   fix: LocationFix | null;
   guidance: NavigationGuidance | null;
   routeProgressMeters: number;
+  /** How far along the CURRENT route the rider has credibly ridden (native's ridden progress); a rejoin starts here. */
+  riddenMeters: number;
   creditedDistanceMeters: number;
   wakeLock: WakeLockStatus;
   storageError?: StorageIssue;
@@ -59,6 +61,11 @@ export interface NavigationDependencies {
   storage?: ActiveRideStore;
   wakeLock?: ForegroundWakeLock;
   onAccepted?: (guidance: NavigationGuidance) => void;
+  /**
+   * An exercise loop was genuinely completed (the shared completion rule: departed, enough verified progress, back at the
+   * finish). Called once per ride; the app records the ride and ends navigation.
+   */
+  onArrived?: (record: RouteRecord) => void;
   evaluate: (
     route: unknown,
     fix: LocationFix,
@@ -97,6 +104,7 @@ const initialState = (wakeLock: WakeLockStatus): NavigationState => ({
   fix: null,
   guidance: null,
   routeProgressMeters: 0,
+  riddenMeters: 0,
   creditedDistanceMeters: 0,
   wakeLock,
 });
@@ -118,6 +126,8 @@ export interface RerouteRequest {
   epoch: number;
   fix: LocationFix;
   progress: number;
+  /** Where a rejoin or a carried ride is measured from (see NavigationState.riddenMeters). */
+  riddenMeters: number;
 }
 export type RerouteStaleReason =
   | "ride-changed"
@@ -140,6 +150,7 @@ export class ForegroundNavigationController {
   private lastTimestamp = -Infinity;
   private lastProgress: number | null = null;
   private needsReacquisition = true;
+  private completionReported = false;
   private offRouteSince: number | null = null;
   private confirmedOffRoute = false;
   private listeners = new Set<(state: NavigationState) => void>();
@@ -168,10 +179,13 @@ export class ForegroundNavigationController {
   }
   start(record: RouteRecord, initialProgress = 0, creditedDistance = 0): void {
     this.invalidate();
+    this.completionReported = false;
     this.state = {
       ...initialState(this.state.wakeLock),
       record,
       routeProgressMeters: Math.max(0, initialProgress),
+      // A restored ride resumes from its saved progress; a fresh route (reroute, reverse, new ride) starts from zero.
+      riddenMeters: Math.max(0, initialProgress),
       creditedDistanceMeters: Math.max(0, creditedDistance),
     };
     this.persist();
@@ -252,6 +266,7 @@ export class ForegroundNavigationController {
       epoch: this.epoch,
       fix,
       progress: this.state.routeProgressMeters,
+      riddenMeters: this.state.riddenMeters,
     };
   }
   /** Why a delayed reroute must not replace the active route, or null when it still applies. */
@@ -450,9 +465,26 @@ export class ForegroundNavigationController {
         fix,
         guidance: deviated ? null : guidance,
         routeProgressMeters: guidance.routeProgressMeters,
+        riddenMeters:
+          typeof guidance.ridden === "number" &&
+          Number.isFinite(guidance.ridden) &&
+          guidance.ridden >= 0
+            ? guidance.ridden
+            : this.state.riddenMeters,
         creditedDistanceMeters: this.state.creditedDistanceMeters + delta,
       });
       this.persist();
+      const finished = this.state.record;
+      if (
+        guidance.arrived === true &&
+        !deviated &&
+        !this.completionReported &&
+        finished &&
+        (finished.route as { kind?: string } | null)?.kind === "ExerciseLoop"
+      ) {
+        this.completionReported = true;
+        this.deps.onArrived?.(finished);
+      }
     } catch {
       if (generation === this.generation && sequence === this.sequence)
         this.lose(

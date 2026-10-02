@@ -8,6 +8,7 @@ import {
 import { MapView } from "./MapView";
 import { DataSources } from "./DataSources";
 import { loopComparison, loopHeading } from "./loopSummary";
+import { applyReverse, reverseOutcome } from "./reverseGate";
 import { HelpDialog } from "./Help";
 import { AccessConnections } from "./AccessConnections";
 import {
@@ -33,6 +34,8 @@ import {
 } from "./types";
 import {
   ActiveRideStore,
+  CarriedRideStore,
+  CompletedSessionStore,
   LocalRouteStore,
   stableRouteKey,
   type PlaceRecord,
@@ -80,6 +83,7 @@ const emptyNavigation: NavigationState = {
   fix: null,
   guidance: null,
   routeProgressMeters: 0,
+  riddenMeters: 0,
   creditedDistanceMeters: 0,
   wakeLock: "unsupported",
 };
@@ -212,6 +216,14 @@ export function App() {
     controllerRef = useRef<ForegroundNavigationController | null>(null),
     storeRef = useRef<LocalRouteStore | null>(null),
     activeRef = useRef<ActiveRideStore | null>(null),
+    completedRef = useRef<CompletedSessionStore | null>(null),
+    carriedStoreRef = useRef<CarriedRideStore | null>(null),
+    // What the rider rode of earlier routes of THIS ride before a rejoin (null: nothing yet), kept with the route key.
+    carriedRef = useRef<{
+      distanceMeters: number;
+      traversalEdges: unknown[];
+    } | null>(null),
+    finishLoopRef = useRef<(record: RouteRecord) => void>(() => {}),
     operation = useRef(0),
     snapshotState = useRef<unknown>(undefined);
   const success = (message: string, undo?: () => void) =>
@@ -308,6 +320,8 @@ export function App() {
       active = new ActiveRideStore(storage);
     storeRef.current = store;
     activeRef.current = active;
+    completedRef.current = new CompletedSessionStore(storage);
+    carriedStoreRef.current = new CarriedRideStore(storage);
     applyStore(store.read());
     const session = new BrowserSessionStore(storage);
     sessionRef.current = session;
@@ -333,6 +347,7 @@ export function App() {
           onAccepted: (guidance) => {
             snapshotState.current = guidance.state;
           },
+          onArrived: (record) => finishLoopRef.current(record),
           evaluate: async (route, fix, context) => {
             const response = await client.call<any>({
               op: "snapshot",
@@ -386,8 +401,18 @@ export function App() {
             );
             if (disposed || token !== operation.current) return;
             setPreview(inspected);
+            void restoreDirection(
+              client,
+              ride.record,
+              () => !disposed && token === operation.current,
+            );
             if (inspected.canNavigate) {
               snapshotState.current = undefined;
+              const carried = carriedStoreRef.current?.read();
+              carriedRef.current =
+                carried && carried.recordKey === ride.record.key
+                  ? carried.carried
+                  : null;
               controller.start(
                 ride.record,
                 ride.routeProgressMeters,
@@ -428,8 +453,14 @@ export function App() {
                   now: Date.now(),
                 }),
               );
-              if (!disposed && token === operation.current)
+              if (!disposed && token === operation.current) {
                 setPreview(inspected);
+                void restoreDirection(
+                  client,
+                  restoredSession.selected,
+                  () => !disposed && token === operation.current,
+                );
+              }
             } catch (e) {
               if (!disposed && token === operation.current)
                 setError(errorText(e));
@@ -716,6 +747,40 @@ export function App() {
         : {}),
     };
   }
+  /** The rider's completed loops, newest first: recently ridden edges cost more, so the next loop is a fresh one. */
+  const loopHistory = () => completedRef.current?.read().state ?? [];
+  /**
+   * An exercise loop was genuinely completed. Record it as native does (including what was carried across a rejoin),
+   * end the ride, and say so; if the history cannot be saved the completion is still reported, and so is that.
+   */
+  async function finishLoop(record: RouteRecord) {
+    const client = clientRef.current;
+    if (!client) return;
+    let message = "Exercise route complete.";
+    try {
+      const made = await client.call<{ session: unknown }>({
+        op: "completedSession",
+        route: record.route,
+        completedAt: Date.now(),
+        ...(carriedRef.current ? { carried: carriedRef.current } : {}),
+      });
+      if (made.session) {
+        const saved = completedRef.current?.record(made.session);
+        if (saved && !saved.ok)
+          message =
+            "Exercise route complete, but its history could not be saved.";
+      }
+    } catch {
+      message = "Exercise route complete, but its history could not be saved.";
+    }
+    controllerRef.current?.stop();
+    snapshotState.current = undefined;
+    carriedRef.current = null;
+    carriedStoreRef.current?.clear();
+    go("preview");
+    setToast({ message });
+  }
+  finishLoopRef.current = (record) => void finishLoop(record);
   async function plan() {
     if (!clientRef.current || !draft.start) return;
     const token = ++operation.current;
@@ -731,6 +796,9 @@ export function App() {
           destination: draft.mode === "point" ? draft.destination : undefined,
           miles: draft.mode === "loop" ? draft.miles : undefined,
           proposed: draft.proposed,
+          ...(draft.mode === "loop"
+            ? { completedSessions: loopHistory() }
+            : {}),
           now: Date.now(),
         }),
       );
@@ -804,6 +872,8 @@ export function App() {
         return;
       }
       snapshotState.current = undefined;
+      carriedRef.current = null;
+      carriedStoreRef.current?.clear();
       controllerRef.current?.start(selected);
       setScreen("navigation");
     } catch (e) {
@@ -815,6 +885,8 @@ export function App() {
   function stopNavigation() {
     controllerRef.current?.stop();
     snapshotState.current = undefined;
+    carriedRef.current = null;
+    carriedStoreRef.current?.clear();
     go("preview");
   }
   async function recalculate() {
@@ -829,6 +901,9 @@ export function App() {
         await clientRef.current.call<RouteResult>({
           op: "recalculate",
           route: selected.route,
+          ...((selected.route as { kind?: string }).kind === "ExerciseLoop"
+            ? { completedSessions: loopHistory() }
+            : {}),
           now: Date.now(),
         }),
       );
@@ -871,7 +946,9 @@ export function App() {
             latitude: request.fix.latitude,
             longitude: request.fix.longitude,
           },
-          progress: request.progress,
+          // As in native, a rejoin is measured from how far the rider has credibly RIDDEN, not from where an off-route
+          // position happens to project onto the loop.
+          progress: request.riddenMeters,
           mode,
           now: Date.now(),
         }),
@@ -901,6 +978,23 @@ export function App() {
       setReverseOf(null);
       setSelected(record);
       snapshotState.current = undefined;
+      if (mode === "rejoin") {
+        // What was ridden of the loop before leaving it counts toward the finished workout, as in native.
+        const carried = await clientRef.current.call<{
+          carried: { distanceMeters: number; traversalEdges: unknown[] };
+        }>({
+          op: "carryRide",
+          route: request.record.route,
+          progress: request.riddenMeters,
+          ...(carriedRef.current ? { carried: carriedRef.current } : {}),
+          now: Date.now(),
+        });
+        carriedRef.current = carried.carried;
+        carriedStoreRef.current?.write({
+          recordKey: record.key,
+          carried: carried.carried,
+        });
+      }
       controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));
     } catch (e) {
@@ -929,19 +1023,90 @@ export function App() {
         }),
       );
       if (token !== operation.current) return;
-      const record = makeRecord(result, draft, selected.title);
+      // A reversal inside a ride restarts it, so it needs a fresh yes. A no is not "keep riding the old route": the same
+      // closure or data change blocks the loop being ridden, so guidance and credit are dropped (reverseGate.ts).
+      const rideActive = !!nav.record;
+      const decision = reverseOutcome(result, rideActive);
+      if (decision.kind === "stop-ride") {
+        applyReverse(decision, rideActive, controllerRef.current, null);
+        snapshotState.current = undefined;
+        // Show the route as it stands now, so the reasons are in front of the rider, and leave the ride screen.
+        const current = routeOkay(
+          await clientRef.current.call<RouteResult>({
+            op: "inspect",
+            route: selected.route,
+            now: Date.now(),
+          }),
+        );
+        if (token !== operation.current) return;
+        setPreview(current);
+        go("preview");
+        setError(decision.message);
+        return;
+      }
       const planned = reverseOf ?? selected;
+      const reversing = reverseOf === null;
+      const record = {
+        ...makeRecord(result, draft, selected.title),
+        ...(reversing ? { plannedKey: planned.key } : {}),
+      };
       setPreview(result);
       setSelected(record);
       // Reversing back is the planned direction again.
-      setReverseOf(reverseOf ? null : planned);
+      setReverseOf(reversing ? planned : null);
       snapshotState.current = undefined;
-      if (nav.record) controllerRef.current?.start(record);
+      carriedRef.current = null;
+      carriedStoreRef.current?.clear();
+      applyReverse(decision, rideActive, controllerRef.current, record);
     } catch (e) {
       if (token === operation.current) setError(errorText(e));
     } finally {
       if (token === operation.current) setBusy(false);
     }
+  }
+  /**
+   * After a reload the direction comes back from the stored record, but only if it checks out: reversing the restored
+   * route afresh must reproduce the planned route's key. Otherwise the route is shown as exactly what it is, a route in
+   * its own right, rather than claiming a direction that cannot be shown.
+   */
+  async function restoreDirection(
+    client: RoutingClient,
+    record: RouteRecord,
+    isCurrent: () => boolean,
+  ) {
+    if (!record.plannedKey) return;
+    try {
+      const result = routeOkay(
+        await client.call<RouteResult>({
+          op: "reverse",
+          route: record.route,
+          now: Date.now(),
+        }),
+      );
+      if (!isCurrent()) return;
+      // Built from the restored record, not from live state: it keeps the data identity the route was planned on.
+      const { plannedKey: _reversed, ...own } = record;
+      const planned: RouteRecord = {
+        ...own,
+        key: stableRouteKey({
+          kind: result.kind,
+          segments: (result.route as { segments: unknown }).segments,
+        }),
+        route: result.route,
+      };
+      if (planned.key === record.plannedKey) {
+        setReverseOf(planned);
+        return;
+      }
+    } catch {
+      /* fall through: the direction is not provable */
+    }
+    if (!isCurrent()) return;
+    setSelected((current) =>
+      current && current.key === record.key
+        ? (({ plannedKey: _dropped, ...rest }) => rest)(current)
+        : current,
+    );
   }
   function saveRecord(record: RouteRecord) {
     applyStore(storeRef.current!.save(record), "Saved to Saved routes");

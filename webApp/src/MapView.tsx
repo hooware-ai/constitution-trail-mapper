@@ -66,6 +66,17 @@ export function MapView({
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
     map.current = m;
     layers.current = L.layerGroup().addTo(m);
+    // A read-only mirror of the view (zoom and centre) for tests and assistive tooling; it changes nothing.
+    const publishView = () => {
+      const c = m.getCenter();
+      root.current?.setAttribute("data-zoom", String(m.getZoom()));
+      root.current?.setAttribute(
+        "data-center",
+        `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`,
+      );
+    };
+    m.on("moveend zoomend", publishView);
+    publishView();
 
     const ro = new ResizeObserver(() => m.invalidateSize());
     ro.observe(root.current);

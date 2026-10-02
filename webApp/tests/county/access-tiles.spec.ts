@@ -174,7 +174,10 @@ test("Help and the map credit say where the road data came from, with no accessi
   expect(results.violations).toEqual([]);
 });
 
-test("Explore draws the reported closure and its switch hides and shows it", async ({
+// RENDERING evidence only: the build carries a synthetic trail with the closure's feature id so the closure has geometry
+// to draw. Whether a route over it may start navigation is the shared core's gate, covered with the real core (and real
+// dates) in tests/unit/bridge-closures.test.ts and bridge-reverse.test.ts, not by this fixture.
+test("Explore draws the reported closure with its official notice link, and its switch hides and shows it", async ({
   page,
 }) => {
   await seedPlaces(page);
@@ -192,6 +195,16 @@ test("Explore draws the reported closure and its switch hides and shows it", asy
   const markers = page.locator(".closure-marker");
   await expect(closures).toBeChecked();
   await expect(markers).toHaveCount(1);
+  // The marker opens the closure's details with a link to the town's official notice, opened safely.
+  await markers.first().click();
+  const notice = page.getByRole("link", { name: "Review official notice" });
+  await expect(notice).toBeVisible();
+  await expect(notice).toHaveAttribute(
+    "href",
+    "https://www.normalil.gov/m/newsflash/Home/Detail/3337",
+  );
+  await expect(notice).toHaveAttribute("target", "_blank");
+  await expect(notice).toHaveAttribute("rel", /noopener/);
   await closures.uncheck();
   await expect(markers).toHaveCount(0);
   await closures.check();

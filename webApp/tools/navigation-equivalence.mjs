@@ -73,6 +73,41 @@ const vertices = existing.layers
   .flatMap((f) => f.paths.flatMap((path) => [path[0], path[path.length - 1]]))
   .map(([longitude, latitude]) => ({ latitude, longitude }));
 
+const rad = Math.PI / 180;
+const distanceMeters = (a, b) =>
+  Math.hypot(
+    (b.longitude - a.longitude) *
+      Math.cos(((a.latitude + b.latitude) / 2) * rad),
+    b.latitude - a.latitude,
+  ) * 111320;
+/** Distance from a point to the nearest piece of a set of polylines, in metres (equirectangular, fine at county scale). */
+function nearestMeters(point, segments) {
+  let best = Infinity;
+  const cos = Math.cos(point.latitude * rad);
+  for (const [a, b] of segments) {
+    const ax = (a[0] - point.longitude) * cos;
+    const ay = a[1] - point.latitude;
+    const bx = (b[0] - point.longitude) * cos;
+    const by = b[1] - point.latitude;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const length = dx * dx + dy * dy;
+    const t = length
+      ? Math.max(0, Math.min(1, (-ax * dx - ay * dy) / length))
+      : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy) * 111320);
+  }
+  return best;
+}
+const segmentsOf = (features) =>
+  features.flatMap((f) =>
+    f.paths.flatMap((path) => path.slice(1).map((q, i) => [path[i], q])),
+  );
+const trailSegments = segmentsOf(existing.layers.flatMap((l) => l.features));
+const roadSegments = segmentsOf(
+  JSON.parse(accessText).layers.flatMap((l) => l.features),
+);
+
 const classify = (r) => {
   const gaps = r.accessGaps ?? [];
   const blockingClosure = (r.closures ?? []).length > 0;
@@ -158,18 +193,24 @@ for (const [name, config] of Object.entries(configs)) {
   }
   const positive = trailPairs.filter((p) => p.routeExists && p.webStartable);
 
-  // 3. Negative controls: an endpoint 250 m and 800 m from the nearest trail vertex, on the far side from any road.
+  // 3. Negative controls: an endpoint displaced due north from the first trail vertex by a fixed number of degrees. The
+  // displacement is what was CHOSEN; what it means for the network is MEASURED here, against the trail geometry and the
+  // access roads actually loaded, and reported apart from the estimated access gap the router then draws.
   const negatives = [];
-  for (const [label, offsetDegrees] of [
-    ["about 250 m off the network", 0.003],
-    ["about 800 m off the network", 0.0095],
-  ]) {
+  for (const offsetDegrees of [0.003, 0.0095]) {
     const a = vertices[0];
     const off = {
       latitude: a.latitude + offsetDegrees,
       longitude: a.longitude,
     };
-    negatives.push({ label, ...classify(plan(off, vertices[1])) });
+    const result = classify(plan(off, vertices[1]));
+    negatives.push({
+      northwardOffsetDegrees: offsetDegrees,
+      offsetFromSelectedVertexMeters: Math.round(distanceMeters(off, a)),
+      nearestTrailMeters: Math.round(nearestMeters(off, trailSegments)),
+      nearestAccessRoadMeters: Math.round(nearestMeters(off, roadSegments)),
+      ...result,
+    });
   }
 
   report.configs[name] = {
@@ -199,6 +240,6 @@ else
       );
     for (const n of config.negatives)
       console.log(
-        `  negative (${n.label}): core route ${n.routeExists}; native startable ${n.nativeStartable}; web startable ${n.webStartable}; reasons ${n.reasons.join(",") || "none"}; gap ${n.gapMeters} m in ${n.gapCount} segment(s)`,
+        `  negative (endpoint ${n.northwardOffsetDegrees} deg north of a trail vertex = ${n.offsetFromSelectedVertexMeters} m from that vertex; measured ${n.nearestTrailMeters} m from the nearest trail and ${n.nearestAccessRoadMeters} m from the nearest access road): core route ${n.routeExists}; native startable ${n.nativeStartable}; web startable ${n.webStartable}; reasons ${n.reasons.join(",") || "none"}; estimated access gap ${n.gapMeters} m in ${n.gapCount} segment(s)`,
       );
   }

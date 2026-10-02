@@ -27,6 +27,8 @@ const validRecord = (value: unknown): value is RouteRecord =>
   typeof value.usedAt === "number" &&
   Number.isFinite(value.usedAt) &&
   object(value.route) &&
+  (value.plannedKey === undefined ||
+    (typeof value.plannedKey === "string" && value.plannedKey.length > 0)) &&
   validDraft(value.draft);
 const keptDataset = (value: unknown): RouteRecord["dataset"] | undefined =>
   object(value) &&
@@ -122,6 +124,10 @@ export class BrowserSessionStore {
               // Which data the route was planned on survives a reload, so it can still be exported truthfully.
               ...(keptDataset(value.selected.dataset)
                 ? { dataset: keptDataset(value.selected.dataset) }
+                : {}),
+              // The direction a loop is being ridden in survives a reload (re-checked against a fresh reversal).
+              ...(value.selected.plannedKey
+                ? { plannedKey: value.selected.plannedKey }
                 : {}),
             }
           : null,

@@ -2419,19 +2419,45 @@ test("Explore offers native's map controls: closure areas switch, Show all trail
   await expect(closures).not.toBeChecked();
   await closures.check();
   await expect(closures).toBeChecked();
-  // Show all trails refits the map to the drawn trails and does not leave the page.
-  const zoomBefore = await page.evaluate(
-    () =>
-      document.querySelector(".leaflet-container")?.getBoundingClientRect()
-        .width,
-  );
-  await page
-    .getByRole("button", { name: "Show all trails", exact: true })
-    .click();
+  // Show all trails really refits the view: zoom in and pan away, and it returns to the zoom and centre that fit every trail.
+  const view = () =>
+    page.locator(".leaflet-container").evaluate((el) => ({
+      zoom: Number(el.getAttribute("data-zoom")),
+      center: el.getAttribute("data-center"),
+    }));
+  const fitted = await view();
+  expect(fitted.zoom).toBeGreaterThan(0);
+  // One step at a time: each zoom animates, and a click during it is not a second step.
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect.poll(async () => (await view()).zoom).toBe(fitted.zoom + 1);
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect.poll(async () => (await view()).zoom).toBe(fitted.zoom + 2);
+  await page.locator(".leaflet-container").focus();
+  for (let press = 0; press < 3; press++)
+    await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await view()).center).not.toBe(fitted.center);
+  const panned = (await view()).center;
+  const showAll = page.getByRole("button", {
+    name: "Show all trails",
+    exact: true,
+  });
+  await showAll.click();
+  // Back to the fitting zoom, and away from where the pan left it. (The first view also frames hidden proposed trails, so
+  // the fit of the DRAWN trails is compared with itself below, not with that first view.)
+  await expect.poll(async () => (await view()).zoom).toBe(fitted.zoom);
+  await expect.poll(async () => (await view()).center).not.toBe(panned);
+  const refit = await view();
+  // Deterministic: panning away and asking again lands on exactly the same view.
+  await page.locator(".leaflet-container").focus();
+  for (let press = 0; press < 3; press++)
+    await page.keyboard.press("ArrowDown");
+  await expect.poll(async () => (await view()).center).not.toBe(refit.center);
+  await showAll.click();
+  await expect.poll(async () => (await view()).center).toBe(refit.center);
+  expect((await view()).zoom).toBe(refit.zoom);
   await expect(
     page.getByRole("heading", { name: "Trails around you" }),
   ).toBeVisible();
-  expect(zoomBefore).toBeGreaterThan(0);
   const county = page.getByRole("link", { name: /County map/ });
   await expect(county).toHaveAttribute(
     "href",
@@ -2528,4 +2554,531 @@ test("reversing during a ride starts that ride over in the new direction", async
   await page.clock.fastForward(1000);
   await acceptedFix(page, 40.51, -88.95);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
+});
+
+const rideRoutePoints = (page: Page) =>
+  page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    )!;
+    const record = JSON.parse(localStorage.getItem(key)!).record;
+    return record.route.segments
+      .flatMap((segment: any) => segment.points)
+      .map((p: any) => [p.latitude, p.longitude]) as [number, number][];
+  });
+/** The point `meters` along the polyline (planar approximation is fine at trail scale). */
+function pointAlong(points: [number, number][], meters: number) {
+  let travelled = 0;
+  for (let i = 1; i < points.length; i++) {
+    const [a, b] = [points[i - 1], points[i]];
+    const leg =
+      Math.hypot(
+        (b[1] - a[1]) * Math.cos((a[0] * Math.PI) / 180),
+        b[0] - a[0],
+      ) * 111320;
+    if (travelled + leg >= meters) {
+      const t = leg === 0 ? 0 : (meters - travelled) / leg;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t] as [
+        number,
+        number,
+      ];
+    }
+    travelled += leg;
+  }
+  return points[points.length - 1];
+}
+async function planLoopPreview(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+}
+const sessionOf = (page: Page) =>
+  page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.session.v1"),
+    );
+    return key ? JSON.parse(localStorage.getItem(key)!) : null;
+  });
+const activeRideOf = (page: Page) =>
+  page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.active-ride.v1"),
+    );
+    return key ? JSON.parse(localStorage.getItem(key)!) : null;
+  });
+
+test("a reversed loop is still reversed after a reload, and Save still stores the planned direction", async ({
+  page,
+}) => {
+  await planLoopPreview(page);
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  const planned = (await libraryOf(page)).recent[0];
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await sessionOf(page))?.selected?.plannedKey ?? null)
+    .toBe(planned.key);
+
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  // The direction comes back, proven by reversing the restored route afresh and matching the stored identity.
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const saved = (await libraryOf(page)).saved[0];
+  expect(saved.key).toBe(planned.key);
+  expect(saved.plannedKey).toBeUndefined();
+});
+
+test("a stored direction that cannot be proven is not claimed after a reload", async ({
+  page,
+}) => {
+  await planLoopPreview(page);
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await sessionOf(page))?.selected?.plannedKey ?? null)
+    .not.toBeNull();
+  // Tamper with the stored identity, and keep the closing page from rewriting the session.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.session.v1"),
+    )!;
+    const session = JSON.parse(localStorage.getItem(key)!);
+    session.selected.plannedKey = "not-the-planned-route";
+    localStorage.setItem(key, JSON.stringify(session));
+  });
+  const blockSessionWrites = () => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      // The tampered session must survive the reload untouched, so the restore reads exactly what was planted.
+      if (key.endsWith("trail-mapper.web.session.v1")) return;
+      return original.call(this, key, value);
+    };
+  };
+  // Both the closing page and the reloaded one must leave the planted session alone.
+  await page.evaluate(blockSessionWrites);
+  await page.addInitScript(blockSessionWrites);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Planned direction", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Riding in reverse")).toHaveCount(0);
+});
+
+test("a ride in reverse resumes in reverse after a reload", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await planLoopPreview(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await acceptedFix(page, 40.51, -88.95);
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await activeRideOf(page))?.record.plannedKey ?? null)
+    .not.toBeNull();
+  await page.reload();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+});
+
+test("reversing mid-ride drops the credit already earned and the new direction starts from zero", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await planLoopPreview(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await acceptedFix(page, 40.51, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const points = await rideRoutePoints(page);
+  // Ride a few hundred metres along the planned loop, a fix at a time, so there is credit to lose.
+  for (const meters of [60, 120, 180, 240]) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, meters);
+    await acceptedFix(page, lat, lon);
+  }
+  await expect(
+    page.getByText(/^(?!0(\.0)? mi)\d+(\.\d+)? mi observed this ride/),
+  ).toBeVisible();
+  await expect(page.getByText(/^0(\.0)? mi observed this ride/)).toHaveCount(0);
+  expect((await activeRideOf(page)).creditedDistanceMeters).toBeGreaterThan(
+    100,
+  );
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  // A direction change starts the ride over: progress and credit belong to one direction.
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/^0(\.0)? mi observed this ride/)).toBeVisible();
+  await expect
+    .poll(async () => (await activeRideOf(page)).creditedDistanceMeters)
+    .toBe(0);
+  expect((await activeRideOf(page)).routeProgressMeters).toBe(0);
+});
+
+/**
+ * Lets a test hold the routing worker's answer to one operation, change its verdict, and release it. Only the answer is
+ * touched: the worker, the router and every other operation are the real ones.
+ */
+async function interceptReverse(page: Page) {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    class Spy extends NativeWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        const ops = new Map<number, string>();
+        let handler: ((event: MessageEvent) => void) | null = null;
+        const post = this.postMessage.bind(this);
+        (this as any).postMessage = (message: any, ...rest: any[]) => {
+          if (message?.request) ops.set(message.id, message.request.op);
+          return (post as any)(message, ...rest);
+        };
+        Object.defineProperty(this, "onmessage", {
+          set: (fn) => {
+            handler = fn;
+          },
+          get: () => handler,
+        });
+        this.addEventListener("message", (event: MessageEvent) => {
+          const deliver = (data: unknown) =>
+            handler?.call(this, new MessageEvent("message", { data }));
+          const override = (window as any).__reverseOverride;
+          if (override && ops.get(event.data?.id) === "reverse") {
+            const data = {
+              ...event.data,
+              result: { ...event.data.result, ...override.patch },
+            };
+            if (override.hold) override.release = () => deliver(data);
+            else deliver(data);
+            return;
+          }
+          deliver(event.data);
+        });
+      }
+    }
+    (window as any).Worker = Spy;
+  });
+}
+
+for (const [name, patch] of [
+  [
+    "a closure",
+    {
+      canNavigate: false,
+      closures: [{ id: "uptown-underpass-detour-2026-09-21" }],
+      warnings: [
+        "Uptown trail detour advisory: This route follows Constitution Trail through the Uptown Underpass construction zone.",
+      ],
+    },
+  ],
+  [
+    "a stale network",
+    {
+      canNavigate: false,
+      network: { status: "stale", checkedEdges: 1, issues: [], issueCount: 0 },
+      warnings: [
+        "This saved route no longer matches the current trail data (trail 1 has different geometry). Recalculate it before riding.",
+      ],
+    },
+  ],
+] as const)
+  test(`a held reverse that comes back blocked by ${name} stops the ride and its credit, and riding resumes only through a fresh start`, async ({
+    page,
+  }) => {
+    await interceptReverse(page);
+    await page.clock.install();
+    await planLoopPreview(page);
+    await page
+      .getByRole("button", { name: "Start navigation", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+    ).toBeVisible();
+    await acceptedFix(page, 40.51, -88.95);
+    const points = await rideRoutePoints(page);
+    for (const meters of [60, 120, 180, 240]) {
+      await page.clock.fastForward(1000);
+      const [lat, lon] = pointAlong(points, meters);
+      await acceptedFix(page, lat, lon);
+    }
+    expect((await activeRideOf(page)).creditedDistanceMeters).toBeGreaterThan(
+      100,
+    );
+
+    // Hold the answer to Reverse, and make it come back blocked.
+    await page.evaluate(
+      (patch) => {
+        (window as any).__reverseOverride = { hold: true, patch };
+      },
+      patch as unknown as Record<string, unknown>,
+    );
+    await page.getByRole("button", { name: "Reverse direction" }).click();
+    // While it is held nothing has changed: the ride is live, the control is busy.
+    await expect(
+      page.getByRole("button", { name: "Reverse direction" }),
+    ).toBeDisabled();
+    expect((await activeRideOf(page)).creditedDistanceMeters).toBeGreaterThan(
+      100,
+    );
+    await page.evaluate(() => (window as any).__reverseOverride.release());
+
+    // Released: the ride is over, not left running on the old route and not restarted on the new one.
+    await expect(
+      page.getByRole("heading", { name: "Route preview" }),
+    ).toBeVisible();
+    await expect(page.getByText(/Navigation stopped/)).toBeVisible();
+    await expect(page.locator(".guidance")).toHaveCount(0);
+    expect(await activeRideOf(page)).toBeNull();
+    await expect(page.getByText("Riding in reverse")).toHaveCount(0);
+
+    // Recovery is explicit: a fresh, accepted route and a fresh Start, from zero.
+    await page.evaluate(() => {
+      delete (window as any).__reverseOverride;
+    });
+    await page
+      .getByRole("button", { name: "Start navigation", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+    ).toBeVisible();
+    await page.clock.fastForward(1000);
+    await acceptedFix(page, 40.51, -88.95);
+    await expect(page.locator(".guidance.navigating")).toBeVisible();
+    await expect(
+      page.getByText(/^0(\.0)? mi observed this ride/),
+    ).toBeVisible();
+    expect((await activeRideOf(page)).creditedDistanceMeters).toBe(0);
+  });
+
+const completedOf = (page: Page) =>
+  page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.completed-sessions.v1"),
+    );
+    return key ? JSON.parse(localStorage.getItem(key)!).sessions : [];
+  });
+/** Like acceptedFix, but a fix that completes the loop ends the ride (and clears its storage), which is also an answer. */
+async function fixOrFinish(page: Page, lat: number, lon: number) {
+  const timestamp = await page.evaluate(
+    ({ lat, lon }) => {
+      const now = Date.now();
+      (window as any).__gps.fix(lat, lon, 5, 0);
+      return now;
+    },
+    { lat, lon },
+  );
+  await expect
+    .poll(() =>
+      page.evaluate((timestamp) => {
+        const key = Object.keys(localStorage).find((k) =>
+          k.endsWith("trail-mapper.web.active-ride.v1"),
+        );
+        const updated = key
+          ? JSON.parse(localStorage.getItem(key)!).updatedAt
+          : 0;
+        return (
+          updated >= timestamp ||
+          /Exercise route complete/.test(document.body.innerText)
+        );
+      }, timestamp),
+    )
+    .toBe(true);
+}
+/** Rides every metre of the loop that is on screen, a fix at a time, from its start to its finish. */
+async function rideWholeLoop(page: Page) {
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const first = (await rideRoutePoints(page))[0];
+  await acceptedFix(page, first[0], first[1]);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const points = await rideRoutePoints(page);
+  let length = 0;
+  for (let i = 1; i < points.length; i++)
+    length +=
+      Math.hypot(
+        (points[i][1] - points[i - 1][1]) *
+          Math.cos((points[i][0] * Math.PI) / 180),
+        points[i][0] - points[i - 1][0],
+      ) * 111320;
+  for (let meters = 80; meters < length + 80; meters += 80) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, Math.min(meters, length));
+    await fixOrFinish(page, lat, lon);
+    if (await page.getByText(/^Exercise route complete/).count()) break;
+  }
+}
+
+test("finishing a loop records it, ends the ride, and the next loop avoids what was just ridden", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.clock.install();
+  await planLoopPreview(page);
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  const firstKey = (await libraryOf(page)).recent[0].key;
+  await rideWholeLoop(page);
+
+  // As native: the ride is over, the completion is said, and the loop is in the history.
+  await expect(page.getByText("Exercise route complete.")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  expect(await activeRideOf(page)).toBeNull();
+  const history = await completedOf(page);
+  expect(history).toHaveLength(1);
+  expect(history[0].id).toMatch(/^\d+:exercise:/);
+  expect(history[0].completedDistanceMeters).toBeGreaterThan(1000);
+  expect(history[0].traversalEdges.length).toBeGreaterThan(0);
+
+  // The next loop of the same length from the same place is a different one, because what was ridden costs more.
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "3 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  const secondKey = (await libraryOf(page)).recent[0].key;
+  expect(secondKey).not.toBe(firstKey);
+});
+
+test("a loop that finishes in a browser that cannot save history is still reported as finished, and says so", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.endsWith("trail-mapper.web.completed-sessions.v1")) {
+        const error = new Error("full");
+        error.name = "QuotaExceededError";
+        throw error;
+      }
+      return original.call(this, key, value);
+    };
+  });
+  await page.clock.install();
+  await planLoopPreview(page);
+  await rideWholeLoop(page);
+  await expect(
+    page.getByText(
+      "Exercise route complete, but its history could not be saved.",
+    ),
+  ).toBeVisible();
+  expect(await activeRideOf(page)).toBeNull();
+  expect(await completedOf(page)).toEqual([]);
+});
+
+test("rejoining a loop carries what was already ridden, and keeps it across a reload", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await planLoopPreview(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+  const points = await rideRoutePoints(page);
+  await acceptedFix(page, points[0][0], points[0][1]);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  // Ride about 300 m of the planned loop, then leave it.
+  for (const meters of [80, 160, 240, 300]) {
+    await page.clock.fastForward(1000);
+    const [lat, lon] = pointAlong(points, meters);
+    await acceptedFix(page, lat, lon);
+  }
+  const carriedBefore = await page.evaluate(() =>
+    Object.keys(localStorage).some((k) =>
+      k.endsWith("trail-mapper.web.carried-ride.v1"),
+    ),
+  );
+  expect(carriedBefore, "nothing is carried before a rejoin").toBe(false);
+  await page.clock.fastForward(1000);
+  await acceptedFix(page, 40.491, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.492, -88.99);
+  await page.clock.fastForward(8000);
+  await acceptedFix(page, 40.493, -88.99);
+  await page
+    .getByRole("button", { name: "Rejoin the loop", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
+
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.endsWith("trail-mapper.web.carried-ride.v1"),
+    );
+    return key ? JSON.parse(localStorage.getItem(key)!) : null;
+  });
+  expect(stored).not.toBeNull();
+  // About what was ridden before leaving the loop (progress at the last on-route fix, within a few metres).
+  expect(stored.carried.distanceMeters).toBeGreaterThan(200);
+  expect(stored.carried.distanceMeters).toBeLessThan(320);
+  expect(stored.carried.traversalEdges.length).toBeGreaterThan(0);
+  // It belongs to the replacement route now being ridden, and nothing else.
+  expect(stored.recordKey).toBe((await activeRideOf(page)).record.key);
+
+  await page.reload();
+  const afterReload = await page.evaluate(() =>
+    Object.keys(localStorage).some((k) =>
+      k.endsWith("trail-mapper.web.carried-ride.v1"),
+    ),
+  );
+  expect(afterReload).toBe(true);
+  // Stopping the ride clears it: it is one ride's history, not a standing preference.
+  await page
+    .getByRole("button", { name: "Stop navigation", exact: true })
+    .click();
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).some((k) =>
+        k.endsWith("trail-mapper.web.carried-ride.v1"),
+      ),
+    ),
+  ).toBe(false);
 });
