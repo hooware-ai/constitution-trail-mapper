@@ -1189,6 +1189,7 @@ export function App() {
           closures={network?.closures ?? []}
           fixture={fixtureData}
           county={network?.mode === "county"}
+          osm={Boolean(network?.datasetRecord?.supplements?.length)}
         />
         <section
           className="panel"

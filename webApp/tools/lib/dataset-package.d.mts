@@ -6,6 +6,9 @@ export const committedManifestFile: string;
 export const licensedInputFile: string;
 export const approvalRecordFile: string;
 export const committedApprovalFile: string;
+export const osmManifestFile: string;
+export const committedOsmManifestFile: string;
+export const osmInputFile: string;
 export class AdmissionError extends Error {}
 export function admittedFeatures(manifest: any): Map<string, any>;
 export function excludedIds(manifest: any): Set<string>;
@@ -14,13 +17,22 @@ export function admit(
   inputText: string,
   manifest: any,
 ): { features: any[]; domainsText: string };
-export function toNetworkText(features: any[], domainsText: string): string;
+export function toNetworkText(
+  features: any[],
+  domainsText: string,
+  supplementLayer?: any,
+): string;
 export function readApprovalRecord(file?: string): Promise<any>;
 export function buildPackage(args: {
   inputText: string;
   manifest: any;
   manifestBytes: Uint8Array;
   approval: any;
+  supplement?: {
+    inputText: string;
+    manifest: any;
+    manifestBytes: Uint8Array;
+  } | null;
 }): Promise<{ record: any; body: Buffer; file: string }>;
 export function writePackage(
   built: { record: any; body: Buffer; file: string },
@@ -31,6 +43,8 @@ export function packageFromFiles(options?: {
   manifestPath?: string;
   approvalPath?: string;
   outDir?: string;
+  osmInput?: string | null;
+  osmManifestPath?: string;
 }): Promise<{ record: any; body: Buffer; file: string }>;
 export function verifyPackageDir(
   dir?: string,
@@ -40,4 +54,5 @@ export function checkPackage(
   record: any,
   body: Uint8Array,
   manifestBytes: Uint8Array,
+  osmManifestBytes?: Uint8Array | null,
 ): any;

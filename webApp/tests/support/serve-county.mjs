@@ -1,7 +1,9 @@
 // Builds and serves a county-mode artifact from the SYNTHETIC package (tests/support/county-fixture.mjs) on a port
 // this run owns. Nothing here reads or needs the private licensed extract; the data is not county data.
 //
-//   node tests/support/serve-county.mjs --port <n> [--public] [--scale <features>] [--build-only]
+//   node tests/support/serve-county.mjs --port <n> [--public] [--osm] [--scale <features>] [--build-only]
+//
+// --osm also packages the SYNTHETIC reviewed OpenStreetMap supplement (tests/support/osm-fixture.mjs) as its own layer.
 //
 // --scale swaps the five-feature package for a synthetic lattice of that many features, for sizing only.
 //
@@ -13,12 +15,15 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeCounty, scaledList } from "./county-fixture.mjs";
+import { makeSupplement } from "./osm-fixture.mjs";
 
 const webRoot = fileURLToPath(new URL("../../", import.meta.url));
 const channel = process.argv.includes("--public") ? "public" : "review";
-const work = join(webRoot, "generated", `synthetic-${channel}`);
+const withOsm = process.argv.includes("--osm");
+const variant = withOsm ? `${channel}-osm` : channel;
+const work = join(webRoot, "generated", `synthetic-${variant}`);
 const county = join(work, "county");
-const distDir = join(webRoot, `dist-county-${channel}`);
+const distDir = join(webRoot, `dist-county-${variant}`);
 const windows = process.platform === "win32";
 
 await rm(work, { recursive: true, force: true });
@@ -35,6 +40,13 @@ const files = {
 await writeFile(files.input, JSON.stringify(synthetic.input));
 await writeFile(files.manifest, JSON.stringify(synthetic.manifest));
 await writeFile(files.approval, JSON.stringify(synthetic.approval));
+if (withOsm) {
+  const supplement = makeSupplement();
+  files.osmInput = join(work, "osm-additions.json");
+  files.osmManifest = join(work, "osm-manifest.json");
+  await writeFile(files.osmInput, JSON.stringify(supplement.input));
+  await writeFile(files.osmManifest, JSON.stringify(supplement.manifest));
+}
 
 const env = {
   ...process.env,
@@ -44,6 +56,7 @@ const env = {
   TRAIL_COUNTY_MANIFEST: files.manifest,
   TRAIL_COUNTY_APPROVAL: files.approval,
   TRAIL_DIST_DIR: distDir,
+  ...(withOsm ? { TRAIL_OSM_MANIFEST: files.osmManifest } : {}),
 };
 // The modules read these variables when first imported, so package in a child with the same environment.
 const run = (label, args) => {
@@ -66,6 +79,7 @@ run("package", [
   files.input,
   "--out",
   county,
+  ...(withOsm ? ["--osm-additions", files.osmInput] : []),
 ]);
 run("build", ["npx", "vite", "build"]);
 run("provenance", ["node", "tools/write-provenance.mjs"]);

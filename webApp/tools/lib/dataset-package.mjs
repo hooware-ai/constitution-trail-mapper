@@ -21,6 +21,16 @@ import {
   toPlain,
 } from "./canonical-json.mjs";
 
+import {
+  SUPPLEMENT_KIND,
+  SUPPLEMENT_LAYER_ID,
+  SupplementError,
+  admitSupplement,
+  checkSupplementLayer,
+  committedOsmManifestFile,
+  osmInputFile,
+} from "./osm-supplement.mjs";
+
 export const NETWORK_SCHEMA = "trail-mapper.network/1";
 export const RECORD_SCHEMA = "trail-mapper.dataset/1";
 export const packageDir = process.env.TRAIL_COUNTY_DIR
@@ -50,6 +60,12 @@ export const committedApprovalFile = join(
 export const approvalRecordFile = process.env.TRAIL_COUNTY_APPROVAL
   ? resolve(process.env.TRAIL_COUNTY_APPROVAL)
   : committedApprovalFile;
+
+// TRAIL_OSM_MANIFEST is a test hook like TRAIL_COUNTY_MANIFEST: the audit refuses a package made from any other manifest.
+export const osmManifestFile = process.env.TRAIL_OSM_MANIFEST
+  ? resolve(process.env.TRAIL_OSM_MANIFEST)
+  : committedOsmManifestFile;
+export { committedOsmManifestFile, osmInputFile };
 
 export class AdmissionError extends Error {
   constructor(message) {
@@ -303,7 +319,7 @@ export function admit(inputText, manifest) {
  * The runtime network as text: what the router reads plus the raw evidence the hashes cover. Geometry and attributes are
  * spliced in exactly as the extractor wrote them, so anyone can recompute the reviewed digests from the shipped file.
  */
-export function toNetworkText(features, domainsText) {
+export function toNetworkText(features, domainsText, supplementLayer = null) {
   const ordered = [...features].sort((a, b) => {
     const [la, oa] = a.id.split(":").map(Number);
     const [lb, ob] = b.id.split(":").map(Number);
@@ -317,7 +333,9 @@ export function toNetworkText(features, domainsText) {
     `"attributesSha256":${JSON.stringify(feature.provenance.attributesSha256)},"attributes":${feature.attributesText}}}`;
   return (
     `{"schema":${JSON.stringify(NETWORK_SCHEMA)},"domains":${domainsText},"layers":[{"id":8,"name":"Reviewed licensed McGIS trails",` +
-    `"featureCount":${ordered.length},"features":[${ordered.map(one).join(",")}]}]}`
+    `"featureCount":${ordered.length},"features":[${ordered.map(one).join(",")}]}` +
+    (supplementLayer ? `,${JSON.stringify(supplementLayer)}` : "") +
+    `]}`
   );
 }
 
@@ -337,10 +355,18 @@ export async function buildPackage({
   manifest,
   manifestBytes,
   approval,
+  supplement = null,
 }) {
   const { features, domainsText } = admit(inputText, manifest);
   const input = JSON.parse(inputText);
-  const body = Buffer.from(toNetworkText(features, domainsText), "utf8");
+  // Optional, separately reviewed OpenStreetMap supplement: its own layer, its own source and licence record.
+  const admittedSupplement = supplement
+    ? admitSupplement(supplement.inputText, supplement.manifest)
+    : null;
+  const body = Buffer.from(
+    toNetworkText(features, domainsText, admittedSupplement?.layer ?? null),
+    "utf8",
+  );
   const contentSha = sha256(body);
   const file = `trails.${contentSha.slice(0, 12)}.json`;
   const layerCounts = {};
@@ -348,6 +374,10 @@ export async function buildPackage({
     const layerId = feature.id.split(":")[0];
     layerCounts[layerId] = (layerCounts[layerId] ?? 0) + 1;
   }
+  if (admittedSupplement)
+    layerCounts[SUPPLEMENT_LAYER_ID] = admittedSupplement.layer.features.length;
+  const totalFeatures =
+    features.length + (admittedSupplement?.layer.features.length ?? 0);
   const sources = input.sources;
   const record = {
     schema: RECORD_SCHEMA,
@@ -360,7 +390,7 @@ export async function buildPackage({
       schema: NETWORK_SCHEMA,
       sha256: contentSha,
       bytes: body.length,
-      featureCount: features.length,
+      featureCount: totalFeatures,
       layerCounts,
     },
     source: {
@@ -383,9 +413,23 @@ export async function buildPackage({
       proposedFeatureIds: [...excludedIds(manifest)]
         .map((id) => Number(id.split(":")[1]))
         .sort((a, b) => a - b),
-      supplements: approval.omitted.supplements,
+      // What is left out, in words a rider can read. With a supplement packaged, the approval record's "none" no longer
+      // applies; the reviewed exclusions are stated instead (gaps stay gaps).
+      supplements: admittedSupplement
+        ? `Included as a separate layer: ${admittedSupplement.facts.featureCount} reviewed OpenStreetMap paths (ODbL). Not included: ${admittedSupplement.facts.excludedUntilVerified.join(" ")}`
+        : approval.omitted.supplements,
       accessRoads: approval.omitted.accessRoads,
     },
+    ...(admittedSupplement
+      ? {
+          supplements: [
+            {
+              ...admittedSupplement.facts,
+              manifestSha256: sha256(supplement.manifestBytes),
+            },
+          ],
+        }
+      : {}),
     approval: {
       approved: approval.approved === true,
       approvedBy: approval.approvedBy ?? null,
@@ -420,6 +464,9 @@ export async function packageFromFiles({
   manifestPath = manifestFile,
   approvalPath = approvalRecordFile,
   outDir = packageDir,
+  // Optional reviewed OpenStreetMap supplement: pass `osmInput` (its normalized file) to include it.
+  osmInput = null,
+  osmManifestPath = osmManifestFile,
 } = {}) {
   let inputBytes;
   try {
@@ -430,11 +477,29 @@ export async function packageFromFiles({
     );
   }
   const manifestBytes = await readFile(manifestPath);
+  let supplement = null;
+  if (osmInput) {
+    let text;
+    try {
+      text = await readFile(osmInput, "utf8");
+    } catch {
+      throw new AdmissionError(
+        `The OpenStreetMap supplement is not present (${osmInput}). Generate it with the native extractor (python tools/fetch-verified-trail-additions.py); this tool never contacts OpenStreetMap.`,
+      );
+    }
+    const osmManifestBytes = await readFile(osmManifestPath);
+    supplement = {
+      inputText: text,
+      manifest: JSON.parse(osmManifestBytes.toString("utf8").replace(/^﻿/, "")),
+      manifestBytes: osmManifestBytes,
+    };
+  }
   const built = await buildPackage({
     inputText: inputBytes.replace(/^﻿/, ""),
     manifest: JSON.parse(manifestBytes.toString("utf8")),
     manifestBytes,
     approval: await readApprovalRecord(approvalPath),
+    supplement,
   });
   await writePackage(built, outDir);
   return built;
@@ -444,7 +509,12 @@ export async function packageFromFiles({
  * Checks a dataset record and its network bytes against the reviewed manifest: hash, exact ID set, excluded IDs
  * absent, per-feature evidence, counts. Shared by the build step and the release audit of the built artifact.
  */
-export function checkPackage(record, body, manifestBytes) {
+export function checkPackage(
+  record,
+  body,
+  manifestBytes,
+  osmManifestBytes = null,
+) {
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (record.schema !== RECORD_SCHEMA || record.kind !== "county")
     refuse("The dataset record is not a county record of this version.");
@@ -463,14 +533,33 @@ export function checkPackage(record, body, manifestBytes) {
     refuse("The packaged network has an unknown schema.");
   const entries = admittedFeatures(manifest);
   const excluded = excludedIds(manifest);
-  const features = network.layers.flatMap((layer) => layer.features);
+  // The county layer(s) are the reviewed set; an OpenStreetMap supplement is its own layer, checked on its own terms.
+  const supplementLayers = network.layers.filter(
+    (layer) => layer.id === SUPPLEMENT_LAYER_ID,
+  );
+  const hasPart = (record.supplements ?? []).length > 0;
+  if (
+    hasPart !== (supplementLayers.length === 1) ||
+    supplementLayers.length > 1
+  )
+    refuse(
+      "The OpenStreetMap supplement layer and the record's description of it disagree.",
+    );
+  if ((record.supplements ?? []).some((part) => part.id !== SUPPLEMENT_KIND))
+    refuse("The record describes a supplement this version does not know.");
+  const countyLayers = network.layers.filter(
+    (layer) => layer.id !== SUPPLEMENT_LAYER_ID,
+  );
+  const features = countyLayers.flatMap((layer) => layer.features);
   const ids = new Set(features.map((f) => f.id));
   if (features.length !== ids.size || !sameSet(ids, new Set(entries.keys())))
     refuse("The packaged trails are not exactly the reviewed set.");
   for (const id of ids)
     if (excluded.has(id)) refuse(`${id} is excluded but present.`);
   const domains = authenticateDomains(tree.domains, manifest);
-  const treeFeatures = tree.layers.flatMap((layer) => layer.features);
+  const treeFeatures = tree.layers
+    .filter((layer) => layer.id !== SUPPLEMENT_LAYER_ID)
+    .flatMap((layer) => layer.features);
   for (const [index, feature] of features.entries()) {
     const entry = entries.get(feature.id);
     if (
@@ -501,7 +590,26 @@ export function checkPackage(record, body, manifestBytes) {
         `${feature.id} carries decoded labels that differ from the reviewed domain mapping.`,
       );
   }
-  if (record.content.featureCount !== features.length)
+  let supplementCount = 0;
+  if (hasPart) {
+    if (!osmManifestBytes)
+      refuse(
+        "The record has an OpenStreetMap supplement but no reviewed manifest to check it against.",
+      );
+    try {
+      checkSupplementLayer(
+        supplementLayers[0],
+        record,
+        JSON.parse(osmManifestBytes.toString("utf8").replace(/^﻿/, "")),
+        osmManifestBytes,
+      );
+    } catch (error) {
+      if (error instanceof SupplementError) refuse(error.message);
+      throw error;
+    }
+    supplementCount = supplementLayers[0].features.length;
+  }
+  if (record.content.featureCount !== features.length + supplementCount)
     refuse("The recorded feature count is wrong.");
   return network;
 }
@@ -514,7 +622,10 @@ export async function verifyPackageDir(
   const record = JSON.parse(await readFile(join(dir, "dataset.json"), "utf8"));
   const manifestBytes = await readFile(manifestPath);
   const body = await readFile(join(dir, record.content.file));
-  const network = checkPackage(record, body, manifestBytes);
+  const osmManifestBytes = (record.supplements ?? []).length
+    ? await readFile(osmManifestFile)
+    : null;
+  const network = checkPackage(record, body, manifestBytes, osmManifestBytes);
   const listing = await readdir(dir);
   const stray = listing.filter(
     (name) => name !== "dataset.json" && name !== record.content.file,

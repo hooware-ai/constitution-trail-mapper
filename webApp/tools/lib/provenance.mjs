@@ -12,6 +12,8 @@ import {
   committedApprovalFile,
   committedManifestFile,
   manifestFile,
+  committedOsmManifestFile,
+  osmManifestFile,
   readApprovalRecord,
 } from "./dataset-package.mjs";
 
@@ -93,7 +95,17 @@ async function loadCountyDataset(dir, paths) {
   let body = null;
   try {
     body = await readFile(join(dir, "data", record.content.file));
-    checkPackage(record, body, manifestBytes);
+    const osmManifestBytes = (record.supplements ?? []).length
+      ? await readFile(paths.osmManifestFile ?? osmManifestFile)
+      : null;
+    checkPackage(record, body, manifestBytes, osmManifestBytes);
+    if (
+      osmManifestBytes &&
+      (paths.osmManifestFile ?? osmManifestFile) !== committedOsmManifestFile
+    )
+      inconsistencies.push(
+        "dataset was packaged from an OpenStreetMap manifest other than the committed one",
+      );
   } catch (error) {
     inconsistencies.push(`dataset content check failed: ${error.message}`);
   }

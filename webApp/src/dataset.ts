@@ -33,6 +33,20 @@ export interface DatasetSource {
   changes: string;
   disclaimer: string;
 }
+/** A separately reviewed source packaged as its own layer of the network (today: the reviewed OpenStreetMap paths). */
+export interface SupplementPart {
+  id: string;
+  layerId: string;
+  featureCount: number;
+  wayIds: number[];
+  reviewedOn: string;
+  license: string;
+  licenseUrl: string;
+  attribution: string;
+  manifestSha256: string;
+  /** What the review keeps OUT (known gaps stay gaps; unverified ways are never imported). */
+  excludedUntilVerified: string[];
+}
 export interface DatasetRecord {
   schema: typeof DATASET_RECORD_SCHEMA;
   kind: DatasetKind;
@@ -48,6 +62,8 @@ export interface DatasetRecord {
     layerCounts: Record<string, number>;
   };
   source: DatasetSource;
+  /** Optional reviewed supplements, each its own layer with its own source, licence and attribution. */
+  supplements?: SupplementPart[];
   /** What was deliberately left out and why, shown to riders as coverage limits. */
   omitted: {
     proposedFeatureIds: number[];
@@ -196,6 +212,33 @@ export function parseDatasetRecord(
       "data-corrupt",
       "The trail data approval record is invalid.",
     );
+  if (value.supplements !== undefined) {
+    const parts = value.supplements;
+    const valid =
+      Array.isArray(parts) &&
+      parts.every(
+        (part) =>
+          isObject(part) &&
+          text(part.id) &&
+          text(part.layerId) &&
+          count(part.featureCount) &&
+          Array.isArray(part.wayIds) &&
+          part.wayIds.every((id) => count(id)) &&
+          text(part.reviewedOn) &&
+          text(part.license) &&
+          text(part.licenseUrl) &&
+          text(part.attribution) &&
+          typeof part.manifestSha256 === "string" &&
+          SHA256.test(part.manifestSha256) &&
+          Array.isArray(part.excludedUntilVerified) &&
+          part.excludedUntilVerified.every((entry) => text(entry)),
+      );
+    if (!valid)
+      throw new DatasetError(
+        "data-corrupt",
+        "The description of the reviewed supplement is invalid.",
+      );
+  }
   if (
     approval.approved === true &&
     !(text(approval.approvedBy) && text(approval.approvedOn))

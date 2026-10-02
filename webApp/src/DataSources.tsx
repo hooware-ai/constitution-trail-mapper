@@ -60,8 +60,20 @@ export function DataSources({
         and this app does not know when it last did.
       </p>
       <p>
-        {content.featureCount} existing trail features. {source.disclaimer}
+        {content.featureCount} existing trail features
+        {record.supplements?.length
+          ? ` (${record.supplements.reduce((n, part) => n + part.featureCount, 0)} of them reviewed OpenStreetMap paths, below)`
+          : ""}
+        . {source.disclaimer}
       </p>
+      {record.supplements?.map((part) => (
+        <p key={part.id}>
+          <strong>Reviewed OpenStreetMap paths:</strong> {part.featureCount}{" "}
+          paths reviewed on {part.reviewedOn}, kept as their own layer.{" "}
+          {part.attribution} · License:{" "}
+          <SafeLink href={part.licenseUrl}>{part.license}</SafeLink>.
+        </p>
+      ))}
       <Sub>What is not included</Sub>
       <ul>
         {omitted.proposedFeatureIds.length > 0 && (

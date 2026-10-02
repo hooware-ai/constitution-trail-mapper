@@ -28,6 +28,7 @@ export function MapView({
   closures = [],
   fixture,
   county = false,
+  osm = false,
 }: {
   features: Feature[];
   route: RouteResult | null;
@@ -40,6 +41,8 @@ export function MapView({
   fixture: boolean;
   /** Packaged county data: credit the county license, not the OSM/Census sources of the older local files. */
   county?: boolean;
+  /** The packaged data includes the reviewed OpenStreetMap supplement: credit it (ODbL) beside the county license. */
+  osm?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
@@ -87,13 +90,13 @@ export function MapView({
     const notice = fixture
       ? "Synthetic review geometry · CC0"
       : county
-        ? `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · ${credit("https://creativecommons.org/licenses/by/4.0/", "CC BY 4.0")} · changes: reviewed subset, normalized`
+        ? `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · ${credit("https://creativecommons.org/licenses/by/4.0/", "CC BY 4.0")} · changes: reviewed subset, normalized${osm ? ` · reviewed paths: ${credit("https://www.openstreetmap.org/copyright", "© OpenStreetMap contributors / ODbL")}` : ""}`
         : `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · U.S. Census · ${credit("https://www.openstreetmap.org/copyright", "© OSM contributors / ODbL")}`;
     m.attributionControl.addAttribution(notice);
     return () => {
       m.attributionControl.removeAttribution(notice);
     };
-  }, [fixture, county]);
+  }, [fixture, county, osm]);
   useEffect(() => {
     const m = map.current,
       g = layers.current;
