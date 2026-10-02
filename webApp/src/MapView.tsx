@@ -307,7 +307,10 @@ export function MapView({
     if (!map.current || !tiles || fixture) return;
     const tile = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: "© OpenStreetMap contributors",
+      // The licence credit is a visible, clickable link whenever the optional tiles are on (the tile policy requires
+      // visible attribution); it opens the copyright page in a new tab without handing it this page.
+      attribution:
+        '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
       crossOrigin: false,
     });
     tile.on("tileerror", () => setTileError(true));
