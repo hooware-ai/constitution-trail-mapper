@@ -48,6 +48,7 @@ import {
   manifestDigest,
   reconstructComposition,
 } from "../../tools/lib/composition.mjs";
+import { checkSupplementLayer } from "../../tools/lib/osm-supplement.mjs";
 import { makeCounty } from "../support/county-fixture.mjs";
 import {
   makeAccessExtract,
@@ -1176,4 +1177,101 @@ test("the committed source contract is real and unapproved: evidence recorded as
     ),
   );
   assert.notEqual(proposed.rights?.status, "granted");
+});
+
+// --- cardinality: one layer, one descriptor ---------------------------------------------------------------------
+
+test("exactly one OpenStreetMap descriptor for the one supported layer: duplicates are refused at the artifact gate", async () => {
+  const county = makeCounty();
+  const fixture = makeSupplement();
+  const part = {
+    inputText: JSON.stringify(fixture.input),
+    manifest: fixture.manifest,
+    manifestBytes: Buffer.from(JSON.stringify(fixture.manifest)),
+  };
+  const withLayer = await buildWith(county, { supplement: part });
+  const without = await buildWith(county);
+  const checkWith = (record: any) =>
+    checkPackage(
+      record,
+      withLayer.body,
+      countyManifestBytes(county),
+      part.manifestBytes,
+    );
+  const checkWithout = (record: any) =>
+    checkPackage(record, without.body, countyManifestBytes(county));
+  // Valid controls: a single descriptor with its layer; no descriptor (absent, and an empty list) with no layer.
+  checkWith(withLayer.record);
+  checkWithout(without.record);
+  checkWithout({ ...clone(without.record), supplements: [] });
+  const [descriptor] = withLayer.record.supplements;
+  // The same descriptor twice.
+  assert.throws(
+    () =>
+      checkWith({
+        ...clone(withLayer.record),
+        supplements: [clone(descriptor), clone(descriptor)],
+      }),
+    refusedWith(/at most one OpenStreetMap supplement/),
+  );
+  // A second descriptor with different, unsupported licence and attribution claims after the authenticated first.
+  assert.throws(
+    () =>
+      checkWith({
+        ...clone(withLayer.record),
+        supplements: [
+          clone(descriptor),
+          {
+            ...clone(descriptor),
+            license: "Made-up licence",
+            licenseUrl: "https://example.test/license",
+            attribution: "Someone else",
+          },
+        ],
+      }),
+    refusedWith(/at most one OpenStreetMap supplement/),
+  );
+  // Three, and a descriptor appended to a package that has no layer at all.
+  assert.throws(
+    () =>
+      checkWith({
+        ...clone(withLayer.record),
+        supplements: [descriptor, descriptor, descriptor],
+      }),
+    AdmissionError,
+  );
+  assert.throws(
+    () =>
+      checkWithout({
+        ...clone(without.record),
+        supplements: [clone(descriptor)],
+      }),
+    AdmissionError,
+  );
+  // The list shape is explicit: an object where a list belongs is refused, not iterated.
+  assert.throws(
+    () =>
+      checkWith({ ...clone(withLayer.record), supplements: clone(descriptor) }),
+    refusedWith(/at most one OpenStreetMap supplement, as a list/),
+  );
+  // The layer-level check refuses a repeated descriptor on its own too (it used to read only the first).
+  const layer = JSON.parse(withLayer.body.toString("utf8")).layers.find(
+    (l: any) => l.id === "verified-osm",
+  );
+  assert.throws(
+    () =>
+      checkSupplementLayer(
+        layer,
+        { supplements: [clone(descriptor), clone(descriptor)] },
+        fixture.manifest,
+        part.manifestBytes,
+      ),
+    /exactly one description/,
+  );
+  checkSupplementLayer(
+    layer,
+    { supplements: [clone(descriptor)] },
+    fixture.manifest,
+    part.manifestBytes,
+  );
 });

@@ -830,6 +830,15 @@ export function checkPackage(
   const supplementLayers = network.layers.filter(
     (layer) => layer.id === SUPPLEMENT_LAYER_ID,
   );
+  // Exactly ONE descriptor for the ONE supported OpenStreetMap layer, or none when none is packaged: a second
+  // descriptor, even one that looks valid, would double counts and add licence claims nothing authenticated.
+  if (
+    record.supplements !== undefined &&
+    (!Array.isArray(record.supplements) || record.supplements.length > 1)
+  )
+    refuse(
+      "The record must describe at most one OpenStreetMap supplement, as a list.",
+    );
   const hasPart = (record.supplements ?? []).length > 0;
   if (
     hasPart !== (supplementLayers.length === 1) ||

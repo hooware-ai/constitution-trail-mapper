@@ -161,6 +161,62 @@ test("unknown schemas and formats are incompatible; missing or invalid fields ar
     );
 });
 
+test("the browser accepts no supplement description or exactly one, and refuses a repeated or non-list one", async () => {
+  const { record } = await packaged();
+  const part = {
+    id: "osm-reviewed-ways",
+    layerId: "verified-osm",
+    featureCount: 2,
+    wayIds: [880001, 880002],
+    reviewedOn: "2026-01-01",
+    license: "Open Database License (ODbL) 1.0",
+    licenseUrl: "https://www.openstreetmap.org/copyright",
+    attribution: "© OpenStreetMap contributors",
+    manifestSha256: "a".repeat(64),
+    excludedUntilVerified: ["A gap that stays a gap."],
+  };
+  const with_ = (supplements: unknown) => ({ ...record, supplements });
+  // Controls: absent, empty, and exactly one description are valid.
+  assert.equal(
+    code(() => parseDatasetRecord(record, "review")),
+    "none",
+  );
+  assert.equal(
+    code(() => parseDatasetRecord(with_([]), "review")),
+    "none",
+  );
+  assert.equal(
+    code(() => parseDatasetRecord(with_([part]), "review")),
+    "none",
+  );
+  // A repeated identical description, and a second one with different licence and attribution claims.
+  assert.equal(
+    code(() => parseDatasetRecord(with_([part, { ...part }]), "review")),
+    "data-corrupt",
+  );
+  assert.equal(
+    code(() =>
+      parseDatasetRecord(
+        with_([
+          part,
+          { ...part, license: "Made-up licence", attribution: "Someone else" },
+        ]),
+        "review",
+      ),
+    ),
+    "data-corrupt",
+  );
+  // The shape is still checked explicitly.
+  assert.equal(
+    code(() => parseDatasetRecord(with_(part), "review")),
+    "data-corrupt",
+  );
+  assert.equal(
+    code(() => parseDatasetRecord(with_("x"), "review")),
+    "data-corrupt",
+  );
+});
+
 test("content that matches its record is returned as text for the router", async () => {
   const { record, buffer } = await packaged();
   const text = await verifyDatasetContent(

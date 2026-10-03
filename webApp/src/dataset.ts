@@ -337,6 +337,9 @@ export function parseDatasetRecord(
     const parts = value.supplements;
     const valid =
       Array.isArray(parts) &&
+      // At most one description: the one supported OpenStreetMap layer has one, and the Data and credits screens add
+      // up every description they are given.
+      parts.length <= 1 &&
       parts.every(
         (part) =>
           isObject(part) &&

@@ -227,7 +227,15 @@ export function admitSupplement(inputText, manifest) {
 
 /** The same checks applied to the layer inside a PACKAGED network (used by the build and the release audit). */
 export function checkSupplementLayer(layer, record, manifest, manifestBytes) {
-  const part = (record.supplements ?? []).find((p) => p.id === SUPPLEMENT_KIND);
+  const parts = (record.supplements ?? []).filter(
+    (p) => p.id === SUPPLEMENT_KIND,
+  );
+  // One layer, one descriptor: authenticating the first of several would leave the rest unchecked.
+  if ((record.supplements ?? []).length !== 1 || parts.length !== 1)
+    refuse(
+      "The record must carry exactly one description of the OpenStreetMap supplement.",
+    );
+  const [part] = parts;
   if (!part)
     refuse(
       "The network has an OpenStreetMap layer the record does not describe.",
