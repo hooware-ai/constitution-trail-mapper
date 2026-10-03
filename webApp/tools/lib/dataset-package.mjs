@@ -140,6 +140,72 @@ export function admittedFeatures(manifest) {
   return entries;
 }
 
+/**
+ * The committed source contract: what the extract's own descriptive fields must say, and the one extraction-time
+ * observation the review recorded. The licence-evidence URL, item, source, licence and review dates are PINNED reviewed
+ * facts (top-level manifest fields). The licence-evidence hash is NOT pinned by the review: it is the hash the extractor
+ * observed on the run the manifest records (`licenseEvidenceObservation`), kept so a changed value forces a new review
+ * instead of passing silently. Extraction-run time is a separate observation and is not part of this contract.
+ */
+export function sourceContractOf(manifest) {
+  const contract = manifest.sourceContract;
+  if (
+    !contract ||
+    typeof contract.changes !== "string" ||
+    !contract.changes ||
+    typeof contract.disclaimer !== "string" ||
+    !contract.disclaimer
+  )
+    refuse(
+      "The reviewed manifest carries no source contract (the change and disclaimer wording the extract must state).",
+    );
+  const observed = contract.licenseEvidenceObservation ?? null;
+  if (observed !== null && !/^[0-9a-f]{64}$/.test(observed.sha256 ?? ""))
+    refuse("The manifest's recorded licence-evidence observation has no hash.");
+  if (
+    typeof manifest.licenseEvidenceUrl !== "string" ||
+    !manifest.licenseEvidenceUrl
+  )
+    refuse("The reviewed manifest pins no licence-evidence URL.");
+  return {
+    changes: contract.changes,
+    disclaimer: contract.disclaimer,
+    evidenceSha256: observed?.sha256 ?? null,
+  };
+}
+
+/** The `source` block a record must carry, from the committed manifest alone (extraction time and attribution aside). */
+function expectedSource(manifest) {
+  const contract = sourceContractOf(manifest);
+  return {
+    reviewedOn: manifest.reviewedOn,
+    evidenceVerifiedAtUtc: manifest.evidenceVerifiedAtUtc ?? null,
+    licensedItemId: manifest.licensedItemId,
+    licensedSourceUrl: manifest.licensedSourceUrl,
+    license: manifest.license,
+    licenseUrl: manifest.licenseUrl,
+    licenseEvidenceUrl: manifest.licenseEvidenceUrl,
+    licenseEvidenceSha256: contract.evidenceSha256,
+    changes: contract.changes,
+    disclaimer: contract.disclaimer,
+  };
+}
+const SOURCE_KEYS = [
+  "reviewedOn",
+  "extractedAtUtc",
+  "evidenceVerifiedAtUtc",
+  "manifestSha256",
+  "licensedItemId",
+  "licensedSourceUrl",
+  "license",
+  "licenseUrl",
+  "licenseEvidenceUrl",
+  "licenseEvidenceSha256",
+  "attribution",
+  "changes",
+  "disclaimer",
+];
+
 /** IDs the manifest says must stay out of the public network (as "layer:objectId"). */
 export function excludedIds(manifest) {
   return new Set(
@@ -239,6 +305,23 @@ export function admit(inputText, manifest) {
     refuse("The extract does not identify the reviewed licensed source.");
   if (input.reviewedOn !== manifest.reviewedOn)
     refuse("The extract was made against a different review date.");
+  // The extract's own descriptive fields are observations; they must say what the committed review says they say.
+  const contract = sourceContractOf(manifest);
+  if (sources.licenseEvidenceUrl !== manifest.licenseEvidenceUrl)
+    refuse(
+      "The extract names a different licence-evidence URL than the reviewed manifest.",
+    );
+  if ((sources.licenseEvidenceSha256 ?? null) !== contract.evidenceSha256)
+    refuse(
+      "The extract's licence-evidence hash differs from the one the review recorded; the licence evidence changed or was altered, so it needs a new review.",
+    );
+  if (
+    sources.changes !== contract.changes ||
+    sources.disclaimer !== contract.disclaimer
+  )
+    refuse(
+      "The extract's change disclosure or disclaimer is not the reviewed wording.",
+    );
   if (
     !sources.attribution ||
     !sources.licenseEvidenceUrl ||
@@ -497,11 +580,12 @@ export async function buildPackage({
       licensedSourceUrl: manifest.licensedSourceUrl,
       license: manifest.license,
       licenseUrl: manifest.licenseUrl,
-      licenseEvidenceUrl: sources.licenseEvidenceUrl,
-      licenseEvidenceSha256: sources.licenseEvidenceSha256 ?? null,
+      // Pinned reviewed facts, taken from the committed manifest (admission already proved the extract says the same).
+      licenseEvidenceUrl: manifest.licenseEvidenceUrl,
+      licenseEvidenceSha256: sourceContractOf(manifest).evidenceSha256,
       attribution: approval.attribution,
-      changes: sources.changes,
-      disclaimer: sources.disclaimer,
+      changes: sourceContractOf(manifest).changes,
+      disclaimer: sourceContractOf(manifest).disclaimer,
     },
     omitted: {
       // Segments admitted through the rights-gated layer are no longer omitted.
@@ -721,6 +805,21 @@ export function checkPackage(
     refuse(
       "The package was made from a different reviewed manifest than the one committed.",
     );
+  // Every descriptive claim the record copies from the source must be the committed, reviewed one (or an observation
+  // that is named as such: extraction-run time, and the approval record's attribution, checked in the audit).
+  const reviewedSource = expectedSource(manifest);
+  if (
+    JSON.stringify(Object.keys(record.source ?? {}).sort()) !==
+    JSON.stringify([...SOURCE_KEYS].sort())
+  )
+    refuse("The record's source description has unexpected or missing fields.");
+  for (const [key, expected] of Object.entries(reviewedSource))
+    if ((record.source[key] ?? null) !== expected)
+      refuse(
+        `The record's source ${key} is not the reviewed value in the committed manifest.`,
+      );
+  if (typeof record.source.extractedAtUtc !== "string")
+    refuse("The record has no extraction time for its source.");
   const tree = parseWithNumbers(body.toString("utf8"));
   const network = toPlain(tree);
   if (network.schema !== NETWORK_SCHEMA)
@@ -841,6 +940,32 @@ export function checkPackage(
     features.length + supplementCount + proposedCount
   )
     refuse("The recorded feature count is wrong.");
+  // The per-layer counts and the list of omitted proposed segments are copied descriptions too: recompute them.
+  const actualCounts = {};
+  for (const feature of features) {
+    const layerId = feature.id.split(":")[0];
+    actualCounts[layerId] = (actualCounts[layerId] ?? 0) + 1;
+  }
+  if (supplementCount) actualCounts[SUPPLEMENT_LAYER_ID] = supplementCount;
+  if (proposedCount) actualCounts[PROPOSED_LAYER_ID] = proposedCount;
+  const sortedKeys = (object) =>
+    JSON.stringify(
+      Object.entries(object ?? {}).sort(([a], [b]) => (a < b ? -1 : 1)),
+    );
+  if (sortedKeys(record.content.layerCounts) !== sortedKeys(actualCounts))
+    refuse("The recorded per-layer counts are wrong.");
+  const shippedProposed = new Set(
+    proposedLayers.flatMap((layer) => layer.features.map((f) => f.id)),
+  );
+  const omittedIds = [...excluded]
+    .filter((id) => !shippedProposed.has(id))
+    .map((id) => Number(id.split(":")[1]))
+    .sort((a, b) => a - b);
+  if (
+    JSON.stringify(record.omitted?.proposedFeatureIds) !==
+    JSON.stringify(omittedIds)
+  )
+    refuse("The record's list of omitted proposed segments is wrong.");
   if (record.access) {
     if (!readPart)
       refuse(

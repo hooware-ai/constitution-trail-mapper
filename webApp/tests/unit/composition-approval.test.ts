@@ -23,6 +23,7 @@ import {
   buildPackage,
   checkPackage,
   packageFromFiles,
+  sourceContractOf,
   verifyPackageDir,
 } from "../../tools/lib/dataset-package.mjs";
 import { writeCoreManifest } from "../../tools/lib/core.mjs";
@@ -874,4 +875,305 @@ test("consistent same-count replacements of the service roads (geometry, identit
     const { check } = await forged({ tile: change });
     assert.throws(check, notTheTransform);
   }
+});
+
+// --- ONE source contract: no copied descriptor is trusted -----------------------------------------------------
+
+const buildWith = (c: any, extra: any = {}, approval: any = c.approval) =>
+  buildPackage({
+    inputText: JSON.stringify(c.input),
+    manifest: c.manifest,
+    manifestBytes: Buffer.from(JSON.stringify(c.manifest)),
+    approval,
+    ...extra,
+  });
+const countyManifestBytes = (c: any) => Buffer.from(JSON.stringify(c.manifest));
+const refusedWith = (pattern: RegExp) => (error: any) =>
+  error instanceof AdmissionError && pattern.test(error.message);
+
+test("admission: the extract's own source descriptors must be the reviewed ones (each field, with a valid control)", async () => {
+  const county = makeCounty();
+  await buildWith(county); // control: the genuine extract is admitted
+  const cases: [string, (sources: any) => void, RegExp][] = [
+    [
+      "licence evidence URL",
+      (s) =>
+        (s.licenseEvidenceUrl = "https://example.test/unreviewed-evidence"),
+      /licence-evidence URL/,
+    ],
+    [
+      "licence evidence hash",
+      (s) => (s.licenseEvidenceSha256 = "f".repeat(64)),
+      /licence-evidence hash/,
+    ],
+    [
+      "missing licence evidence hash",
+      (s) => delete s.licenseEvidenceSha256,
+      /licence-evidence hash/,
+    ],
+    [
+      "change disclosure",
+      (s) => (s.changes = "Nothing was changed."),
+      /change disclosure or disclaimer/,
+    ],
+    [
+      "disclaimer",
+      (s) => (s.disclaimer = "Guaranteed accurate."),
+      /change disclosure or disclaimer/,
+    ],
+    ["licence", (s) => (s.license = "CC0"), /license does not match/],
+    [
+      "licence URL",
+      (s) => (s.licenseUrl = "https://example.test/license"),
+      /license does not match/,
+    ],
+    [
+      "licensed source URL",
+      (s) => (s.licensedSourceUrl = "https://example.test/source"),
+      /reviewed licensed source/,
+    ],
+    [
+      "licensed item",
+      (s) => (s.licensedItemId = "other-item"),
+      /reviewed licensed source/,
+    ],
+  ];
+  for (const [name, mutate, pattern] of cases) {
+    const changed = clone(county);
+    mutate(changed.input.sources);
+    await assert.rejects(buildWith(changed), refusedWith(pattern), name);
+  }
+  // The review date is its own fact, distinct from the extraction-run time.
+  const reviewed = clone(county);
+  reviewed.input.reviewedOn = "2030-01-01";
+  await assert.rejects(
+    buildWith(reviewed),
+    refusedWith(/different review date/),
+  );
+  // Extraction-run time is an observation: a new run of the same reviewed data is admitted, and it is not review time.
+  const rerun = clone(county);
+  rerun.input.generatedAtUtc = "2031-02-03T04:05:06+00:00";
+  const built = await buildWith(rerun);
+  assert.equal(built.record.source.extractedAtUtc, "2031-02-03T04:05:06+00:00");
+  assert.equal(built.record.source.reviewedOn, county.manifest.reviewedOn);
+  // A manifest with no source contract cannot admit anything.
+  const bare = clone(county);
+  delete bare.manifest.sourceContract;
+  await assert.rejects(buildWith(bare), refusedWith(/no source contract/));
+  // Changed extract evidence under an old (hypothetical) approval cannot slip through either.
+  const baseline = await buildWith(county);
+  const changed = clone(county);
+  changed.input.sources.licenseEvidenceUrl =
+    "https://example.test/unreviewed-evidence";
+  changed.input.sources.licenseEvidenceSha256 = "f".repeat(64);
+  await assert.rejects(
+    buildWith(
+      changed,
+      {},
+      {
+        ...county.approval,
+        approved: true,
+        approvedBy: "Synthetic test only",
+        approvedOn: "2026-01-01",
+        approvedComposition: baseline.record.composition,
+        blockers: [],
+      },
+    ),
+    AdmissionError,
+  );
+});
+
+test("audit: every copied source descriptor in a shipped record must be the reviewed one (each field, with a valid control)", async () => {
+  const county = makeCounty();
+  const built = await buildWith(county);
+  const check = (record: any) =>
+    checkPackage(record, built.body, countyManifestBytes(county));
+  check(built.record); // valid control
+  const fields: [string, string][] = [
+    ["license", "Synthetic unsupported license"],
+    ["licenseUrl", "https://example.test/unreviewed-license"],
+    ["licensedSourceUrl", "https://example.test/unreviewed-source"],
+    ["licensedItemId", "other-item"],
+    ["licenseEvidenceUrl", "https://example.test/unreviewed-evidence"],
+    ["licenseEvidenceSha256", "f".repeat(64)],
+    ["reviewedOn", "2030-01-01"],
+    ["evidenceVerifiedAtUtc", "2030-01-01T00:00:00+00:00"],
+    ["changes", "Nothing changed."],
+    ["disclaimer", "Guaranteed accurate."],
+  ];
+  const forgeries: [string, (record: any) => void, RegExp][] = [
+    ...fields.map(
+      ([field, value]) =>
+        [
+          `source.${field}`,
+          (r: any) => (r.source[field] = value),
+          new RegExp(`source ${field} is not the reviewed value`),
+        ] as [string, (r: any) => void, RegExp],
+    ),
+    [
+      "an extra source field",
+      (r) => (r.source.grantedBy = "someone"),
+      /unexpected or missing fields/,
+    ],
+    [
+      "a removed source field",
+      (r) => delete r.source.disclaimer,
+      /unexpected or missing fields/,
+    ],
+    [
+      "a non-text extraction time",
+      (r) => (r.source.extractedAtUtc = 5),
+      /no extraction time/,
+    ],
+    [
+      "per-layer counts",
+      (r) => (r.content.layerCounts = { "16": 99 }),
+      /per-layer counts/,
+    ],
+    [
+      "omitted proposed segments",
+      (r) => (r.omitted.proposedFeatureIds = []),
+      /omitted proposed segments/,
+    ],
+  ];
+  for (const [name, forge, pattern] of forgeries) {
+    const record = clone(built.record);
+    forge(record);
+    assert.throws(() => check(record), refusedWith(pattern), name);
+  }
+});
+
+test("fresh provenance: a forged source descriptor in the shipped package is a blocker, even under a matching hypothetical approval", async () => {
+  await withLab({}, { build: approveOf() }, async ({ paths, distData }) => {
+    const file = join(distData, "dataset.json");
+    const original = await readFile(file, "utf8");
+    // control: the genuine package under its approved composition has no substantive blocker
+    assert.deepEqual(substantive(await blockersOf(paths)), []);
+    for (const [field, value] of [
+      ["licenseEvidenceUrl", "https://example.test/unreviewed-evidence"],
+      ["license", "Synthetic unsupported license"],
+      ["reviewedOn", "2030-01-01"],
+    ]) {
+      const record = JSON.parse(original);
+      record.source[field] = value;
+      await writeFile(file, JSON.stringify(record));
+      assert.ok(
+        (await blockersOf(paths)).some((b) =>
+          new RegExp(`content check failed.*source ${field}`).test(b),
+        ),
+        field,
+      );
+      const provenance = await writeProvenance({ paths, source: CLEAN });
+      assert.equal(provenance.publicRelease.allowed, false);
+      await assert.rejects(
+        verifyProvenance({ paths, requirePublic: true, source: CLEAN }),
+        /source/,
+      );
+    }
+    await writeFile(file, original);
+    assert.deepEqual(substantive(await blockersOf(paths)), []);
+  });
+});
+
+test("optional layers: every copied descriptor of the OpenStreetMap supplement and the proposed layer is recomputed (valid controls included)", async () => {
+  const county = makeCounty();
+  for (const kind of ["OSM", "Proposed"] as const) {
+    const fixture = kind === "OSM" ? makeSupplement() : makeProposed();
+    const part = {
+      inputText: JSON.stringify(fixture.input),
+      manifest: fixture.manifest,
+      manifestBytes: Buffer.from(JSON.stringify(fixture.manifest)),
+    };
+    const built = await buildWith(
+      county,
+      kind === "OSM" ? { supplement: part } : { proposed: part },
+    );
+    const check = (record: any) =>
+      checkPackage(
+        record,
+        built.body,
+        countyManifestBytes(county),
+        kind === "OSM" ? part.manifestBytes : null,
+        undefined,
+        kind === "Proposed" ? part.manifestBytes : null,
+      );
+    check(built.record); // valid control
+    const descriptorOf = (record: any) =>
+      kind === "OSM" ? record.supplements[0] : record.proposedLayer;
+    const fields = Object.keys(descriptorOf(built.record)).filter(
+      (f) => f !== "manifestSha256",
+    );
+    assert.ok(fields.length >= 6, `${kind} descriptor fields: ${fields}`);
+    for (const field of fields) {
+      const record = clone(built.record);
+      const descriptor = descriptorOf(record);
+      const value = descriptor[field];
+      descriptor[field] =
+        typeof value === "number"
+          ? value + 1
+          : Array.isArray(value)
+            ? [...value, "forged"]
+            : `${value}-forged`;
+      assert.throws(
+        () => check(record),
+        (error: any) => error instanceof AdmissionError,
+        `${kind}.${field}`,
+      );
+    }
+    // A dropped or added descriptor field is also refused.
+    for (const change of [
+      (d: any) => delete d.reviewedOn,
+      (d: any) => (d.grantedBy = "someone"),
+    ]) {
+      const record = clone(built.record);
+      change(descriptorOf(record));
+      assert.throws(() => check(record), AdmissionError);
+    }
+  }
+});
+
+test("the committed source contract is real and unapproved: evidence recorded as an observation, rights unresolved", async () => {
+  const root = join(process.cwd(), "..");
+  const manifest = JSON.parse(
+    await readFile(
+      join(root, "data", "web-reviewed-trails.manifest.json"),
+      "utf8",
+    ),
+  );
+  const contract = sourceContractOf(manifest);
+  assert.equal(
+    contract.evidenceSha256,
+    "5123f51c9a79f75e3b386b108437e383b99702c78a63cc60dc2f077253c28845",
+  );
+  assert.match(manifest.sourceContract.scope, /NOT a pinned fact/);
+  assert.match(
+    manifest.sourceContract.licenseEvidenceObservation.meaning,
+    /distinct from the review date/,
+  );
+  // The reviewed facts are the manifest's own top-level fields; the review date and the run time are not the same thing.
+  assert.equal(manifest.reviewedOn, "2026-09-28");
+  assert.notEqual(
+    manifest.sourceContract.licenseEvidenceObservation.observedAtUtc.slice(
+      0,
+      10,
+    ),
+    manifest.reviewedOn,
+  );
+  const approval = JSON.parse(
+    await readFile(
+      join(process.cwd(), "release", "dataset.county.json"),
+      "utf8",
+    ),
+  );
+  assert.equal(approval.approved, false);
+  assert.equal(approval.approvedBy, null);
+  assert.equal(approval.approvedOn, null);
+  assert.equal(approval.approvedComposition, null);
+  const proposed = JSON.parse(
+    await readFile(
+      join(root, "data", "web-proposed-trails.manifest.json"),
+      "utf8",
+    ),
+  );
+  assert.notEqual(proposed.rights?.status, "granted");
 });

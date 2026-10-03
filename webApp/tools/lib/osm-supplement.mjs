@@ -38,6 +38,16 @@ const refuse = (message) => {
   throw new SupplementError(message);
 };
 const sha256Text = (text) => createHash("sha256").update(text).digest("hex");
+/** JSON text with every object's keys in a fixed order, so two descriptions can be compared whatever order they came in. */
+const stable = (value) =>
+  JSON.stringify(value, (_key, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : v,
+  );
+
 const finitePoint = (point) =>
   Array.isArray(point) &&
   point.length === 2 &&
@@ -234,12 +244,10 @@ export function checkSupplementLayer(layer, record, manifest, manifestBytes) {
     JSON.stringify({ layers: [layer] }),
     manifest,
   );
-  if (
-    part.featureCount !== facts.featureCount ||
-    JSON.stringify(part.wayIds) !== JSON.stringify(facts.wayIds) ||
-    JSON.stringify(part.excludedUntilVerified) !==
-      JSON.stringify(facts.excludedUntilVerified)
-  )
+  // Every claim the record copies (layer id, count, ways, review date, licence, licence URL, attribution, exclusions) must
+  // be what the reviewed manifest and the layer itself say; only the manifest hash is the record's own.
+  const { manifestSha256: _own, ...claimed } = part;
+  if (stable(claimed) !== stable(facts))
     refuse(
       "The record's description of the OpenStreetMap supplement is wrong.",
     );

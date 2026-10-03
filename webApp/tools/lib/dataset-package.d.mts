@@ -98,3 +98,8 @@ export function checkPackage(
 ): any;
 export const accessManifestFile: string;
 export const committedAccessManifestFile: string;
+export function sourceContractOf(manifest: any): {
+  changes: string;
+  disclaimer: string;
+  evidenceSha256: string | null;
+};
