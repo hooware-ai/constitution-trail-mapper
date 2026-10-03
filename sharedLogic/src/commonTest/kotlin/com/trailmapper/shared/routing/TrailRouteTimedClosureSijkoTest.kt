@@ -370,6 +370,7 @@ class TrailRouteTimedClosureSijkoTest {
         val spur = trail("54:9100", eastOf(vertex98, 4.0), eastOf(vertex98, 60.0))
         var derived = 0
         listOf(listOf(spur, rawLeg), listOf(rawLeg, spur)).forEach { features ->
+            derivedLegs = derivedOf(features)
             listOf(1.0, 5.0, 10.0, 14.0, 30.0).forEach { meters ->
                 val a = mapped(features, along(0.6 * legMeters))
                 val b = mapped(features, along(0.6 * legMeters + meters))
@@ -385,7 +386,7 @@ class TrailRouteTimedClosureSijkoTest {
                     assertEquals(listOf(closure.id), gated(route, now), "derived line, $meters m, at the instant")
                     assertEquals(listOf(closure.id), gated(route, estimate + 1), "derived line, $meters m, after the estimate")
                     val outcome = TrailRouteClosureGateSijko.recalculate(
-                        features, route, TrailRouteRerouteAccess.NotAvailable, nowEpochMillis = now,
+                        features, route, TrailRouteRerouteAccess.NotAvailable, nowEpochMillis = now, derived = derivedLegs,
                     )
                     assertTrue(outcome is TrailRouteRecalculationOutcome.NoSafeRoute, "recalculating gave $outcome")
                     assertTrue(closure in (outcome as TrailRouteRecalculationOutcome.NoSafeRoute).blockingClosures)
@@ -404,6 +405,7 @@ class TrailRouteTimedClosureSijkoTest {
         // A different feature running 4 m beside the closed section is not the closed trail: no blanket radius.
         val parallel = trail("54:9200", eastOf(along(300.0), 4.0), eastOf(along(700.0), 4.0))
         val features = listOf(spur, rawLeg, parallel)
+        derivedLegs = derivedOf(features)
         fun open(from: MapPoint, to: MapPoint) {
             val route = assertNotNull(findRoute(features, mapped(features, from), mapped(features, to), now - 1))
             assertTrue(route.segments.none { !it.isRouted })
@@ -431,6 +433,7 @@ class TrailRouteTimedClosureSijkoTest {
         fun beside(meters: Double) = MapPoint(crossing.closedFrom.latitude + meters / 111_194.93, crossing.closedFrom.longitude)
         var derived = 0
         listOf(listOf(spur, leg), listOf(leg, spur)).forEach { features ->
+            derivedLegs = derivedOf(features)
             val south = mapped(features, beside(-15.0))
             val north = mapped(features, MapPoint(vertex8.latitude + 0.0005, vertex8.longitude))
             listOf(south to north, north to south).forEach { (from, to) ->
@@ -523,6 +526,7 @@ class TrailRouteTimedClosureSijkoTest {
         val spur = trail("54:9100", eastOf(vertex98, 14.0), eastOf(vertex98, 60.0))
         var denseChecked = 0
         listOf(listOf(spur, rawLeg), listOf(rawLeg, spur)).forEach { features ->
+            derivedLegs = derivedOf(features)
             listOf(1.0, 5.0, 20.0, 100.0).forEach { meters ->
                 val a = mapped(features, along(0.6 * legMeters))
                 val b = mapped(features, along(0.6 * legMeters + meters))
@@ -558,8 +562,9 @@ class TrailRouteTimedClosureSijkoTest {
         val north = south + TrailDistanceSijko.metersBetween(closure.closedFrom, closure.closedTo)
         val spur = trail("54:9100", eastOf(vertex98, 14.0), eastOf(vertex98, 60.0))
         listOf(listOf(rawLeg), listOf(spur, rawLeg)).forEach { features ->
+            derivedLegs = derivedOf(features)
             fun route(from: Double, to: Double) =
-                assertNotNull(findRoute(features, mapped(features, along(from)), mapped(features, along(to)), now - 1))
+                assertNotNull(findRoute(features, mapped(features, onTheLeg(from)), mapped(features, onTheLeg(to)), now - 1))
             // Penetration at either bound is refused sparse and dense; an approach that ends at a bound is open in both.
             listOf(
                 route(south - 4.0, south + 3.0), route(north + 4.0, north - 3.0), route(south - 20.0, north + 20.0),
@@ -580,6 +585,7 @@ class TrailRouteTimedClosureSijkoTest {
         val leg = trail("54:1305", southEnd, vertex6, vertex7, vertex8, northEnd)
         val camelSpur = trail("54:9100", eastOf(vertex7, 14.0), eastOf(vertex7, 60.0))
         listOf(listOf(leg), listOf(camelSpur, leg)).forEach { features ->
+            derivedLegs = derivedOf(features)
             val a = mapped(features, MapPoint(crossing.closedFrom.latitude - 15.0 / 111_194.93, crossing.closedFrom.longitude))
             val b = mapped(features, MapPoint(vertex8.latitude + 0.0005, vertex8.longitude))
             listOf(a to b, b to a).forEach { (from, to) ->
@@ -600,7 +606,201 @@ class TrailRouteTimedClosureSijkoTest {
         assertTrue(TrailRouteAdvisorySijko.entersClosedSection(subdivided(hop, 0.05, allTypes = true), now))
     }
 
-    private fun gated(route: TrailRoute, now: Long) = TrailRouteClosureGateSijko.blockingAdvisories(route, now).map { it.id }
+    @Test
+    fun anApproachThatEndsAtTheTransferredBoundIsOpenAndAnyPenetrationPastItIsRefusedOnADerivedChord() {
+        val now = closure.activeFromEpochMillis
+        val estimate = assertNotNull(closure.estimatedEndEpochMillis)
+        val legMeters = TrailDistanceSijko.metersBetween(vertex97, vertex98)
+        val south = TrailDistanceSijko.metersBetween(vertex97, closure.closedFrom)
+        val north = south + TrailDistanceSijko.metersBetween(closure.closedFrom, closure.closedTo)
+        // The northern node 14 m east of the raw endpoint, listed first, in both feature orders; each bound is carried
+        // onto the chord by its fraction of the raw leg, and the control rides to exactly that point and past it.
+        val spur = trail("54:9100", eastOf(vertex98, 14.0), eastOf(vertex98, 60.0))
+        listOf(listOf(spur, rawLeg), listOf(rawLeg, spur)).forEach { features ->
+            derivedLegs = derivedOf(features)
+            val leg = derivedLegs.singleOrNull { it.closureId == closure.id }
+            if (leg == null) {
+                // The spur does not own the node in this order: the geometry is the raw leg and needs no transfer.
+                assertTrue(derivedLegs.none { it.closureId == closure.id })
+                return@forEach
+            }
+            val chordMeters = TrailDistanceSijko.metersBetween(leg.from, leg.to)
+            fun onChord(position: Double) = MapPoint(
+                leg.from.latitude + (leg.to.latitude - leg.from.latitude) * position / chordMeters,
+                leg.from.longitude + (leg.to.longitude - leg.from.longitude) * position / chordMeters,
+            )
+            // Not vacuous: the chord really is off the raw line, and the transferred bounds are not the projected ones.
+            assertTrue(TrailDistanceSijko.projectToSegment(onChord(leg.low), vertex97, vertex98).distanceMeters > 1.0)
+            assertEquals(south * chordMeters / legMeters, leg.low, 0.05)
+            assertEquals(north * chordMeters / legMeters, leg.high, 0.05)
+            fun route(from: Double, to: Double) =
+                assertNotNull(findRoute(features, mapped(features, onChord(from)), mapped(features, onChord(to)), now - 1), "$from to $to")
+            listOf(0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 3.0).forEach { into ->
+                listOf(
+                    route(leg.low - 20.0, leg.low + into), route(leg.low + into, leg.low - 20.0),
+                    route(leg.high + 20.0, leg.high - into), route(leg.high - into, leg.high + 20.0),
+                ).forEach { sparse ->
+                    assertTrue(sparse.segments.none { !it.isRouted })
+                    assertTrue(gated(sparse, now - 1).isEmpty())
+                    assertEquals(listOf(closure.id), gated(sparse, now), "$into m past a bound")
+                    assertEquals(listOf(closure.id), gated(sparse, estimate + 1))
+                    assertEquals(listOf(closure.id), gated(subdivided(sparse, 0.01), now), "$into m past a bound, dense")
+                }
+            }
+            listOf(
+                route(leg.low - 30.0, leg.low), route(leg.low, leg.low - 30.0),
+                route(leg.high, leg.high + 30.0), route(leg.high + 30.0, leg.high),
+            ).forEach { sparse ->
+                assertTrue(gated(sparse, now - 1).isEmpty())
+                assertTrue(gated(sparse, now).isEmpty(), "ending exactly at the transferred bound is not travel")
+                assertTrue(gated(subdivided(sparse, 0.01), now).isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun anOutsideBendCannotHideExactClosedTravelAtTheBoundary() {
+        val now = closure.activeFromEpochMillis
+        val estimate = assertNotNull(closure.estimatedEndEpochMillis)
+        val legMeters = TrailDistanceSijko.metersBetween(vertex97, vertex98)
+        val low = TrailDistanceSijko.metersBetween(vertex97, closure.closedFrom)
+        val straight = assertNotNull(findRoute(listOf(rawLeg), along(low - 21.0), along(low + 0.1), now - 1))
+        assertTrue(legMeters > low + 1.0)
+        assertEquals(listOf(closure.id), gated(straight, now))
+        // The same start and the same closed tail, with a bend that stays outside the closure and inside the 0.5 m the
+        // geometry check allows. Distances and cost follow the changed geometry.
+        fun point(along: Double, across: Double): MapPoint {
+            val base = along(along)
+            return eastOf(base, across)
+        }
+        val bent = listOf(point(low - 21.0, 0.0), point(low - 1.0, 0.4), point(low, 0.0), point(low + 0.1, 0.0))
+        val length = TrailDistanceSijko.pathLengthMeters(bent)
+        val route = straight.copy(
+            segments = listOf(straight.segments.single().copy(points = bent)),
+            edges = straight.edges.map { edge -> edge.copy(routeSegments = listOf(edge.routeSegments.single().copy(points = bent)), distanceMeters = length) },
+            totalDistanceMeters = length,
+            totalCost = straight.totalCost * length / straight.totalDistanceMeters,
+        )
+        assertTrue(gated(route, now - 1).isEmpty())
+        assertEquals(listOf(closure.id), gated(route, now), "the bend outside the closure must not hide the travel inside it")
+        assertEquals(listOf(closure.id), gated(route, estimate + 1))
+        // An outside bend with no closed tail is not travel; the tail alone, however short and however subdivided, is.
+        val ends = bent.take(3)
+        assertTrue(gated(route.copy(segments = listOf(route.segments.single().copy(points = ends)), edges = emptyList()), now).isEmpty())
+        val tail = bent.takeLast(2)
+        assertEquals(listOf(closure.id), gated(subdivided(route.copy(segments = listOf(route.segments.single().copy(points = tail))), 0.01), now))
+    }
+
+    @Test
+    fun theGraphCarriesAClosureAcrossASourceLegOfAMultiVertexRunPiecewise() {
+        val crossing = TrailRouteClosureSijko.camelbackCrossing
+        val start = crossing.activeFromEpochMillis
+        // A vertex 5 m before vertex 6 shares its node, so the run is W, 6, 7 with vertex 6 a bend INSIDE it; a spur
+        // listed first owns vertex 7's node, 14 m east. The crossing lies on source leg 6 to 7 only.
+        val before = MapPoint(vertex6.latitude - 5.0 / 111_194.93, vertex6.longitude)
+        val leg = trail("54:1305", southEnd, before, vertex6, vertex7, vertex8, northEnd)
+        val spur = trail("54:9100", eastOf(vertex7, 14.0), eastOf(vertex7, 60.0))
+        val features = listOf(spur, leg)
+        derivedLegs = derivedOf(features)
+        val legs = derivedLegs.filter { it.closureId == crossing.id }
+        // The run's own derived form and any junction connector of it each stand for source leg 6 to 7.
+        assertTrue(legs.isNotEmpty(), "a derived leg stands for source leg 6 to 7")
+        val derivedLeg = legs.first { TrailDistanceSijko.metersBetween(it.from, vertex6) < 0.01 }
+        // Piecewise: the leg starts at the unchanged interior vertex 6 and ends on the displaced node, so the position is
+        // the crossing's fraction of source leg 6 to 7 (about 0.98), never its fraction of the whole run's length.
+        assertTrue(TrailDistanceSijko.metersBetween(derivedLeg.from, vertex6) < 0.01)
+        assertEquals(14.0, TrailDistanceSijko.metersBetween(derivedLeg.to, vertex7), 0.5)
+        val length = TrailDistanceSijko.metersBetween(derivedLeg.from, derivedLeg.to)
+        val fraction = TrailDistanceSijko.metersBetween(vertex6, crossing.closedFrom) / TrailDistanceSijko.metersBetween(vertex6, vertex7)
+        assertEquals(fraction * length, derivedLeg.low, 0.05)
+        assertEquals(derivedLeg.low, derivedLeg.high, 1e-9)
+        // Routes over the crossing on that leg, sparse and dense, both directions: open before, refused from the instant.
+        fun onDerived(position: Double) = MapPoint(
+            derivedLeg.from.latitude + (derivedLeg.to.latitude - derivedLeg.from.latitude) * position / length,
+            derivedLeg.from.longitude + (derivedLeg.to.longitude - derivedLeg.from.longitude) * position / length,
+        )
+        listOf(0.02, 0.5, 3.0).forEach { into ->
+            val a = mapped(features, onDerived(derivedLeg.low - 15.0))
+            val b = mapped(features, onDerived(derivedLeg.low + into))
+            listOf(a to b, b to a).forEach { (from, to) ->
+                val route = assertNotNull(findRoute(features, from, to, start - 1))
+                assertTrue(route.segments.none { !it.isRouted })
+                assertTrue(gated(route, start - 1).isEmpty())
+                assertEquals(listOf(crossing.id), gated(route, start), "$into m past the transferred crossing")
+                assertEquals(listOf(crossing.id), gated(subdivided(route, 0.01), start))
+            }
+        }
+        // Ending 10 m short of the transferred crossing is not a crossing.
+        val short = assertNotNull(findRoute(features, mapped(features, onDerived(derivedLeg.low - 30.0)), mapped(features, onDerived(derivedLeg.low - 10.0)), start))
+        assertTrue(gated(short, start).isEmpty())
+    }
+
+    @Test
+    fun theGraphIsTheOnlySourceOfTheCorrespondenceAndASavedRouteCannotSupplyIt() {
+        val now = closure.activeFromEpochMillis
+        val legMeters = TrailDistanceSijko.metersBetween(vertex97, vertex98)
+        val spur = trail("54:9100", eastOf(vertex98, 14.0), eastOf(vertex98, 60.0))
+        val features = listOf(spur, rawLeg)
+        val legs = derivedOf(features)
+        derivedLegs = legs
+        val route = assertNotNull(findRoute(features, mapped(features, along(0.6 * legMeters)), mapped(features, along(0.6 * legMeters + 5.0)), now - 1))
+        assertEquals(listOf(closure.id), gated(route, now))
+        // Without the graph's legs only the unchanged source line is judged (a front end that has no graph keeps the
+        // earlier behavior, which this route escapes); nothing in the serialized route can substitute for them.
+        derivedLegs = emptyList()
+        val serialized = kotlinx.serialization.json.Json.decodeFromString(
+            TrailRoute.serializer(), kotlinx.serialization.json.Json.encodeToString(TrailRoute.serializer(), route),
+        )
+        assertEquals(route, serialized)
+        assertEquals(gated(route, now), gated(serialized, now))
+        // A different network's legs (the spur absent, so the geometry is raw) transfer nothing onto this route.
+        assertTrue(derivedOf(listOf(rawLeg)).isEmpty())
+    }
+
+    @Test
+    fun theDecisionDoesNotDependOnHowTheRouteGroupsTheSameGeometryIntoSegments() {
+        val now = closure.activeFromEpochMillis
+        val low = TrailDistanceSijko.metersBetween(vertex97, closure.closedFrom)
+        // 0.02 m of closed travel after a long approach: refused as one segment, and as two or three segments that split
+        // the same geometry so each piece alone is below the noise floor.
+        val points = listOf(along(low - 20.0), along(low), along(low + 0.01), along(low + 0.02))
+        val base = assertNotNull(findRoute(listOf(rawLeg), points.first(), points.last(), now - 1))
+        val template = base.segments.single()
+        fun regrouped(vararg groups: List<MapPoint>): TrailRoute = base.copy(
+            segments = groups.map { template.copy(points = it) },
+            edges = base.edges.map { edge -> edge.copy(routeSegments = groups.map { template.copy(points = it) }) },
+        )
+        val whole = regrouped(points)
+        val two = regrouped(points.take(2), points.drop(1))
+        val three = regrouped(points.take(2), points.subList(1, 3), points.drop(2))
+        listOf(whole, two, three).forEach { route ->
+            assertEquals(listOf(closure.id), gated(route, now), "${route.segments.size} segments")
+        }
+        // And travel that really is below the noise floor stays open however it is grouped.
+        val tiny = listOf(along(low - 20.0), along(low), along(low + 0.004), along(low + 0.008))
+        listOf(regrouped(tiny), regrouped(tiny.take(2), tiny.drop(1)), regrouped(tiny.take(3), tiny.drop(2))).forEach { route ->
+            assertTrue(gated(route, now).isEmpty(), "${route.segments.size} segments of numerical noise")
+        }
+    }
+
+    // Where the loaded graph's derived geometry stands for a closure's source leg (what a front end with the graph passes).
+    private var derivedLegs: List<TrailRouteDerivedClosureLeg> = emptyList()
+
+    /** A point [meters] along the raw leg, carried onto the graph's derived leg when it has one (by the same fraction). */
+    private fun onTheLeg(meters: Double): MapPoint {
+        val leg = derivedLegs.singleOrNull { it.closureId == closure.id } ?: return along(meters)
+        val fraction = meters / TrailDistanceSijko.metersBetween(vertex97, vertex98)
+        return MapPoint(
+            leg.from.latitude + (leg.to.latitude - leg.from.latitude) * fraction,
+            leg.from.longitude + (leg.to.longitude - leg.from.longitude) * fraction,
+        )
+    }
+
+    private fun derivedOf(features: List<TrailNetworkFeature>) =
+        TrailRouteClosureDerivationSijko.legsFor(TrailGraphBuilderSijko.buildGraph(features))
+
+    private fun gated(route: TrailRoute, now: Long) =
+        TrailRouteClosureGateSijko.blockingAdvisories(route, now, derivedLegs).map { it.id }
 
     private fun camel(route: TrailRoute, now: Long) =
         TrailRouteAdvisorySijko.forRoute(route, now).singleOrNull { it.id == TrailRouteClosureSijko.camelbackCrossing.id }

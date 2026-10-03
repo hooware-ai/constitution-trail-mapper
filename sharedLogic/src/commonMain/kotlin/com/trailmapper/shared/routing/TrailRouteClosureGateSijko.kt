@@ -27,9 +27,10 @@ object TrailRouteClosureGateSijko {
     fun blockingAdvisories(
         route: TrailRoute,
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
+        derived: List<TrailRouteDerivedClosureLeg> = emptyList(),
     ): List<TrailRouteAdvisory> {
         val activeClosureIds = TrailRouteClosureSijko.activeClosures(nowEpochMillis).mapTo(mutableSetOf()) { it.id }
-        return TrailRouteAdvisorySijko.forRoute(route, nowEpochMillis).filter { it.id in activeClosureIds }
+        return TrailRouteAdvisorySijko.forRoute(route, nowEpochMillis, derived).filter { it.id in activeClosureIds }
     }
 
     fun startOf(route: TrailRoute): MapPoint? = route.segments.firstOrNull()?.points?.firstOrNull()
@@ -55,6 +56,7 @@ object TrailRouteClosureGateSijko {
         access: TrailRouteRerouteAccess,
         completedSessions: List<CompletedExerciseSession> = emptyList(),
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
+        derived: List<TrailRouteDerivedClosureLeg> = emptyList(),
         cancellationCheckpoint: () -> Unit = {},
     ): TrailRouteRecalculationOutcome {
         val accessFeatures = when (access) {
@@ -62,7 +64,7 @@ object TrailRouteClosureGateSijko {
             TrailRouteRerouteAccess.NotAvailable -> null
             TrailRouteRerouteAccess.LoadFailed -> return TrailRouteRecalculationOutcome.RoadDataFailed
         }
-        val start = startOf(route) ?: return noRouteFor(route, nowEpochMillis)
+        val start = startOf(route) ?: return noRouteFor(route, nowEpochMillis, derived)
         val replacement = if (route.kind == TrailRouteKind.ExerciseLoop) {
             val targetMeters = route.requestedDistanceMeters ?: route.totalDistanceMeters
             val accessGraph = accessFeatures?.let { roads ->
@@ -93,17 +95,18 @@ object TrailRouteClosureGateSijko {
         return replacement
             // Not a way around a closure: a route that travels it, or whose own geometry (an estimated hop included)
             // starts or ends inside a closed section.
-            ?.takeIf { blockingAdvisories(it, nowEpochMillis).isEmpty() }
+            ?.takeIf { blockingAdvisories(it, nowEpochMillis, derived).isEmpty() }
             ?.takeIf { !TrailRouteAdvisorySijko.entersClosedSection(it, nowEpochMillis) }
             ?.let(TrailRouteRecalculationOutcome::Replacement)
-            ?: noRouteFor(route, nowEpochMillis)
+            ?: noRouteFor(route, nowEpochMillis, derived)
     }
 
     private fun noRouteFor(
         route: TrailRoute,
         nowEpochMillis: Long,
+        derived: List<TrailRouteDerivedClosureLeg>,
     ): TrailRouteRecalculationOutcome.NoSafeRoute {
-        val blockingIds = blockingAdvisories(route, nowEpochMillis).mapTo(mutableSetOf()) { it.id }.also { ids ->
+        val blockingIds = blockingAdvisories(route, nowEpochMillis, derived).mapTo(mutableSetOf()) { it.id }.also { ids ->
             // A route that only starts or ends inside a closed section (an estimated hop is its sole geometry there) is
             // stopped by that closure too, so the rider is told which one.
             TrailRouteClosureSijko.activeClosures(nowEpochMillis)

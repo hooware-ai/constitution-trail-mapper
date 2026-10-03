@@ -97,6 +97,7 @@ class TimedClosureRealDataTest {
     @Test
     fun bothResidualPortionsStayRoutableAndGateFree() {
         variants().forEach { (name, network) ->
+            derivedLegs = derivedOf(network)
             val southern = assertNotNull(find(network, raw[97], closure.closedFrom, willowStart), "$name southern")
             val northern = assertNotNull(find(network, closure.closedTo, raw[98], willowStart), "$name northern")
             listOf(southern, northern).forEach { route ->
@@ -116,6 +117,7 @@ class TimedClosureRealDataTest {
     fun shortRoutesWhollyInsideTheSectionAreGatedOnTheActualPathAtEveryLengthInBothDirections() {
         val legMeters = TrailDistanceSijko.metersBetween(raw[97], raw[98])
         variants().forEach { (name, network) ->
+            derivedLegs = derivedOf(network)
             var refused = 0
             val first = pointAlong(0.6 * legMeters)
             listOf(1.0, 5.0, 10.0, 14.0, 16.0, 30.0, 150.0).forEach { meters ->
@@ -128,7 +130,7 @@ class TimedClosureRealDataTest {
                         assertEquals(listOf(closure.id), gated(route, willowEstimate + 1), "$name gated after the estimate, $meters m")
                     }
                     // Every one of these starts or ends inside the section, so recalculation has no way around it.
-                    val outcome = TrailRouteClosureGateSijko.recalculate(network, route, TrailRouteRerouteAccess.NotAvailable, nowEpochMillis = willowStart)
+                    val outcome = TrailRouteClosureGateSijko.recalculate(network, route, TrailRouteRerouteAccess.NotAvailable, nowEpochMillis = willowStart, derived = derivedLegs)
                     assertTrue(outcome is TrailRouteRecalculationOutcome.NoSafeRoute, "$name $meters m recalculation gave $outcome")
                     assertTrue(closure in (outcome as TrailRouteRecalculationOutcome.NoSafeRoute).blockingClosures, name)
                 }
@@ -148,6 +150,7 @@ class TimedClosureRealDataTest {
         val south = TrailDistanceSijko.metersBetween(raw[97], closure.closedFrom)
         val north = south + TrailDistanceSijko.metersBetween(closure.closedFrom, closure.closedTo)
         variants().forEach { (name, network) ->
+            derivedLegs = derivedOf(network)
             fun routeOf(from: Double, to: Double) =
                 assertNotNull(find(network, pointAlong(from), pointAlong(to), willowStart - 1), "$name $from to $to")
             val penetrating = listOf(
@@ -159,9 +162,14 @@ class TimedClosureRealDataTest {
             if (name == "asset order" || name == "reversed raw path") {
                 assertTrue(refusedHere >= 4, "$name: the gate refused only $refusedHere penetrating routes")
             }
+            // Where the graph moved a node, the planner's chord is the raw leg stretched toward the anchor, and the bound is
+            // carried onto it by fraction: a tap on the raw bound lands up to a few meters from the carried one, so there
+            // the approach is judged 15 m short of the bound (the exact bound-ending controls on carried bounds are in the
+            // synthetic tests). Everywhere else the approach ends exactly at the bound.
+            val shy = if (derivedLegs.any { it.closureId == closure.id }) 15.0 else 0.0
             listOf(
-                routeOf(south - 30.0, south), routeOf(south, south - 30.0), routeOf(south - 30.0, south - 0.3),
-                routeOf(north, north + 30.0), routeOf(north + 30.0, north), routeOf(north + 0.3, north + 30.0),
+                routeOf(south - 30.0, south - shy), routeOf(south - shy, south - 30.0), routeOf(south - 30.0, south - shy - 0.3),
+                routeOf(north + shy, north + 30.0), routeOf(north + 30.0, north + shy), routeOf(north + shy + 0.3, north + 30.0),
             ).forEach { route -> assertTrue(gated(route, willowStart).isEmpty(), "$name residual approach is not section travel") }
         }
     }
@@ -175,6 +183,7 @@ class TimedClosureRealDataTest {
         var derived = 0
         var eligible = 0
         variants().forEach { (name, network) ->
+            derivedLegs = derivedOf(network)
             val graph = TrailGraphBuilderSijko.buildGraph(network)
             fun mapped(point: MapPoint) = assertNotNull(NearestTrailSnapSijko.nearestSnap(graph, point)).projectedPoint
             val first = mapped(pointAlong(0.6 * legMeters))
@@ -191,7 +200,7 @@ class TimedClosureRealDataTest {
                     }
                     assertEquals(listOf(closure.id), gated(route, willowStart), "$name map-picker route, $meters m, at the instant")
                     assertEquals(listOf(closure.id), gated(route, willowEstimate + 1), "$name map-picker route, $meters m, after the estimate")
-                    val outcome = TrailRouteClosureGateSijko.recalculate(network, route, TrailRouteRerouteAccess.NotAvailable, nowEpochMillis = willowStart)
+                    val outcome = TrailRouteClosureGateSijko.recalculate(network, route, TrailRouteRerouteAccess.NotAvailable, nowEpochMillis = willowStart, derived = derivedLegs)
                     assertTrue(outcome is TrailRouteRecalculationOutcome.NoSafeRoute, "$name $meters m recalculation gave $outcome")
                     assertTrue(closure in (outcome as TrailRouteRecalculationOutcome.NoSafeRoute).blockingClosures, name)
                 }
@@ -207,6 +216,7 @@ class TimedClosureRealDataTest {
         val start = camelback.activeFromEpochMillis
         val end = assertNotNull(camelback.estimatedEndEpochMillis)
         variants().forEach { (name, network) ->
+            derivedLegs = derivedOf(network)
             val graph = TrailGraphBuilderSijko.buildGraph(network)
             fun mapped(point: MapPoint) = assertNotNull(NearestTrailSnapSijko.nearestSnap(graph, point)).projectedPoint
             fun beside(meters: Double) =
@@ -261,6 +271,7 @@ class TimedClosureRealDataTest {
         val index = path.indexOfFirst { TrailDistanceSijko.metersBetween(it, closure.closedFrom) < 1.0 }
         assertTrue(index in 1 until path.lastIndex, "the actual crossing vertex is within a meter of the south bound")
         variants().forEach { (name, network) ->
+            derivedLegs = derivedOf(network)
             listOf(path[index - 2] to path[index + 3], path[index + 3] to path[index - 2], path.first() to path.last()).forEach { (from, to) ->
                 listOf(willowStart - 1, willowStart + 1, willowEstimate + 1).forEach { now ->
                     val route = assertNotNull(find(network, from, to, now), "$name crossing route at $now")
@@ -283,6 +294,7 @@ class TimedClosureRealDataTest {
         // The crossing is on leg 6 to 7 of the actual path.
         assertTrue(TrailDistanceSijko.projectToSegment(camelback.closedFrom, raw[6], raw[7]).distanceMeters < 1.0)
         variants().forEach { (name, network) ->
+            derivedLegs = derivedOf(network)
             listOf(raw[6] to raw[8], raw[8] to raw[6], raw[3] to raw[12]).forEach { (from, to) ->
                 val route = assertNotNull(find(network, from, to, start - 1), "$name route exists")
                 assertTrue(gated(route, start - 1).isEmpty(), "$name open before")
@@ -366,7 +378,14 @@ class TimedClosureRealDataTest {
         return true
     }
 
-    private fun gated(route: TrailRoute, now: Long) = TrailRouteClosureGateSijko.blockingAdvisories(route, now).map { it.id }
+    // Where the loaded graph's derived geometry stands for a closure's source leg (what a front end with the graph passes).
+    private var derivedLegs: List<TrailRouteDerivedClosureLeg> = emptyList()
+
+    private fun derivedOf(network: List<TrailNetworkFeature>) =
+        TrailRouteClosureDerivationSijko.legsFor(TrailGraphBuilderSijko.buildGraph(network))
+
+    private fun gated(route: TrailRoute, now: Long) =
+        TrailRouteClosureGateSijko.blockingAdvisories(route, now, derivedLegs).map { it.id }
 
     private fun camel(route: TrailRoute, now: Long) =
         TrailRouteAdvisorySijko.forRoute(route, now).singleOrNull { it.id == camelback.id }

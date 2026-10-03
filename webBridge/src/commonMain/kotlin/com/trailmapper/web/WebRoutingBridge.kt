@@ -276,8 +276,9 @@ class WebRoutingBridge {
 
     private fun describe(route: TrailRoute, now: Long): JsonObject {
         validateRoute(route)
-        val advisories = TrailRouteAdvisorySijko.forRoute(route, now)
-        val blocking = TrailRouteClosureGateSijko.blockingAdvisories(route, now)
+        val derived = derivedClosureLegs(route)
+        val advisories = TrailRouteAdvisorySijko.forRoute(route, now, derived)
+        val blocking = TrailRouteClosureGateSijko.blockingAdvisories(route, now, derived)
         val accessGaps = accessGapJson(route)
         val estimated = accessGaps.isNotEmpty()
         val proposed = route.edges.any { it.status == TrailFeatureStatus.Proposed } ||
@@ -500,7 +501,7 @@ class WebRoutingBridge {
     private fun recalculate(request: JsonObject, now: Long): JsonObject {
         val route = request.route()
         val access = accessRoads(TrailRouteClosureGateSijko.accessEndpoints(route))?.let(TrailRouteRerouteAccess::Roads) ?: TrailRouteRerouteAccess.NotAvailable
-        return when (val result = TrailRouteClosureGateSijko.recalculate(requireNetwork(), route, access, completedSessions(request), nowEpochMillis = now)) {
+        return when (val result = TrailRouteClosureGateSijko.recalculate(requireNetwork(), route, access, completedSessions(request), nowEpochMillis = now, derived = derivedClosureLegs(route))) {
             is TrailRouteRecalculationOutcome.Replacement -> describe(result.route, now)
             is TrailRouteRecalculationOutcome.NoSafeRoute -> noRoute(result.blockingClosures)
             TrailRouteRecalculationOutcome.RoadDataFailed -> error("Road access data failed to load.")
@@ -618,7 +619,7 @@ class WebRoutingBridge {
         // when a closure applies, the uncut graph as well, so a route made before it is not misread as moved).
         val indexes = buildList {
             add(geometryIndexes.getOrPut("open|$layers|$closedKey") { GeometryIndex(TrailGraphBuilderSijko.buildGraph(openNetwork.features)) })
-            if (closedKey.isNotEmpty()) add(geometryIndexes.getOrPut("all|$layers") { GeometryIndex(TrailGraphBuilderSijko.buildGraph(enabled)) })
+            if (closedKey.isNotEmpty()) add(geometryIndexes.getOrPut("all|$layers") { GeometryIndex(TrailGraphBuilderSijko.buildGraph(enabled), keepGraph = true) })
         }
         // Ordinary-road access the planner spliced into the route comes from the access graph it built for the same
         // endpoints (start and destination are the route's own first and last points), so check it against that.
@@ -670,6 +671,20 @@ class WebRoutingBridge {
                 (segment.type == TrailRouteSegmentType.Access && accessIndex?.derivesFromAny(segment.points) == true)
         }
 
+    /**
+     * Where the graph this route was planned on derives geometry for a closure's source leg, with the closure's interval
+     * transferred onto it: computed from the CURRENT graph (never from the saved route), so a route snapped onto a displaced
+     * node anchor is judged against the interval the graph itself puts there. Empty unless the route touches a closure's feature.
+     */
+    private fun derivedClosureLegs(route: TrailRoute): List<TrailRouteDerivedClosureLeg> {
+        if (features == null) return emptyList()
+        val featureIds = TrailRouteClosureSijko.closures.filter { it.boundsProjected || it.isCrossing }.mapTo(mutableSetOf()) { it.featureId }
+        if (route.edges.none { it.sourceFeatureId in featureIds }) return emptyList()
+        val layers = route.routeLayers ?: RouteLayerDefaultsSijko.defaultSelection()
+        val enabled = TrailFeatureFilterSijko.enabledFeatures(requireNetwork(), layers)
+        return geometryIndexes.getOrPut("all|$layers") { GeometryIndex(TrailGraphBuilderSijko.buildGraph(enabled), keepGraph = true) }.derivedClosureLegs
+    }
+
     /** The planner's access graph for this route's endpoints, as geometry references; null when no access data is loaded. */
     private fun accessIndexFor(route: TrailRoute): GeometryIndex? {
         if (roads == null) return null
@@ -681,7 +696,14 @@ class WebRoutingBridge {
     }
 
     /** The polylines the planner's graph derives from each feature: raw runs, connectors, and their node-anchored forms. */
-    private class GeometryIndex(graph: TrailGraph) {
+    private class GeometryIndex(graph: TrailGraph, keepGraph: Boolean = false) {
+        private val kept = if (keepGraph) graph else null
+
+        /** Where this graph's derived geometry stands for a closure's source leg (computed once, on first use; needs [keepGraph]). */
+        val derivedClosureLegs: List<TrailRouteDerivedClosureLeg> by lazy {
+            kept?.let(TrailRouteClosureDerivationSijko::legsFor) ?: emptyList()
+        }
+
         private class Reference(val points: List<MapPoint>) {
             val south = points.minOf { it.latitude }
             val north = points.maxOf { it.latitude }

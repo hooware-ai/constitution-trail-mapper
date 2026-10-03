@@ -23,25 +23,23 @@ object TrailRouteAdvisorySijko {
     // intersection of the city's road line with the county trail leg, so a few meters absorb the map's own precision.
     private const val CrossingToleranceMeters = 3.0
 
-    // A leg whose source is not known is "on" a closed section only when both its ends are within this distance of the
-    // section's line: the section lies on the unchanged source leg, so travel along it is exact to rounding, and a
-    // perpendicular crossing is not.
+    // A leg is "on" a line when both its ends are within this distance of it: planned geometry lies ON the raw source
+    // line, or ON the derived leg that replaces it, so travel along either is exact to rounding, and a perpendicular
+    // crossing is not.
     private const val OnSectionLineToleranceMeters = 0.5
 
-    // A saved route's trail geometry is anchored on graph node points, and the graph puts every vertex within its snap
-    // tolerance on one node. When a neighboring feature owns that node, the route follows a chord to ITS point instead of
-    // the source vertex, so a leg that really is a piece of the source feature can lie this far off the unchanged source
-    // line. Only legs whose recorded source is the closure's own feature, and only when aligned with the source line and
-    // within its extent, are judged against that line with this tolerance: the lineage is verified, nothing else is within
-    // its reach.
-    private const val DerivedLineToleranceMeters = TrailGraphBuilderSijko.DEFAULT_SNAP_TOLERANCE_METERS
+    // Polylines whose ends meet within this distance are one continuous geometry.
+    private const val JoinMeters = 0.01
+
+    // An estimated hop has no source at all, so it is judged with the graph's own reach: the distance within which the
+    // graph moves a vertex onto a neighboring node.
+    private const val GraphReachMeters = TrailGraphBuilderSijko.DEFAULT_SNAP_TOLERANCE_METERS
 
     // Overlap with the section's interval counts above this: numerical noise only, never a minimum riding distance.
     private const val SectionOverlapEpsilonMeters = 0.01
 
     // Direction alignment (cosine) needed to call a leg longitudinal.
     private const val LongitudinalCosine = 0.9
-    private const val MetersPerDegree = 111_194.93
 
     private const val CorridorMatchToleranceMeters = 25.0
 
@@ -108,15 +106,22 @@ object TrailRouteAdvisorySijko {
         "^(?:(?:e|east|w|west) )?hamilton (?:rd|road)$|^rhodes (?:ln|lane)$",
     )
 
+    /**
+     * The notices that apply to [route] at [nowEpochMillis]. [derived] is where the loaded graph's derived geometry stands
+     * for a closure's source leg ([TrailRouteClosureDerivationSijko.legsFor]); a front end that has the graph passes it so
+     * a route snapped onto displaced node anchors is judged against the interval transferred onto them. Without it only the
+     * unchanged source line is judged.
+     */
     fun forRoute(
         route: TrailRoute,
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
+        derived: List<TrailRouteDerivedClosureLeg> = emptyList(),
     ): List<TrailRouteAdvisory> {
         return listOfNotNull(
             hamiltonAdvisory(route, nowEpochMillis),
             uptownAdvisory(route, nowEpochMillis),
-            willowAdvisory(route, nowEpochMillis),
-            camelbackAdvisory(route, nowEpochMillis),
+            willowAdvisory(route, nowEpochMillis, derived),
+            camelbackAdvisory(route, nowEpochMillis, derived),
         )
     }
 
@@ -125,9 +130,9 @@ object TrailRouteAdvisorySijko {
      * closure; from its start it is the blocking advisory the gate uses, and it stays so after the estimated end
      * until an official status update is reviewed.
      */
-    private fun willowAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {
+    private fun willowAdvisory(route: TrailRoute, nowEpochMillis: Long, derived: List<TrailRouteDerivedClosureLeg>): TrailRouteAdvisory? {
         val closure = TrailRouteClosureSijko.willowTrailCrossing
-        if (!ridesClosedSection(route, closure)) {
+        if (!ridesClosedSection(route, closure, derived)) {
             return null
         }
         val estimate = closure.estimatedEndEpochMillis
@@ -171,9 +176,9 @@ object TrailRouteAdvisorySijko {
      * after the estimated end (an estimate is not a reopening). Without published limits nothing is cut or drawn, so the
      * router does not plan around it: the route can be previewed, and cannot be started.
      */
-    private fun camelbackAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {
+    private fun camelbackAdvisory(route: TrailRoute, nowEpochMillis: Long, derived: List<TrailRouteDerivedClosureLeg>): TrailRouteAdvisory? {
         val closure = TrailRouteClosureSijko.camelbackCrossing
-        if (!traversesCrossing(route, closure)) {
+        if (!traversesCrossing(route, closure, derived)) {
             return null
         }
         val estimate = closure.estimatedEndEpochMillis
@@ -235,9 +240,9 @@ object TrailRouteAdvisorySijko {
         val frame = frameOf(closure) ?: return false
         val (low, high) = intervalOf(frame, closure)
         return route.segments.filter { !it.isRouted }.any { segment ->
-            // An estimated hop has no source: it is judged with the same reach as a derived trail line.
-            segment.points.any { frame.insideInterval(it, low, high, DerivedLineToleranceMeters) } ||
-                frame.travelsAlongPath(segment.points, low, high, DerivedLineToleranceMeters, requireExtent = false)
+            // An estimated hop has no source: it is judged with the graph's own reach.
+            segment.points.any { insideInterval(frame, it, low, high, GraphReachMeters) } ||
+                travelsAlongPath(frame, segment.points, low, high, GraphReachMeters)
         }
     }
 
@@ -249,6 +254,30 @@ object TrailRouteAdvisorySijko {
      * the continuous polyline, so it cannot depend on how many collinear vertices the geometry happens to keep.
      */
     private fun candidates(route: TrailRoute, closure: TrailRouteClosure): List<Candidate> {
+        return joined(rawCandidates(route, closure))
+    }
+
+    /**
+     * Consecutive polylines that meet end to start are one continuous geometry however the route happens to group it into
+     * segments and edges, so they are judged as one.
+     */
+    private fun joined(candidates: List<Candidate>): List<Candidate> {
+        val out = mutableListOf<Candidate>()
+        candidates.forEach { next ->
+            val previous = out.lastOrNull()
+            if (previous != null && previous.known == next.known && next.points.isNotEmpty() &&
+                previous.points.isNotEmpty() &&
+                TrailDistanceSijko.metersBetween(previous.points.last(), next.points.first()) <= JoinMeters
+            ) {
+                out[out.lastIndex] = Candidate(previous.points + next.points, previous.known)
+            } else {
+                out += next
+            }
+        }
+        return out
+    }
+
+    private fun rawCandidates(route: TrailRoute, closure: TrailRouteClosure): List<Candidate> {
         if (route.edges.isEmpty()) {
             // A route without per-edge provenance: its merged trail segments, judged by geometry alone.
             return route.segments
@@ -268,165 +297,120 @@ object TrailRouteAdvisorySijko {
             }
     }
 
+    /** A line to judge travel against, with the closure's interval (or crossing position) expressed on it. */
+    private class Reference(val frame: TrailRouteSourceFrame, val low: Double, val high: Double)
+
     /**
-     * Does the route travel through the closure's crossing point on its feature? Touching the point counts. A leg of the
-     * feature's own edge that follows the verified source line, even when graph node anchoring moved its ends, counts
-     * when it spans the crossing's position along that line.
+     * The lines a candidate may travel on: the unchanged source line, and, for a leg of the closure's own feature, each
+     * derived leg the current graph defines for the closure's source leg, with the interval transferred onto it by the
+     * graph's own correspondence ([TrailRouteClosureDerivationSijko]). Nothing here projects the bounds onto a chord.
      */
-    private fun traversesCrossing(route: TrailRoute, closure: TrailRouteClosure): Boolean {
-        val frame = frameOf(closure)
+    private fun references(candidate: Candidate, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>): List<Reference> {
+        val own = frameOf(closure)?.let { frame -> intervalOf(frame, closure).let { Reference(frame, it.first, it.second) } }
+        val transferred = if (candidate.known) {
+            derived.filter { it.closureId == closure.id }.mapNotNull { leg ->
+                TrailRouteSourceFrame(leg.from, leg.to).takeIf { it.length > 0.0 }?.let { Reference(it, leg.low, leg.high) }
+            }
+        } else {
+            emptyList()
+        }
+        return listOfNotNull(own) + transferred
+    }
+
+    /**
+     * Does the route travel through the closure's crossing point on its feature? Touching the point counts (within the
+     * crossing tolerance). On a derived leg the crossing's position is the one the graph's correspondence transfers.
+     */
+    private fun traversesCrossing(route: TrailRoute, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>): Boolean {
         return candidates(route, closure).any { candidate ->
             candidate.points.zipWithNext().any { (start, end) ->
                 TrailDistanceSijko.projectToSegment(closure.closedFrom, start, end).distanceMeters <=
-                    CrossingToleranceMeters ||
-                    (candidate.known && frame != null &&
-                        frame.spansPosition(start, end, frame.along(closure.closedFrom)))
+                    CrossingToleranceMeters
+            } || references(candidate, closure, derived).any { reference ->
+                candidate.points.zipWithNext().any { (start, end) -> spansPosition(reference.frame, start, end, reference.low) }
             }
         }
     }
 
     /**
-     * Positive travel ALONG the closed section: some leg of the route lies on the section's source line and covers part of
-     * its interval. Any amount counts (a short route wholly inside it, or a few meters past either bound), with numerical
-     * tolerance only. A perpendicular crossing, a junction hop or an approach that ends at a bound has no leg on the line
-     * that overlaps the interval, so it is not travel along the section. A leg of the closure's own feature that follows
-     * the source line while graph node anchoring moved its ends is judged against that source line, so the section's
-     * bounds transfer to it along the source lineage rather than by raw-line proximity.
+     * Positive travel ALONG the closed section: some run of legs of the route lies on the source line (or on a derived leg,
+     * with the interval transferred onto it) and covers part of the interval. Any amount counts (a short route wholly
+     * inside it, or a few meters past either bound), with numerical noise only. A perpendicular crossing, a junction hop
+     * and an approach that ends at a bound have no leg on the line that overlaps the interval, so they are not travel
+     * along the section. There is no error allowance: the line each leg is judged against is the line it lies on, and the
+     * interval on it is the closure's own, transferred exactly.
      */
-    private fun ridesClosedSection(route: TrailRoute, closure: TrailRouteClosure): Boolean {
-        val frame = frameOf(closure) ?: return false
-        val (low, high) = intervalOf(frame, closure)
+    private fun ridesClosedSection(route: TrailRoute, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>): Boolean {
         return candidates(route, closure).any { candidate ->
-            if (candidate.known) {
-                frame.travelsAlongPath(candidate.points, low, high, DerivedLineToleranceMeters, requireExtent = true)
-            } else {
-                frame.travelsAlongPath(candidate.points, low, high, OnSectionLineToleranceMeters, requireExtent = false)
+            references(candidate, closure, derived).any { reference ->
+                travelsAlongPath(reference.frame, candidate.points, reference.low, reference.high, OnSectionLineToleranceMeters)
             }
         }
     }
 
-    /** The source line a closure sits on: its recorded source leg, else its own section. Null when it has no extent. */
-    private fun frameOf(closure: TrailRouteClosure): SourceFrame? {
-        val line = closure.sourceLine.ifEmpty { closure.closedPath }
+    /** The line of the closure's own section, from its bounds. Null when it has no extent (a crossing). */
+    private fun frameOf(closure: TrailRouteClosure): TrailRouteSourceFrame? {
+        val line = closure.closedPath
         if (line.size < 2) {
             return null
         }
-        return SourceFrame(line.first(), line.last()).takeIf { it.length > 0.0 }
+        return TrailRouteSourceFrame(line.first(), line.last()).takeIf { it.length > 0.0 }
     }
 
-    /** The section's interval in the frame's positions, lowest first. A crossing has the one position twice. */
-    private fun intervalOf(frame: SourceFrame, closure: TrailRouteClosure): Pair<Double, Double> {
+    /** The section's interval in the frame's positions, lowest first. */
+    private fun intervalOf(frame: TrailRouteSourceFrame, closure: TrailRouteClosure): Pair<Double, Double> {
         val from = frame.along(closure.closedFrom)
         val to = frame.along(closure.closedTo)
         return Pair(kotlin.math.min(from, to), kotlin.math.max(from, to))
     }
 
-    /** A straight source line as a frame: position along it from its first point, and distance across it, in meters. */
-    private class SourceFrame(private val origin: MapPoint, end: MapPoint) {
-        private val cosLatitude = kotlin.math.cos(origin.latitude * kotlin.math.PI / 180.0)
-        val length: Double
-        private val directionX: Double
-        private val directionY: Double
+    /** A point strictly inside [low]..[high] along the line, within [tolerance] of it. */
+    private fun insideInterval(frame: TrailRouteSourceFrame, point: MapPoint, low: Double, high: Double, tolerance: Double): Boolean {
+        val position = frame.along(point)
+        return frame.across(point) <= tolerance &&
+            position > low + SectionOverlapEpsilonMeters && position < high - SectionOverlapEpsilonMeters
+    }
 
-        init {
-            val lineX = x(end)
-            val lineY = y(end)
-            length = kotlin.math.hypot(lineX, lineY)
-            directionX = if (length > 0.0) lineX / length else 0.0
-            directionY = if (length > 0.0) lineY / length else 0.0
-        }
-
-        private fun x(point: MapPoint) = (point.longitude - origin.longitude) * cosLatitude * MetersPerDegree
-        private fun y(point: MapPoint) = (point.latitude - origin.latitude) * MetersPerDegree
-
-        fun along(point: MapPoint) = x(point) * directionX + y(point) * directionY
-        private fun across(point: MapPoint) = kotlin.math.abs(x(point) * directionY - y(point) * directionX)
-
-        /** Cosine of the angle between the leg and the line; null for a leg with no length. */
-        private fun alignment(start: MapPoint, end: MapPoint): Double? {
-            val legX = x(end) - x(start)
-            val legY = y(end) - y(start)
-            val legLength = kotlin.math.hypot(legX, legY)
-            return if (legLength <= 0.0) null else kotlin.math.abs((legX * directionX + legY * directionY) / legLength)
-        }
-
-        /** A point strictly inside [low]..[high] along the line, within [tolerance] of it. */
-        fun insideInterval(point: MapPoint, low: Double, high: Double, tolerance: Double): Boolean {
-            val position = along(point)
-            return across(point) <= tolerance &&
-                position > low + SectionOverlapEpsilonMeters && position < high - SectionOverlapEpsilonMeters
-        }
-
-        /** The leg's ends are both within [tolerance] of the line and along it, within the line's own extent. */
-        fun withinExtent(start: MapPoint, end: MapPoint, tolerance: Double): Boolean {
-            return listOf(along(start), along(end)).all { it >= -tolerance && it <= length + tolerance }
-        }
-
-        /**
-         * The polyline travels along the line over more than the transfer error of [low]..[high]. The decision is made on
-         * each maximal run of consecutive legs that lie on the line (within [tolerance], aligned, inside the extent when
-         * required) and sums the run's overlap, so subdividing a continuous geometry into any number of collinear legs
-         * cannot change it. Projection onto the source line is off by the run's distance from the line times its slope
-         * against it; overlap below that, or below numerical noise on the raw line, is the transfer and not travel.
-         */
-        fun travelsAlongPath(
-            points: List<MapPoint>,
-            low: Double,
-            high: Double,
-            tolerance: Double,
-            requireExtent: Boolean,
-        ): Boolean {
-            var inRun = false
-            var overlap = 0.0
-            var distance = 0.0
-            var slope = 0.0
-
-            fun runTravels() = inRun && overlap > kotlin.math.max(SectionOverlapEpsilonMeters, distance * slope)
-
-            points.zipWithNext().forEach { (start, end) ->
-                val legAlignment = alignment(start, end)
-                if (legAlignment == null) {
-                    // A repeated vertex has no direction and no length: it neither continues nor breaks a run.
-                    return@forEach
+    /**
+     * The polyline travels along the line over more than numerical noise of [low]..[high]. The decision is made on each
+     * maximal run of consecutive legs that lie on the line (within [tolerance], aligned) and sums the run's overlap, so
+     * subdividing a continuous geometry into any number of collinear legs cannot change it, and geometry outside the
+     * interval can never hide travel inside it: a leg contributes only its own overlap with the interval.
+     */
+    private fun travelsAlongPath(frame: TrailRouteSourceFrame, points: List<MapPoint>, low: Double, high: Double, tolerance: Double): Boolean {
+        var overlap = 0.0
+        points.zipWithNext().forEach { (start, end) ->
+            // A repeated vertex has no direction and no length: it neither continues nor breaks a run.
+            val alignment = frame.alignment(start, end) ?: return@forEach
+            if (frame.across(start) > tolerance || frame.across(end) > tolerance || alignment < LongitudinalCosine) {
+                if (overlap > SectionOverlapEpsilonMeters) {
+                    return true
                 }
-                val onLine = across(start) <= tolerance && across(end) <= tolerance &&
-                    legAlignment >= LongitudinalCosine && (!requireExtent || withinExtent(start, end, tolerance))
-                if (!onLine) {
-                    if (runTravels()) {
-                        return true
-                    }
-                    inRun = false
-                    overlap = 0.0
-                    distance = 0.0
-                    slope = 0.0
-                    return@forEach
-                }
-                inRun = true
-                val a = along(start)
-                val b = along(end)
-                overlap += kotlin.math.max(
-                    0.0,
-                    kotlin.math.min(kotlin.math.max(a, b), high) - kotlin.math.max(kotlin.math.min(a, b), low),
-                )
-                distance = kotlin.math.max(distance, kotlin.math.max(across(start), across(end)))
-                slope = kotlin.math.max(slope, kotlin.math.sqrt(kotlin.math.max(0.0, 1.0 - legAlignment * legAlignment)))
+                overlap = 0.0
+                return@forEach
             }
-            return runTravels()
+            val a = frame.along(start)
+            val b = frame.along(end)
+            overlap += kotlin.math.max(
+                0.0,
+                kotlin.math.min(kotlin.math.max(a, b), high) - kotlin.math.max(kotlin.math.min(a, b), low),
+            )
         }
+        return overlap > SectionOverlapEpsilonMeters
+    }
 
-        /** The leg runs along the line, within the line's extent, across [position] (touching, within the crossing tolerance). */
-        fun spansPosition(start: MapPoint, end: MapPoint, position: Double): Boolean {
-            if (!withinExtent(start, end, DerivedLineToleranceMeters) ||
-                across(start) > DerivedLineToleranceMeters || across(end) > DerivedLineToleranceMeters ||
-                (alignment(start, end) ?: 0.0) < LongitudinalCosine
-            ) {
-                return false
-            }
-            val a = along(start)
-            val b = along(end)
-            return position >= kotlin.math.min(a, b) - CrossingToleranceMeters &&
-                position <= kotlin.math.max(a, b) + CrossingToleranceMeters
+    /** The leg lies on the line and spans [position] (touching, within the crossing tolerance). */
+    private fun spansPosition(frame: TrailRouteSourceFrame, start: MapPoint, end: MapPoint, position: Double): Boolean {
+        val alignment = frame.alignment(start, end) ?: return false
+        if (frame.across(start) > OnSectionLineToleranceMeters || frame.across(end) > OnSectionLineToleranceMeters ||
+            alignment < LongitudinalCosine
+        ) {
+            return false
         }
+        val a = frame.along(start)
+        val b = frame.along(end)
+        return position >= kotlin.math.min(a, b) - CrossingToleranceMeters &&
+            position <= kotlin.math.max(a, b) + CrossingToleranceMeters
     }
 
     private fun hamiltonAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {

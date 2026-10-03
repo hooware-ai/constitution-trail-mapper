@@ -1648,6 +1648,17 @@ test(
   },
 );
 
+/** The 14 m spur-first fixture's chord: A to D = eastOf(B, 14), with a position given as a fraction of the raw leg. */
+const chordAt = (fraction: number) => {
+  const d = eastOf(V98, 14);
+  return {
+    latitude: V97.latitude + (d.latitude - V97.latitude) * fraction,
+    longitude: V97.longitude + (d.longitude - V97.longitude) * fraction,
+  };
+};
+const SOUTH_T = (FROM.latitude - V97.latitude) / (V98.latitude - V97.latitude);
+const NORTH_T = (TO.latitude - V97.latitude) / (V98.latitude - V97.latitude);
+
 test(
   "Willow and Camelback: dense copies keep the approach-at-a-bound controls open and the crossing refused",
   { skip },
@@ -1656,16 +1667,23 @@ test(
     const { call } = await engine(
       network(spur, feature("54:1305", [V97, V98])),
     );
-    const at = (meters: number) => snap(call, along(meters), WILLOW_START - 1);
+    // The bounds carried onto the chord by their fraction of the raw leg (the source geometry fixes the correspondence).
+    const at = (fraction: number) =>
+      snap(call, chordAt(fraction), WILLOW_START - 1);
+    const meters = (m: number) => m / LEG_METERS;
     for (const [a, b] of [
-      [FROM_METERS - 30, FROM_METERS],
-      [FROM_METERS, FROM_METERS - 30],
-      [TO_METERS, TO_METERS + 30],
-      [TO_METERS + 30, TO_METERS],
+      [SOUTH_T - meters(30), SOUTH_T],
+      [SOUTH_T, SOUTH_T - meters(30)],
+      [NORTH_T, NORTH_T + meters(30)],
+      [NORTH_T + meters(30), NORTH_T],
     ]) {
       const sparse = plan(call, at(a), at(b), WILLOW_START - 1);
       assert.ok(sparse.route, `${a} to ${b}`);
       assert.equal(sparse.accessGaps.length, 0);
+      assert.ok(
+        routePoints(sparse.route).some((p) => offRawLeg(p) > 0.5),
+        "the route rides the chord",
+      );
       for (const route of [sparse.route, subdivide(sparse.route, 400)]) {
         const inspected = call({ op: "inspect", route, now: WILLOW_START });
         assert.equal(inspected.canNavigate, true, `${a} to ${b} stays open`);
@@ -1673,9 +1691,9 @@ test(
       }
     }
     for (const [a, b] of [
-      [FROM_METERS - 4, FROM_METERS + 3],
-      [TO_METERS + 4, TO_METERS - 3],
-      [FROM_METERS - 20, TO_METERS + 20],
+      [SOUTH_T - meters(4), SOUTH_T + meters(3)],
+      [NORTH_T + meters(4), NORTH_T - meters(3)],
+      [SOUTH_T - meters(20), NORTH_T + meters(20)],
     ]) {
       const sparse = plan(call, at(a), at(b), WILLOW_START - 1);
       assert.ok(sparse.route);
@@ -1715,6 +1733,132 @@ test(
         false,
       );
       assert.equal(startAt(camel.call, route, south, CAMEL_START).ok, false);
+    }
+  },
+);
+
+test(
+  "Willow: any penetration past the transferred bound on a displaced chord is refused and a route that ends exactly at it is open, both bounds, both directions, sparse, dense and reloaded",
+  { skip },
+  async () => {
+    const spur = feature("54:9100", [eastOf(V98, 14), eastOf(V98, 60)]);
+    const trails = network(spur, feature("54:1305", [V97, V98]));
+    const { call } = await engine(trails);
+    const reloaded = await engine(trails, WILLOW_START);
+    const at = (fraction: number) =>
+      snap(call, chordAt(fraction), WILLOW_START - 1);
+    const meters = (m: number) => m / LEG_METERS;
+    let refused = 0;
+    for (const into of [0.02, 0.05, 0.1, 0.2, 0.5, 1, 3]) {
+      for (const [a, b] of [
+        [SOUTH_T - meters(20), SOUTH_T + meters(into)],
+        [SOUTH_T + meters(into), SOUTH_T - meters(20)],
+        [NORTH_T + meters(20), NORTH_T - meters(into)],
+        [NORTH_T - meters(into), NORTH_T + meters(20)],
+      ]) {
+        const planned = plan(call, at(a), at(b), WILLOW_START - 1);
+        // Nonvacuous: current network, zero gaps, Start-eligible before the closure, on the chord.
+        assert.ok(planned.route, `${into} m route exists`);
+        assert.equal(planned.accessGaps.length, 0);
+        assert.equal(planned.canNavigate, true);
+        assert.ok(routePoints(planned.route).some((p) => offRawLeg(p) > 0.5));
+        for (const route of [planned.route, subdivide(planned.route, 300)]) {
+          for (const engineCall of [call, reloaded.call]) {
+            const inspected = engineCall({
+              op: "inspect",
+              route,
+              now: WILLOW_START,
+            });
+            assert.equal(
+              inspected.canNavigate,
+              false,
+              `${into} m past a bound`,
+            );
+            assert.equal(inspected.closures[0].id, WILLOW_ID);
+            assert.equal(
+              startAt(engineCall, route, at(a), WILLOW_START).ok,
+              false,
+            );
+          }
+        }
+        refused++;
+      }
+    }
+    assert.equal(refused, 28);
+    // Ending exactly at the transferred bound is not travel.
+    for (const [a, b] of [
+      [SOUTH_T - meters(30), SOUTH_T],
+      [NORTH_T + meters(30), NORTH_T],
+    ]) {
+      const planned = plan(call, at(a), at(b), WILLOW_START - 1);
+      assert.ok(planned.route);
+      assert.equal(planned.accessGaps.length, 0);
+      for (const route of [planned.route, subdivide(planned.route, 300)]) {
+        assert.equal(
+          call({ op: "inspect", route, now: WILLOW_START }).canNavigate,
+          true,
+        );
+      }
+    }
+  },
+);
+
+test(
+  "Willow: an outside bend inside the geometry tolerance cannot hide exact closed travel at the boundary (straight and bent are both refused, both Start-eligible before)",
+  { skip },
+  async () => {
+    const { call } = await engine(willow());
+    const reloaded = await engine(willow(), WILLOW_START);
+    const P = (t: number, v: number) => eastOf(along(FROM_METERS + t), v);
+    const first = snap(call, P(-21, 0), WILLOW_START - 1);
+    const last = snap(call, P(0.1, 0), WILLOW_START - 1);
+    const straight = plan(call, first, last, WILLOW_START - 1);
+    assert.ok(straight.route);
+    assert.equal(straight.accessGaps.length, 0);
+    assert.equal(straight.canNavigate, true);
+    const bentPoints = [first, P(-1, 0.4), P(0, 0), last];
+    const lengthOf = (pts: { latitude: number; longitude: number }[]) => {
+      let total = 0;
+      for (let i = 0; i + 1 < pts.length; i++)
+        total += distance(pts[i], pts[i + 1]);
+      return total;
+    };
+    const scale = lengthOf(bentPoints) / lengthOf([first, last]);
+    const bend = (segment: any) => ({ ...segment, points: bentPoints });
+    const bent = {
+      ...straight.route,
+      segments: straight.route.segments.map(bend),
+      edges: straight.route.edges.map((e: any) => ({
+        ...e,
+        distanceMeters: e.distanceMeters * scale,
+        routeSegments: e.routeSegments.map(bend),
+      })),
+      totalDistanceMeters: straight.route.totalDistanceMeters * scale,
+      totalCost: straight.route.totalCost * scale,
+      traversalEdges: straight.route.traversalEdges.map((e: any) => ({
+        ...e,
+        distanceMeters: e.distanceMeters * scale,
+        geometryMeters:
+          e.geometryMeters == null
+            ? e.geometryMeters
+            : e.geometryMeters * scale,
+      })),
+    };
+    // Eligible before the closure: current network, no gap, startable.
+    const early = call({ op: "inspect", route: bent, now: WILLOW_START - 1 });
+    assert.equal(early.network.status, "current");
+    assert.equal(early.canNavigate, true);
+    assert.equal(startAt(call, bent, first, WILLOW_START - 1).ok, true);
+    for (const route of [straight.route, bent]) {
+      for (const engineCall of [call, reloaded.call]) {
+        for (const now of [WILLOW_START, WILLOW_END + 1]) {
+          const inspected = engineCall({ op: "inspect", route, now });
+          assert.equal(inspected.network.status, "current");
+          assert.equal(inspected.canNavigate, false);
+          assert.equal(inspected.closures[0].id, WILLOW_ID);
+          assert.equal(startAt(engineCall, route, first, now).ok, false);
+        }
+      }
     }
   },
 );
