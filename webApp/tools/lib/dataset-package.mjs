@@ -35,6 +35,17 @@ import {
   checkAccessParts,
 } from "./access-package.mjs";
 import {
+  AccessSourceError,
+  admitAccessSource,
+  checkAccessSource,
+  committedAccessManifestFile,
+} from "./access-source.mjs";
+import {
+  approvedCompositionProblems,
+  compositionDifferences,
+  reconstructComposition,
+} from "./composition.mjs";
+import {
   SUPPLEMENT_KIND,
   SUPPLEMENT_LAYER_ID,
   SupplementError,
@@ -80,7 +91,13 @@ export const osmManifestFile = process.env.TRAIL_OSM_MANIFEST
   : committedOsmManifestFile;
 export const proposedManifestFile =
   process.env.TRAIL_PROPOSED_MANIFEST ?? committedProposedManifestFile;
+// TRAIL_ACCESS_MANIFEST is a test hook like the others: a synthetic extract needs a synthetic (test-only) source
+// manifest, and the release audit refuses a package made from any manifest other than the committed one.
+export const accessManifestFile = process.env.TRAIL_ACCESS_MANIFEST
+  ? resolve(process.env.TRAIL_ACCESS_MANIFEST)
+  : committedAccessManifestFile;
 export {
+  committedAccessManifestFile,
   committedOsmManifestFile,
   osmInputFile,
   committedProposedManifestFile,
@@ -415,10 +432,22 @@ export async function buildPackage({
   const contentSha = sha256(body);
   const file = `trails.${contentSha.slice(0, 12)}.json`;
   let accessParts = null;
+  let accessSource = null;
   try {
+    // Source review first: only the pinned extract is split into parts at all.
+    if (access) {
+      if (!access.manifestBytes)
+        refuse(
+          "Access roads need the reviewed access source manifest; none was given.",
+        );
+      accessSource = admitAccessSource(access.inputText, access.manifestBytes);
+    }
     accessParts = access ? buildAccessParts(access.inputText) : null;
   } catch (error) {
-    if (error instanceof AccessPackageError)
+    if (
+      error instanceof AccessPackageError ||
+      error instanceof AccessSourceError
+    )
       throw new AdmissionError(error.message);
     throw error;
   }
@@ -498,7 +527,14 @@ export async function buildPackage({
         }
       : {}),
     ...(accessParts
-      ? { access: { ...accessParts.descriptor, combinedSha256: combinedSha } }
+      ? {
+          access: {
+            ...accessParts.descriptor,
+            combinedSha256: combinedSha,
+            // Which reviewed input these roads were made from (source review; not rights, not publication approval).
+            source: accessSource.source,
+          },
+        }
       : {}),
     ...(admittedProposed
       ? {
@@ -512,9 +548,32 @@ export async function buildPackage({
       approved: approval.approved === true,
       approvedBy: approval.approvedBy ?? null,
       approvedOn: approval.approvedOn ?? null,
+      // The owner's committed expected composition, carried verbatim (null until an owner records one). Never filled in here.
+      approvedComposition: approval.approvedComposition ?? null,
       blockers: [...(approval.blockers ?? [])],
     },
   };
+  // The composition this build actually has, reconstructed from the parts just made, recorded beside the approval.
+  const partBytes = new Map(
+    (accessParts?.files ?? []).map((part) => [part.file, part.body]),
+  );
+  record.composition = reconstructComposition({
+    record,
+    body,
+    network: JSON.parse(body.toString("utf8")),
+    readPart: (name) => partBytes.get(name),
+    osmManifestBytes: supplement?.manifestBytes ?? null,
+    proposedManifestBytes: proposed?.manifestBytes ?? null,
+    accessManifestBytes: access?.manifestBytes ?? null,
+  });
+  // An approved build must be exactly the approved composition; a build that differs is refused, not shipped.
+  if (approval.approved === true) {
+    const problems = approvedCompositionProblems(
+      record.composition,
+      approval.approvedComposition,
+    );
+    if (problems.length) refuse(problems.join("; "));
+  }
   return { record, body, file, accessFiles: accessParts?.files ?? [] };
 }
 
@@ -553,6 +612,7 @@ export async function packageFromFiles({
   osmManifestPath = osmManifestFile,
   // Optional normalized access-road extract (TIGER roads plus endpoint-local service roads).
   accessInput = null,
+  accessManifestPath = accessManifestFile,
   // Optional proposed-trails extract; requires a manifest whose rights block is granted, else packaging is refused.
   proposedInput = null,
   proposedManifestPath = proposedManifestFile,
@@ -612,7 +672,10 @@ export async function packageFromFiles({
         `The access road extract is not present (${accessInput}). Generate it with the native extractor; this tool never contacts a server.`,
       );
     }
-    access = { inputText: text };
+    access = {
+      inputText: text,
+      manifestBytes: await readFile(accessManifestPath),
+    };
   }
   const built = await buildPackage({
     inputText: inputBytes.replace(/^﻿/, ""),
@@ -639,6 +702,7 @@ export function checkPackage(
   // Returns the bytes of a package file by name (undefined when absent); required when the record has access parts.
   readPart = undefined,
   proposedManifestBytes = null,
+  accessManifestBytes = null,
 ) {
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (record.schema !== RECORD_SCHEMA || record.kind !== "county")
@@ -783,6 +847,16 @@ export function checkPackage(
       if (error instanceof AccessPackageError) refuse(error.message);
       throw error;
     }
+    if (!accessManifestBytes)
+      refuse(
+        "The record has access roads but no reviewed access source manifest to check them against.",
+      );
+    try {
+      checkAccessSource(record.access, accessManifestBytes);
+    } catch (error) {
+      if (error instanceof AccessSourceError) refuse(error.message);
+      throw error;
+    }
     const combined = accessIdentity(
       record.content.sha256,
       record.access.index.sha256,
@@ -797,6 +871,36 @@ export function checkPackage(
       );
   } else if (!record.version.endsWith(`.${record.content.sha256.slice(0, 12)}`))
     refuse("The dataset version does not name the network content.");
+  // Owner composition: what the record says it is must be what the parts and bytes actually are, and an approved record
+  // must be bound to exactly that composition by an expected composition it carries.
+  let actual;
+  try {
+    actual = reconstructComposition({
+      record,
+      body,
+      network,
+      readPart,
+      osmManifestBytes,
+      proposedManifestBytes,
+      accessManifestBytes,
+    });
+  } catch (error) {
+    refuse(
+      `The package composition could not be reconstructed: ${error.message}`,
+    );
+  }
+  const drift = compositionDifferences(actual, record.composition);
+  if (drift.length)
+    refuse(
+      `The record's composition differs from the package's actual parts (${drift.join(", ")}).`,
+    );
+  if (record.approval?.approved === true) {
+    const problems = approvedCompositionProblems(
+      actual,
+      record.approval.approvedComposition,
+    );
+    if (problems.length) refuse(problems.join("; "));
+  }
   return network;
 }
 
@@ -804,6 +908,7 @@ export function checkPackage(
 export async function verifyPackageDir(
   dir = packageDir,
   manifestPath = manifestFile,
+  accessManifestPath = accessManifestFile,
 ) {
   const record = JSON.parse(await readFile(join(dir, "dataset.json"), "utf8"));
   const manifestBytes = await readFile(manifestPath);
@@ -813,6 +918,9 @@ export async function verifyPackageDir(
     : null;
   const proposedManifestBytes = record.proposedLayer
     ? await readFile(proposedManifestFile)
+    : null;
+  const accessManifestBytes = record.access
+    ? await readFile(accessManifestPath)
     : null;
   const listing = await readdir(dir);
   const present = new Map();
@@ -832,6 +940,7 @@ export async function verifyPackageDir(
     osmManifestBytes,
     readPart,
     proposedManifestBytes,
+    accessManifestBytes,
   );
   const stray = [...present.keys()].filter((name) => !used.has(name));
   if (stray.length)

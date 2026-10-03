@@ -68,7 +68,20 @@ const fixture = {
 };
 async function approvedDataset(root: string) {
   const bytes = await readFile(join(root, "dist/assets/data.json"));
+  const composition = {
+    networkSha256: sha256(bytes),
+    layerCounts: { "8": 0 },
+    accessBaseSha256: null,
+    accessIndexSha256: null,
+    accessCombinedSha256: null,
+    accessSourceInputSha256: null,
+    accessSourceManifestSha256: null,
+    supplementManifestSha256: null,
+    proposedManifestSha256: null,
+  };
   return {
+    composition,
+    approvedComposition: composition,
     schema: 1,
     kind: "county",
     id: "county",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // SYNTHETIC ordinary-road access for the county fixture (tests/support/county-fixture.mjs): one TIGER-style base road far
 // from everything, and an endpoint-local service road that is the ONLY way from a cul-de-sac start to the west end of the
 // west trail. Self-authored geometry; it is not road data and proves nothing about any real extract.
@@ -72,3 +73,27 @@ export const closureTrailEntry = [
     ],
   ],
 ];
+
+/**
+ * A SYNTHETIC, explicitly test-only source manifest for a synthetic extract (`text` is the exact text written to disk).
+ * It pins that file the way the committed manifest pins the real one; the release audit refuses any package made from
+ * it, because it is not the committed manifest, and it says testOnly so no one can mistake it for a review.
+ */
+export function makeAccessManifest(text) {
+  const extract = JSON.parse(text);
+  const layerCounts = {};
+  for (const layer of extract.layers)
+    layerCounts[layer.id] =
+      (layerCounts[layer.id] ?? 0) + layer.features.length;
+  return {
+    schemaVersion: 1,
+    kind: "access-road-source",
+    id: "synthetic-access-roads",
+    testOnly: true,
+    scope: "Synthetic test fixture. Not a source review of any real data.",
+    sourceInputSha256: createHash("sha256")
+      .update(Buffer.from(text, "utf8"))
+      .digest("hex"),
+    sourceInput: { layerCounts },
+  };
+}

@@ -22,7 +22,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_LIST, makeCounty, scaledList } from "./county-fixture.mjs";
 import { makeSupplement } from "./osm-fixture.mjs";
-import { closureTrailEntry, makeAccessExtract } from "./access-fixture.mjs";
+import {
+  closureTrailEntry,
+  makeAccessExtract,
+  makeAccessManifest,
+} from "./access-fixture.mjs";
 import { makeProposed } from "./proposed-fixture.mjs";
 
 const webRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -79,7 +83,13 @@ if (withProposed) {
 }
 if (withAccess) {
   files.accessInput = join(work, "access-roads.json");
-  await writeFile(files.accessInput, JSON.stringify(makeAccessExtract()));
+  const accessText = JSON.stringify(makeAccessExtract());
+  await writeFile(files.accessInput, accessText);
+  files.accessManifest = join(work, "access-manifest.json");
+  await writeFile(
+    files.accessManifest,
+    JSON.stringify(makeAccessManifest(accessText)),
+  );
 }
 
 const env = {
@@ -92,6 +102,7 @@ const env = {
   TRAIL_DIST_DIR: distDir,
   ...(withOsm ? { TRAIL_OSM_MANIFEST: files.osmManifest } : {}),
   ...(withProposed ? { TRAIL_PROPOSED_MANIFEST: files.proposedManifest } : {}),
+  ...(withAccess ? { TRAIL_ACCESS_MANIFEST: files.accessManifest } : {}),
 };
 // The modules read these variables when first imported, so package in a child with the same environment.
 const run = (label, args) => {

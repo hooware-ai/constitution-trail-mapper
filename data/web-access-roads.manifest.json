@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "access-road-source",
+  "id": "mclean-access-roads",
+  "testOnly": false,
+  "scope": "SOURCE REVIEW IDENTITY ONLY. This pins which extract bytes the web packager may admit for ordinary-road access. It is not a rights review, not an owner approval of any dataset composition, and not a publication approval. A matching hash proves which file was reviewed, nothing more.",
+  "sourceInputSha256": "23a9719dd45297352cef641014697ca0b263184af9fdace48573b0d6ba264d07",
+  "sourceInput": {
+    "job": "Trail Mapper normalized ordinary endpoint access roads",
+    "generatedAtUtc": "2026-09-27T14:38:56.0914803Z",
+    "generatedAtMeaning": "When the native extractor ran. It is not when TIGER or OpenStreetMap last changed any way.",
+    "file": "data/generated/mclean-access-roads.normalized.json (private, ignored by Git, never committed)",
+    "layerCounts": {
+      "8": 3424,
+      "osm-service": 9313
+    },
+    "layerOrder": [
+      "8 (TIGERweb Local Roads, ordered by OBJECTID)",
+      "osm-service (OpenStreetMap highway=service, in the order the Overpass response listed the ways)"
+    ],
+    "sources": {
+      "tigerLineAllRoads": "https://catalog.data.gov/dataset/tiger-line-shapefile-current-county-mclean-county-il-all-roads",
+      "tigerwebTransportationService": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer",
+      "tigerwebLayer": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8",
+      "openStreetMapOverpass": "https://overpass-api.de/api/interpreter",
+      "openStreetMap": "https://www.openstreetmap.org/copyright"
+    },
+    "boundingBoxWgs84": [-89.2, 40.4, -88.9, 40.6],
+    "filters": {
+      "includedMtfcc": ["S1400", "S1640", "S1710", "S1730", "S1780", "S1820"],
+      "includedOsmHighways": ["service"],
+      "osmExclusions": "Ways marked access=no or access=private without a bicycle allowance, bicycle=no or bicycle=private, or service=drive-through or emergency_access; ways with fewer than two points."
+    },
+    "queries": {
+      "tigerweb": "{layer}/query?where=MTFCC IN (included classes)&geometry=<bbox>&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,OID,NAME,BASENAME,MTFCC,RTTYP&returnGeometry=true&outSR=4326&f=json&orderByFields=OBJECTID&resultOffset=<n>&resultRecordCount=<page>",
+      "overpass": "[out:json][timeout:120];way[\"highway\"=\"service\"](<south>,<west>,<north>,<east>);out tags geom;"
+    },
+    "extractor": "tools/fetch-tigerweb-access-roads.ps1 in the native repository (git blob 3d5e9a35144e2110eb1b047b91371372e68c6620 at this review)",
+    "perWayTimestamps": "UNKNOWN. The extract carries no per-way source timestamps or OpenStreetMap way versions; only the extractor's run time above. Historical per-way change dates cannot be recovered from this file and are not stated here."
+  },
+  "nativeBaseline": {
+    "statement": "This is the access extract the native app ships. The architect independently matched the same SHA-256 to the built-local APK asset on 2026-10-02 (3424 TIGER roads, 9313 OpenStreetMap service roads).",
+    "nativeDocumentation": "docs/routing-data-plan.md (native repository) records the 2026-09-27 refresh that produced it."
+  },
+  "futureSources": "A re-run extractor, a refreshed extract, or any file with a different SHA-256 is a different source. It needs a fresh entry here, with its own review identity, before the packager will admit it. Editing this hash to match a new file without that review defeats the pin and is a review failure.",
+  "rights": {
+    "status": "unresolved",
+    "note": "TIGER/Line is U.S. Census Bureau public-domain data. OpenStreetMap service roads are ODbL; whether a merged routing graph is a derivative database is unresolved (docs/web/data-rights.md). Nothing in this manifest grants or implies a right to publish."
+  }
+}
