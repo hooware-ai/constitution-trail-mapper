@@ -29,7 +29,7 @@ data class LocalTrailGuideEntry(
 
 object LocalTrailGuide {
     const val reviewedOn = "September 7, 2026"
-    const val updatedOn = "September 27, 2026"
+    const val updatedOn = "October 2, 2026"
     const val freshnessMessage = "Reviewed $reviewedOn, with selected entries updated $updatedOn. " +
         "This guide is a saved update, not live conditions. " +
         "Check official notices and signs before riding. Estimated completion dates do not confirm reopening."
@@ -39,12 +39,44 @@ object LocalTrailGuide {
     fun entries(): List<LocalTrailGuideEntry> = listOf(
         LocalTrailGuideEntry(
             "hamilton-rhodes", LocalTrailGuideCategory.Conditions, "Hamilton / Rhodes connection",
-            "The city reported an all-traffic closure between 512 and 519 E. Hamilton Road from August 17, " +
-                "with completion estimated September 30, 2026. Use another road connection; a separate parallel " +
-                "trail is not automatically closed by this notice.",
-            "Closure reported · through September 30 estimate",
+            "The city reported an all-traffic closure between 512 and 519 E. Hamilton Road from August 17. The city's " +
+                "closure map (object 841, last edited September 25) now estimates completion at 6 p.m. CDT on " +
+                "October 31, 2026; the older notice, last checked September 7, said September 30. Use another road " +
+                "connection; a separate parallel trail is not automatically closed by this notice, and an estimate " +
+                "does not confirm reopening.",
+            "Closure reported · estimated through October 31",
             TrailResourceLink("City closure notice", "https://www.bloomingtonil.gov/Home/Components/News/News/10909/1394"),
-            reviewAfterEpochMillis = epoch("2026-10-01T05:00:00Z"),
+            reviewAfterEpochMillis = epoch("2026-10-31T23:00:00Z"),
+        ),
+        LocalTrailGuideEntry(
+            "willow-trail-closure", LocalTrailGuideCategory.Conditions, "Willow Street trail crossing: Locust to Cypress",
+            "Posted October 2: from 6 a.m. CDT on Monday, October 5, Constitution Trail's Illinois Central Branch is " +
+                "closed between Locust Street and Cypress Avenue to rebuild the Willow Street trail crossing. The Town's " +
+                "detour is Fell Avenue, via Locust Street and Cypress Street (its notice also calls the boundary Cypress " +
+                "Avenue and the detour street Cypress Street). Access to private walks north of Locust is to be " +
+                "maintained. Completion is estimated by 5 p.m. CDT on Monday, October 19, weather permitting; an " +
+                "estimate does not confirm reopening. New routes avoid the closed section once it begins and saved " +
+                "routes through it cannot start; the section, about 202 m, is projected from the Town's closure map " +
+                "onto the county trail and is approximate. Trail Mapper does not route the detour.",
+            "Scheduled · closure begins October 5, 6 a.m.",
+            TrailResourceLink("Normal trail closure notice", "https://www.normalil.gov/m/newsflash/home/detail/3356"),
+            effectiveAtEpochMillis = epoch("2026-10-05T11:00:00Z"),
+            effectiveStatus = "Closed since October 5 · estimated through October 19; reopening not confirmed",
+            reviewAfterEpochMillis = epoch("2026-10-19T22:00:00Z"),
+        ),
+        LocalTrailGuideEntry(
+            "camelback-trail-closure", LocalTrailGuideCategory.Conditions, "Virginia Avenue trail crossing (Camelback Bridge)",
+            "Posted September 30: Virginia Avenue between South Linden and Hillcrest Streets closes at 8 a.m. CDT on " +
+                "Monday, October 5 for bridge inspection and maintenance, and Constitution Trail is also closed at " +
+                "Virginia Avenue (Camelback Bridge). Completion is estimated by 5 p.m. CDT on Tuesday, October 6, " +
+                "weather permitting; an estimate does not confirm reopening. The notice gives no trail detour and no " +
+                "closure limits along the trail, so Trail Mapper shows an advisory on routes that cross there and does " +
+                "not block or reroute them; follow posted signs. The road closure does not define the trail closure.",
+            "Scheduled · closure begins October 5, 8 a.m.",
+            TrailResourceLink("Normal bridge closure notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3353"),
+            effectiveAtEpochMillis = epoch("2026-10-05T13:00:00Z"),
+            effectiveStatus = "Closed at Virginia Avenue since October 5 · estimated through October 6; reopening not confirmed",
+            reviewAfterEpochMillis = epoch("2026-10-06T22:00:00Z"),
         ),
         LocalTrailGuideEntry(
             "hershey-work", LocalTrailGuideCategory.Conditions, "Hershey: Lamon Drive to GE Road",
@@ -81,14 +113,29 @@ object LocalTrailGuide {
         LocalTrailGuideEntry(
             "collegiate-repaving", LocalTrailGuideCategory.Conditions, "Collegiate Branch repaving: Fairview Park to Heartland",
             "Repaving from the south entrance of Fairview Park at Adelaide Street to Heartland Community College at " +
-                "Millennium Boulevard is expected to begin September 28 or 29, weather permitting. Repairs, patching and " +
-                "milling need targeted, temporary closures in individual sections before the overlay. The Town expects " +
-                "the closure to end by October 2, weather permitting. Follow posted closure and detour signs.",
+                "Millennium Boulevard was expected to begin September 28 or 29, weather permitting. Repairs, patching and " +
+                "milling need targeted, temporary closures in individual sections before the overlay. The September 24 " +
+                "notice expected the closures to end by October 2; that estimate has passed and completion was not " +
+                "confirmed. See the October 2 trail paving notice below. Follow posted closure and detour signs.",
             "Scheduled · from September 28, 2026",
             TrailResourceLink("Normal repaving notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3345"),
             effectiveAtEpochMillis = epoch("2026-09-28T05:00:00Z"),
             effectiveStatus = "Work expected · targeted closures through October 2 estimate",
             reviewAfterEpochMillis = epoch("2026-10-03T05:00:00Z"),
+        ),
+        LocalTrailGuideEntry(
+            "trail-paving-raab", LocalTrailGuideCategory.Conditions, "Constitution Trail paving: Raab Road",
+            "Posted October 2: paving work on Constitution Trail begins Saturday, October 3 and needs temporary trail " +
+                "and lane closures on Raab Road. The eastbound lane near the ISU Horticulture Center and Cornbelters " +
+                "Stadium closes from 6 a.m. October 3; the westbound lane from near Cornbelters Stadium to Millennium " +
+                "Boulevard closes 6 a.m.–4 p.m. on Monday, October 5 and Tuesday, October 6. Those are road-lane " +
+                "closures. The notice does not say which trail sections close, when each reopens or when the work ends, so " +
+                "Trail Mapper does not mark a trail barrier; follow posted signs.",
+            "Scheduled · paving begins October 3, 2026",
+            TrailResourceLink("Normal paving notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3357"),
+            effectiveAtEpochMillis = epoch("2026-10-03T11:00:00Z"),
+            effectiveStatus = "Paving under way · temporary closures; trail sections and end not published",
+            reviewAfterEpochMillis = epoch("2026-10-07T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
             "west-college", LocalTrailGuideCategory.Conditions, "West College toward Rivian Motorway",

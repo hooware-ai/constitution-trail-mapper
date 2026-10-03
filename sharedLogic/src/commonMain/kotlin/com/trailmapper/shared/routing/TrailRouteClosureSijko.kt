@@ -17,6 +17,23 @@ data class TrailRouteClosure(
     val closedFrom: MapPoint,
     val closedTo: MapPoint,
     val activeFromEpochMillis: Long,
+    /**
+     * The notice's estimated completion. It is information for the rider and never lifts a closure: reopening needs an
+     * official status update that has been reviewed, so a closure stays in force after this instant.
+     */
+    val estimatedEndEpochMillis: Long? = null,
+    /**
+     * True when [closedFrom]/[closedTo] are positions inside a source leg (the official map line projected onto the
+     * county trail), not source vertices. The closed section is then cut out at those positions at run time, from the
+     * unchanged source path, and the rest of every touched leg stays open.
+     */
+    val boundsProjected: Boolean = false,
+    /** The closed section as a polyline, for projected bounds only valid when both bounds lie in ONE source leg. */
+    val closedPath: List<MapPoint> = listOf(closedFrom, closedTo),
+    /** Where the interval comes from and how approximate it is; empty when the bounds are source vertices. */
+    val mappingNote: String = "",
+    /** When the schedule was last checked against the official notice, for display. */
+    val checkedOn: String = "",
 )
 
 object TrailRouteClosureSijko {
@@ -38,7 +55,35 @@ object TrailRouteClosureSijko {
         activeFromEpochMillis = 1_789_966_800_000L,
     )
 
-    val closures: List<TrailRouteClosure> = listOf(uptownUnderpass)
+    // Town of Normal notice 3356, posted October 2, 2026: Constitution Trail Illinois Central Branch closed between
+    // Locust Street and Cypress Avenue from 6 a.m. Monday, October 5 to rebuild the Willow Street trail crossing,
+    // completion estimated 5 p.m. Monday, October 19 (weather permitting). The official city map line (object 919)
+    // is projected onto county trail feature 54:1305, path 0, inside the 790 m source leg between vertices 97 and
+    // 98. The two projected positions are 202.5 m apart; they are neither surveyed barricades nor source vertices,
+    // and the unchanged source leg keeps both of its remaining portions open.
+    val willowTrailCrossing = TrailRouteClosure(
+        id = "willow-trail-crossing-2026-10-05",
+        title = "No route avoids the Willow Street trail closure",
+        guidance = "Constitution Trail's Illinois Central Branch is closed between Locust Street and Cypress Avenue " +
+            "while the Willow Street trail crossing is rebuilt (Town of Normal notice, posted October 2, 2026). " +
+            "The Town's detour for the trail is Fell Avenue, via Locust Street and Cypress Street; its notice " +
+            "calls the closure boundary Cypress Avenue and the detour street Cypress Street. Access to private " +
+            "walks north of Locust Street is to be maintained. Trail Mapper does not route this detour. " +
+            "The Town estimates completion by 5 p.m. CDT on Monday, October 19, weather permitting; an estimate " +
+            "does not confirm reopening.",
+        noticeUrl = "https://www.normalil.gov/m/newsflash/home/detail/3356",
+        featureId = "54:1305",
+        closedFrom = MapPoint(latitude = 40.5131086201, longitude = -88.9846643109),
+        closedTo = MapPoint(latitude = 40.5149242085, longitude = -88.9848171673),
+        activeFromEpochMillis = 1_791_198_000_000L,
+        estimatedEndEpochMillis = 1_792_447_200_000L,
+        boundsProjected = true,
+        mappingNote = "Approximate: the Town's online closure map line (object 919) projected onto the county " +
+            "trail, about 202 m. Not surveyed barricade locations.",
+        checkedOn = "October 2, 2026",
+    )
+
+    val closures: List<TrailRouteClosure> = listOf(uptownUnderpass, willowTrailCrossing)
 
     fun activeClosures(nowEpochMillis: Long): List<TrailRouteClosure> {
         return closures.filter { closure -> nowEpochMillis >= closure.activeFromEpochMillis }
@@ -62,7 +107,7 @@ object TrailRouteClosureSijko {
             var paths = feature.paths
             closuresForFeature.forEach { closure ->
                 paths = paths.flatMap { path ->
-                    val cut = cut(path, closure)
+                    val cut = if (closure.boundsProjected) cutAtProjectedBounds(path, closure) else cut(path, closure)
                     if (cut != null) {
                         applied += closure
                     }
@@ -86,6 +131,62 @@ object TrailRouteClosureSijko {
         return listOf(path.subList(0, first + 1), path.subList(last, path.size)).filter { it.size >= 2 }
     }
 
+    /**
+     * Splits [path] at the closure's projected bounds, which lie inside source legs. Everything before the first bound
+     * and after the second stays, ending exactly at the bound; the section between is removed. Nothing is invented
+     * apart from those two positions, which are on the source line.
+     */
+    private fun cutAtProjectedBounds(path: List<MapPoint>, closure: TrailRouteClosure): List<List<MapPoint>>? {
+        val fromAt = locate(path, closure.closedFrom) ?: return null
+        val toAt = locate(path, closure.closedTo) ?: return null
+        val (first, last) = if (fromAt.position <= toAt.position) Pair(fromAt, toAt) else Pair(toAt, fromAt)
+        if (last.position <= first.position) {
+            return null
+        }
+        // The stored bounds are the cut points themselves (they lie on the source line), so the cut is exact and repeatable.
+        val before = path.subList(0, first.leg + 1) + first.point
+        val after = listOf(last.point) + path.subList(last.leg + 1, path.size)
+        return listOf(before.withoutRepeats(), after.withoutRepeats()).filter { it.size >= 2 }
+    }
+
+    /** The drawable closed section of [path]: the two bounds and every source vertex between them, or null. */
+    fun closedSection(path: List<MapPoint>, closure: TrailRouteClosure): List<MapPoint>? {
+        val fromAt = locate(path, closure.closedFrom) ?: return null
+        val toAt = locate(path, closure.closedTo) ?: return null
+        val (first, last) = if (fromAt.position <= toAt.position) Pair(fromAt, toAt) else Pair(toAt, fromAt)
+        if (last.position <= first.position) {
+            return null
+        }
+        val inner = path.subList(first.leg + 1, last.leg + 1)
+        return (listOf(first.point) + inner + last.point).withoutRepeats()
+    }
+
+    private class Located(val leg: Int, val position: Double, val point: MapPoint)
+
+    /** The nearest place on [path] to [point], when it is within [ProjectionToleranceMeters] of the line. */
+    private fun locate(path: List<MapPoint>, point: MapPoint): Located? {
+        var best: Located? = null
+        var bestDistance = Double.MAX_VALUE
+        for (leg in 0 until path.lastIndex) {
+            val projection = TrailDistanceSijko.projectToSegment(point, path[leg], path[leg + 1])
+            if (projection.distanceMeters < bestDistance) {
+                val length = projection.distanceFromStartMeters + projection.distanceToEndMeters
+                val fraction = if (length <= 0.0) 0.0 else projection.distanceFromStartMeters / length
+                bestDistance = projection.distanceMeters
+                best = Located(leg, leg + fraction, point)
+            }
+        }
+        return best?.takeIf { bestDistance <= ProjectionToleranceMeters }
+    }
+
+    private fun List<MapPoint>.withoutRepeats(): List<MapPoint> {
+        val out = mutableListOf<MapPoint>()
+        forEach { point ->
+            if (out.isEmpty() || TrailDistanceSijko.metersBetween(out.last(), point) > 0.01) out += point
+        }
+        return out
+    }
+
     data class ClosedNetwork(
         val features: List<TrailNetworkFeature>,
         /** Active closures whose section was found and removed from [features]. */
@@ -93,4 +194,7 @@ object TrailRouteClosureSijko {
     )
 
     private const val VertexMatchMeters = 1.0
+
+    /** The projected bounds are stored on the line itself; this only absorbs rounding. */
+    private const val ProjectionToleranceMeters = 2.0
 }

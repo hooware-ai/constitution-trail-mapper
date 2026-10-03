@@ -108,6 +108,22 @@ test("Help lists the proposed layer with the rights it was admitted under, and h
   const help = page.getByRole("dialog", { name: "Help and about" });
   await expect(help).toContainText("Proposed trails (preview only):");
   await expect(help).toContainText("2 planned segments");
+  // The total in the record includes the proposed segments; the "existing" label must not.
+  const record = await (await page.request.get("/data/dataset.json")).json();
+  expect(record.content.featureCount).toBe(
+    record.content.featureCount - record.proposedLayer.featureCount + 2,
+  );
+  const existing =
+    record.content.featureCount - record.proposedLayer.featureCount;
+  await expect(help).toContainText(
+    `${existing} existing trail features, plus 2 proposed segments (preview only, below)`,
+  );
+  await expect(help).not.toContainText(
+    `${record.content.featureCount} existing trail features`,
+  );
+  await expect(help).toContainText(
+    "2 proposed features are loaded too, hidden unless you turn them on",
+  );
   await expect(
     help.getByRole("link", { name: "Synthetic Open License 1.0" }),
   ).toHaveAttribute("href", "https://example.test/synthetic/license");

@@ -84,9 +84,12 @@ class TrailRouteAdvisorySijkoTest {
     fun neverTreatsTheEstimatedCompletionAsAConfirmedReopening() {
         val warning = TrailRouteAdvisorySijko.forRoute(route("Rhodes Ln"), October1).single()
 
-        assertTrue(warning.message.contains("estimated completion date"))
-        assertTrue(warning.message.contains("reopening has not been confirmed"))
+        assertTrue(warning.message.contains("Completion is estimated"))
+        assertTrue(warning.message.contains("an estimate does not confirm reopening"))
         assertTrue(warning.message.contains("last checked September 7, 2026"))
+        assertTrue(warning.message.contains("object 841"))
+        val afterEstimate = TrailRouteAdvisorySijko.forRoute(route("Rhodes Ln"), 1_793_487_600_001L).single()
+        assertTrue(afterEstimate.message.contains("has passed; reopening has not been confirmed"))
         assertEquals(
             1,
             TrailRouteAdvisorySijko.approximateCorridors(October1).count { it.advisoryId.startsWith("hamilton") },

@@ -725,9 +725,7 @@ test("Help describes the packaged county data it is running on: coverage, licens
     "Bloomington–Normal and nearby McLean County",
   );
   await expect(dialog).toContainText("5 existing trail features (about");
-  await expect(dialog).toContainText(
-    "The county data has no street or shared-roadway information",
-  );
+  await expect(dialog).toContainText("This build has no street-access data");
   await expect(dialog).not.toContainText("Do not ride it");
   // Source, license and change notices, with the license as a real link.
   await expect(dialog.getByRole("link", { name: /CC BY 4.0/ })).toHaveAttribute(
@@ -747,4 +745,43 @@ test("Help describes the packaged county data it is running on: coverage, licens
     "not offered in the synthetic review build",
   );
   await expect(dialog).toContainText("Street basemap (online)");
+});
+
+test("Help on the build WITHOUT road data says so, claims no road files, and the session requested none", async ({
+  page,
+}) => {
+  const urls: string[] = [];
+  page.on("request", (request) => urls.push(request.url()));
+  // The optional basemap host is stubbed: nothing may reach it, and the build never asks.
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.abort(),
+  );
+  await seedPlaces(page);
+  await page.goto("/");
+  await expect(page.locator(".review-banner")).toContainText(
+    "Review candidate",
+  );
+  await page.getByRole("button", { name: /^Help/ }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Help and about" });
+  await expect(dialog).toContainText(
+    "This build has no street-access data: the app routes only on the loaded features",
+  );
+  await expect(dialog).toContainText(
+    "Outside the loaded features there is nothing to route on",
+  );
+  await expect(dialog).toContainText(
+    "The app never uploads your exact GPS fixes, what you type or what you save",
+  );
+  const copy = await dialog.innerText();
+  expect(copy).not.toContain("road files");
+  expect(copy).not.toContain("map squares");
+  expect(copy).not.toContain("is not sent by the app anywhere");
+  expect(copy).not.toContain("Road access:");
+  // The packaged record carries no road data, which is what the copy was derived from.
+  const record = await (await page.request.get("/data/dataset.json")).json();
+  expect(record.access).toBeUndefined();
+  expect(urls.filter((url) => /access-/.test(url))).toEqual([]);
+  expect(urls.filter((url) => /tile\.openstreetmap\.org/.test(url))).toEqual(
+    [],
+  );
 });

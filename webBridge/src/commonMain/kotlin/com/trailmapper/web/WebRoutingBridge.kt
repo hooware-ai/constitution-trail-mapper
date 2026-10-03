@@ -827,11 +827,21 @@ class WebRoutingBridge {
         put("closedTo", json.encodeToJsonElement(closure.closedTo))
         // Draw only the actual loaded source path; boundary coordinates alone do not imply a chord.
         val points = features?.firstOrNull { it.id == closure.featureId }?.paths?.firstNotNullOfOrNull { path ->
-            val first = path.indexOfFirst { TrailDistanceSijko.metersBetween(it, closure.closedFrom) <= 1.0 }
-            val last = path.indexOfFirst { TrailDistanceSijko.metersBetween(it, closure.closedTo) <= 1.0 }
-            if (first >= 0 && last >= 0 && first != last) path.subList(minOf(first, last), maxOf(first, last) + 1) else null
+            if (closure.boundsProjected) {
+                // Bounds inside a source leg: draw the section between them on the unchanged source line.
+                TrailRouteClosureSijko.closedSection(path, closure)
+            } else {
+                val first = path.indexOfFirst { TrailDistanceSijko.metersBetween(it, closure.closedFrom) <= 1.0 }
+                val last = path.indexOfFirst { TrailDistanceSijko.metersBetween(it, closure.closedTo) <= 1.0 }
+                if (first >= 0 && last >= 0 && first != last) path.subList(minOf(first, last), maxOf(first, last) + 1) else null
+            }
         } ?: emptyList()
         put("points", json.encodeToJsonElement(points))
+        // An estimate and an approximation label are information for the rider; neither lifts the closure.
+        put("estimatedEnd", closure.estimatedEndEpochMillis?.let { JsonPrimitive(it) } ?: JsonNull)
+        put("activeFrom", closure.activeFromEpochMillis)
+        put("mappingNote", closure.mappingNote)
+        put("checkedOn", closure.checkedOn)
     } })
 }
 

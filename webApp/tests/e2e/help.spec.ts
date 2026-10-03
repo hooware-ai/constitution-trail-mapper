@@ -78,6 +78,14 @@ test("Help follows today's behaviour: browser-only storage, optional basemap, no
   await expect(dialog).toContainText("off by default");
   await expect(dialog).toContainText("no analytics, advertising or tracking");
   await expect(dialog).toContainText("Accounts and sync: not available");
+  // The location claim is the qualified one: exact fixes are never uploaded, and this build fetches no road files.
+  await expect(dialog).toContainText(
+    "The app never uploads your exact GPS fixes, what you type or what you save",
+  );
+  const copy = await dialog.innerText();
+  expect(copy).not.toContain("is not sent by the app anywhere");
+  expect(copy).not.toContain("road files");
+  expect([...requested].filter((url) => /access-/.test(url))).toEqual([]);
   await expect(dialog).toContainText(
     "not been verified on physical iPhone Safari or Android Chrome",
   );
@@ -541,4 +549,67 @@ test("normal copy and the fallback still work and are announced again when the s
   await settle(page, 2, "reject");
   await expect(report.getByRole("alert")).toContainText("The text is selected");
   expect(await selectedLength(report)).toBeGreaterThan(50);
+});
+
+test("Trail updates lists the October notices with official links that open safely, their source and check date, and statuses that follow the clock", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Updates", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Trail updates" }),
+  ).toBeVisible();
+  await expect(page.locator(".freshness")).toContainText(
+    "selected entries updated October 2, 2026",
+  );
+  const card = (title: string) =>
+    page.locator(".updates-list article", { hasText: title });
+  const now = Date.now();
+  const at = (iso: string) => Date.parse(iso);
+  const willow = card("Willow Street trail crossing: Locust to Cypress");
+  await expect(willow.locator(".update-status")).toHaveText(
+    now >= at("2026-10-19T22:00:00Z")
+      ? "Recheck needed"
+      : now >= at("2026-10-05T11:00:00Z")
+        ? "Closed since October 5 · estimated through October 19; reopening not confirmed"
+        : "Scheduled · closure begins October 5, 6 a.m.",
+  );
+  const camelback = card("Virginia Avenue trail crossing (Camelback Bridge)");
+  await expect(camelback.locator(".update-status")).toHaveText(
+    now >= at("2026-10-06T22:00:00Z")
+      ? "Recheck needed"
+      : now >= at("2026-10-05T13:00:00Z")
+        ? "Closed at Virginia Avenue since October 5 · estimated through October 6; reopening not confirmed"
+        : "Scheduled · closure begins October 5, 8 a.m.",
+  );
+  const raab = card("Constitution Trail paving: Raab Road");
+  await expect(raab.locator(".update-status")).toHaveText(
+    now >= at("2026-10-07T05:00:00Z")
+      ? "Recheck needed"
+      : now >= at("2026-10-03T11:00:00Z")
+        ? "Paving under way · temporary closures; trail sections and end not published"
+        : "Scheduled · paving begins October 3, 2026",
+  );
+  // Raab says what it does not know, and marks no trail barrier.
+  await expect(raab).toContainText("does not say which trail sections close");
+  for (const [article, href] of [
+    [willow, "https://www.normalil.gov/m/newsflash/home/detail/3356"],
+    [camelback, "https://www.normalil.gov/m/newsflash/Home/Detail/3353"],
+    [raab, "https://www.normalil.gov/m/newsflash/Home/Detail/3357"],
+  ] as const) {
+    const link = article.getByRole("link");
+    await expect(link).toHaveAttribute("href", href);
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", /noopener/);
+  }
+  // The Hamilton notice carries the official map's estimate and still says an estimate is not a reopening.
+  await expect(card("Hamilton / Rhodes connection")).toContainText(
+    "estimates completion at 6 p.m. CDT on October 31, 2026",
+  );
+  await expect(card("Hamilton / Rhodes connection")).toContainText(
+    "an estimate does not confirm reopening",
+  );
 });

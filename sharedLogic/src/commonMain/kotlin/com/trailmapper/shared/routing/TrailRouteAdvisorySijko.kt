@@ -15,7 +15,26 @@ object TrailRouteAdvisorySijko {
     private const val HamiltonNoticeUrl =
         "https://www.bloomingtonil.gov/Home/Components/News/News/10909/1394"
     private const val HamiltonClosureStartEpochMillis = 1_786_968_000_000L
-    private const val HamiltonEstimatedEndEpochMillis = 1_790_809_200_000L
+    // The official city closure map (object 841, last edited September 25, 2026) now estimates October 31, 2026 at
+    // 6 p.m. CDT; the older city notice said September 30. Either is an estimate, never a confirmed reopening.
+    private const val HamiltonEstimatedEndEpochMillis = 1_793_487_600_000L
+
+    // Town of Normal notice 3353 (September 30, 2026): the trail is closed at Virginia Avenue (Camelback Bridge) from
+    // 8 a.m. CDT on October 5, completion estimated 5 p.m. CDT on October 6. The notice gives no trail detour and no
+    // closure limits along the trail, and the city map's line for it is a ROAD line (object 916), so this is an advisory
+    // for trail travel through the crossing, not a mapped exclusion.
+    private const val CamelbackAdvisoryId = "camelback-virginia-trail-crossing-2026-10-05"
+    private const val CamelbackNoticeUrl = "https://www.normalil.gov/m/newsflash/Home/Detail/3353"
+    private const val CamelbackStartEpochMillis = 1_791_205_200_000L
+    private const val CamelbackEstimatedEndEpochMillis = 1_791_324_000_000L
+    private const val CamelbackMatchToleranceMeters = 15.0
+
+    // Where the city's Virginia Avenue line crosses county trail 54:1305 (leg 6 to 7), near the Camelback Bridge.
+    private val camelbackCrossing = MapPoint(latitude = 40.4982689784, longitude = -88.9834162490)
+
+    private const val ClosedSectionToleranceMeters = 3.0
+    private const val ClosedSectionMinimumOverlapMeters = 15.0
+    private const val ClosedSectionSampleSpacingMeters = 2.0
     private const val CorridorMatchToleranceMeters = 25.0
 
     // The advisory warns about the same closure that new route searches exclude.
@@ -65,6 +84,15 @@ object TrailRouteAdvisorySijko {
         sourceUrl = LatestClosureMapUrl,
     )
 
+    // The Town's closure map line for the Willow Street trail closure, projected onto the county trail: an approximate
+    // display corridor, not surveyed barricade locations (the routing exclusion is in TrailRouteClosureSijko).
+    private val willowCorridor = TrailRouteAdvisoryCorridor(
+        advisoryId = TrailRouteClosureSijko.willowTrailCrossing.id,
+        label = "Willow Street trail closure, Locust Street to Cypress Avenue (approximate; not exact closure limits)",
+        points = TrailRouteClosureSijko.willowTrailCrossing.closedPath,
+        sourceUrl = TrailRouteClosureSijko.willowTrailCrossing.noticeUrl,
+    )
+
     // The bundled TIGER source duplicates this same road under both names. IDs
     // support older saved routes whose drawable segments did not retain names.
     private val hamiltonAccessFeatureIds = setOf("8:2368212", "8:3333226")
@@ -76,7 +104,132 @@ object TrailRouteAdvisorySijko {
         route: TrailRoute,
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
     ): List<TrailRouteAdvisory> {
-        return listOfNotNull(hamiltonAdvisory(route, nowEpochMillis), uptownAdvisory(route, nowEpochMillis))
+        return listOfNotNull(
+            hamiltonAdvisory(route, nowEpochMillis),
+            uptownAdvisory(route, nowEpochMillis),
+            willowAdvisory(route, nowEpochMillis),
+            camelbackAdvisory(route, nowEpochMillis),
+        )
+    }
+
+    /**
+     * The Willow Street trail closure. Before it begins this is a notice that it is SCHEDULED and does not claim a
+     * closure; from its start it is the blocking advisory the gate uses, and it stays so after the estimated end
+     * until an official status update is reviewed.
+     */
+    private fun willowAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {
+        val closure = TrailRouteClosureSijko.willowTrailCrossing
+        if (!usesClosedSection(route, closure)) {
+            return null
+        }
+        val estimate = closure.estimatedEndEpochMillis
+        val active = nowEpochMillis >= closure.activeFromEpochMillis
+        val end = if (estimate != null && nowEpochMillis > estimate) {
+            "The Town's estimated completion, 5 p.m. CDT on Monday, October 19, has passed; reopening has not been confirmed."
+        } else {
+            "The Town estimates completion by 5 p.m. CDT on Monday, October 19, weather permitting; an estimate does not confirm reopening."
+        }
+        val detour = "The Town's detour is Fell Avenue, via Locust Street and Cypress Street."
+        return if (active) {
+            TrailRouteAdvisory(
+                id = closure.id,
+                title = "Willow Street trail closure advisory",
+                message = "This route rides Constitution Trail's Illinois Central Branch between Locust Street and " +
+                    "Cypress Avenue, closed since 6 a.m. CDT on Monday, October 5, 2026 to rebuild the Willow Street " +
+                    "trail crossing. $detour $end The closed section is approximate (about 202 m, from the Town's " +
+                    "closure map). This route has not been detoured.",
+                sourceUrl = closure.noticeUrl,
+                locationDescription = "Constitution Trail, Illinois Central Branch, Locust Street to Cypress Avenue, at " +
+                    "Willow Street, Normal. The map overlay is approximate. Checked ${closure.checkedOn}.",
+            )
+        } else {
+            TrailRouteAdvisory(
+                id = closure.id,
+                title = "Scheduled Willow Street trail closure",
+                message = "Scheduled, not closed yet: the Town of Normal will close Constitution Trail's Illinois Central " +
+                    "Branch between Locust Street and Cypress Avenue, to rebuild the Willow Street trail crossing, " +
+                    "beginning 6 a.m. CDT on Monday, October 5, 2026. This route rides that section and has not been " +
+                    "changed. $detour $end",
+                sourceUrl = closure.noticeUrl,
+                locationDescription = "Constitution Trail, Illinois Central Branch, Locust Street to Cypress Avenue, at " +
+                    "Willow Street, Normal. Checked ${closure.checkedOn}.",
+            )
+        }
+    }
+
+    /** Trail travel through the Camelback Bridge crossing; informs, never blocks, because no closure limits are given. */
+    private fun camelbackAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {
+        val usesCrossing = route.segments.any { segment ->
+            segment.type == TrailRouteSegmentType.Trail &&
+                TrailNetworkRole.SharedRoadways !in segment.routeRoles &&
+                segment.points.zipWithNext().any { (first, second) ->
+                    TrailDistanceSijko.projectToSegment(camelbackCrossing, first, second).distanceMeters <=
+                        CamelbackMatchToleranceMeters
+                }
+        }
+        if (!usesCrossing) {
+            return null
+        }
+        val end = if (nowEpochMillis > CamelbackEstimatedEndEpochMillis) {
+            "The Town's estimated completion, 5 p.m. CDT on Tuesday, October 6, has passed; reopening has not been confirmed."
+        } else {
+            "The Town estimates completion by 5 p.m. CDT on Tuesday, October 6, weather permitting; an estimate does not confirm reopening."
+        }
+        val limits = "The notice gives no trail detour and no closure limits along the trail, so this route has not " +
+            "been changed or blocked; follow posted signs."
+        return if (nowEpochMillis >= CamelbackStartEpochMillis) {
+            TrailRouteAdvisory(
+                id = CamelbackAdvisoryId,
+                title = "Virginia Avenue (Camelback Bridge) trail closure advisory",
+                message = "This route crosses Virginia Avenue at the Camelback Bridge, where the Town of Normal closed " +
+                    "Constitution Trail from 8 a.m. CDT on Monday, October 5, 2026, with Virginia Avenue closed between " +
+                    "South Linden and Hillcrest Streets for bridge inspection and maintenance. $limits $end",
+                sourceUrl = CamelbackNoticeUrl,
+                locationDescription = "Constitution Trail at Virginia Avenue (Camelback Bridge), Normal. Notice posted " +
+                    "September 30, 2026; checked October 2, 2026.",
+            )
+        } else {
+            TrailRouteAdvisory(
+                id = CamelbackAdvisoryId,
+                title = "Scheduled trail closure at Virginia Avenue (Camelback Bridge)",
+                message = "Scheduled, not closed yet: the Town of Normal will close Constitution Trail at Virginia " +
+                    "Avenue (Camelback Bridge) from 8 a.m. CDT on Monday, October 5, 2026, with Virginia Avenue closed " +
+                    "between South Linden and Hillcrest Streets for bridge inspection and maintenance. This route " +
+                    "crosses there. $limits $end",
+                sourceUrl = CamelbackNoticeUrl,
+                locationDescription = "Constitution Trail at Virginia Avenue (Camelback Bridge), Normal. Notice posted " +
+                    "September 30, 2026; checked October 2, 2026.",
+            )
+        }
+    }
+
+    /** Trail travel along a closure's mapped section; a crossing street or a neighboring trail does not count. */
+    private fun usesClosedSection(route: TrailRoute, closure: TrailRouteClosure): Boolean {
+        val section = closure.closedPath.zipWithNext()
+        var overlapMeters = 0.0
+        route.segments
+            .filter { segment -> segment.type == TrailRouteSegmentType.Trail }
+            .forEach { segment ->
+                segment.points.zipWithNext().forEach { (start, end) ->
+                    val legMeters = TrailDistanceSijko.metersBetween(start, end)
+                    val samples = maxOf(1, (legMeters / ClosedSectionSampleSpacingMeters).toInt())
+                    repeat(samples) { sample ->
+                        val ratio = (sample + 0.5) / samples
+                        val point = MapPoint(
+                            latitude = start.latitude + (end.latitude - start.latitude) * ratio,
+                            longitude = start.longitude + (end.longitude - start.longitude) * ratio,
+                        )
+                        if (section.any { (from, to) ->
+                                TrailDistanceSijko.projectToSegment(point, from, to).distanceMeters <=
+                                    ClosedSectionToleranceMeters
+                            }
+                        ) {
+                            overlapMeters += legMeters / samples
+                        }
+                    }
+                }
+            }
+        return overlapMeters >= ClosedSectionMinimumOverlapMeters
     }
 
     private fun hamiltonAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {
@@ -84,15 +237,17 @@ object TrailRouteAdvisorySijko {
             return null
         }
         val schedule = if (nowEpochMillis > HamiltonEstimatedEndEpochMillis) {
-            "September 30, 2026 was an estimated completion date; reopening has not been confirmed."
+            "The estimated completion, 6 p.m. CDT on October 31, 2026, has passed; reopening has not been confirmed."
         } else {
-            "Completion is estimated for September 30, 2026; that date does not confirm reopening."
+            "Completion is estimated for 6 p.m. CDT on October 31, 2026 (the older notice said September 30); " +
+                "an estimate does not confirm reopening."
         }
         return TrailRouteAdvisory(
             id = HamiltonAdvisoryId,
             title = "Hamilton/Rhodes closure advisory",
-            message = "This route uses the Hamilton/Rhodes work corridor. The city notice, " +
-                "last checked September 7, 2026, reports an all-traffic closure between " +
+            message = "This route uses the Hamilton/Rhodes work corridor. The city's closure map (object 841, last " +
+                "edited September 25, 2026) reports Hamilton Road / Rhodes Lane closed to through traffic, and the " +
+                "city notice, last checked September 7, 2026, reports an all-traffic closure between " +
                 "512 and 519 E. Hamilton Road. $schedule Exact barrier locations are not mapped. " +
                 "Use another road connection and check the city notice; this route has not been detoured.",
             sourceUrl = HamiltonNoticeUrl,
@@ -129,6 +284,7 @@ object TrailRouteAdvisorySijko {
         return listOfNotNull(
             hamiltonCorridor.takeIf { nowEpochMillis >= HamiltonClosureStartEpochMillis },
             uptownCorridor.takeIf { nowEpochMillis >= UptownDetourStartEpochMillis },
+            willowCorridor.takeIf { nowEpochMillis >= TrailRouteClosureSijko.willowTrailCrossing.activeFromEpochMillis },
         )
     }
 

@@ -2045,6 +2045,11 @@ export function App() {
                         <article key={closure.id}>
                           <h3>{closure.title}</h3>
                           <p>{closure.message}</p>
+                          {closure.locationDescription && (
+                            <p className="caption">
+                              {closure.locationDescription}
+                            </p>
+                          )}
                           <SafeLink href={closure.sourceUrl}>
                             Review official notice
                           </SafeLink>

@@ -102,7 +102,7 @@ Replacement workers (restart, cancellation) boot on **exactly the dataset the pa
 
 - Physical iPhone Safari / Android Chrome runs (#41) and field validation (#18): every timing above is an emulator number, and whether the 21-part network is acceptable for riders (the largest part is 88% of the trails, but downtown gaps need street data) is a product decision for the owner.
 - Street access and the unresolved 16:69 / 16:1773 join are not explored beyond the numbers above.
-- Owner approval of this source composition, hosting, basemap and sign-in decisions, Firebase/sign-in/sync (#31 beyond this slice, #32, #33), and any public release. The dataset stays `approved: false` with five listed blockers.
+- Owner approval of this source composition, the hosting and basemap decisions, and any public release. Sign-in and sync (Firebase, #31 beyond this slice, #32, #33) are deferred by decision: the first launch is guest-first, so they are not an undecided launch requirement. The dataset stays `approved: false` with five listed blockers.
 
 ## Rollback
 

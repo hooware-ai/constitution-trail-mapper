@@ -66,6 +66,22 @@ export function coverageOf(features: readonly Feature[]): Coverage | null {
     : null;
 }
 
+/** What the loaded features are, from their own status and roles, so copy never claims more or less than is loaded. */
+export interface FeatureMix {
+  existing: number;
+  proposed: number;
+  /** Existing features that are roads shared with traffic. */
+  shared: number;
+}
+export function featureMix(features: readonly Feature[]): FeatureMix {
+  const existing = features.filter((f) => f.status !== "Proposed");
+  return {
+    existing: existing.length,
+    proposed: features.length - existing.length,
+    shared: existing.filter((f) => f.roles.includes("SharedRoadways")).length,
+  };
+}
+
 const degrees = (value: number, positive: string, negative: string) =>
   `${Math.abs(value).toFixed(2)}° ${value >= 0 ? positive : negative}`;
 /** "40.28° N to 40.76° N, 89.21° W to 88.71° W": a rough extent, not a boundary. */

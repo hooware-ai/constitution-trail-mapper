@@ -5,6 +5,7 @@ import {
   coverageOf,
   datasetText,
   extentText,
+  featureMix,
   reportTemplate,
   withBrowserDetails,
   type BuildInfo,
@@ -117,4 +118,24 @@ test("the optional browser line is added and removed exactly, without touching w
     added,
   );
   assert.equal(withBrowserDetails(added, false, ""), original);
+});
+
+test("the feature mix counts existing, proposed and shared-roadway features from their own status and roles", () => {
+  const some = (status: string, roles: string[]): Feature => ({
+    id: `x:${Math.random()}`,
+    name: null,
+    status,
+    roles,
+    paths: [],
+  });
+  assert.deepEqual(
+    featureMix([
+      some("Existing", ["TrailBranches"]),
+      some("Existing", ["SharedRoadways"]),
+      some("Existing", ["TrailBranches", "SharedRoadways"]),
+      some("Proposed", ["ProposedTrails", "SharedRoadways"]),
+    ]),
+    { existing: 3, proposed: 1, shared: 2 },
+  );
+  assert.deepEqual(featureMix([]), { existing: 0, proposed: 0, shared: 0 });
 });
