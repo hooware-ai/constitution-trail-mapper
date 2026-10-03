@@ -29,6 +29,18 @@ const validRecord = (value: unknown): value is RouteRecord =>
   object(value.route) &&
   (value.plannedKey === undefined ||
     (typeof value.plannedKey === "string" && value.plannedKey.length > 0)) &&
+  (value.temporary === undefined || value.temporary === true) &&
+  (value.geometryKey === undefined ||
+    (typeof value.geometryKey === "string" && value.geometryKey.length > 0)) &&
+  (value.plannedGeometryKey === undefined ||
+    (typeof value.plannedGeometryKey === "string" &&
+      value.plannedGeometryKey.length > 0)) &&
+  (value.recalculatedFrom === undefined ||
+    (object(value.recalculatedFrom) &&
+      typeof value.recalculatedFrom.key === "string" &&
+      value.recalculatedFrom.key.length > 0 &&
+      typeof value.recalculatedFrom.title === "string" &&
+      value.recalculatedFrom.title.length > 0)) &&
   validDraft(value.draft);
 const keptDataset = (value: unknown): RouteRecord["dataset"] | undefined =>
   object(value) &&
@@ -128,6 +140,23 @@ export class BrowserSessionStore {
               // The direction a loop is being ridden in survives a reload (re-checked against a fresh reversal).
               ...(value.selected.plannedKey
                 ? { plannedKey: value.selected.plannedKey }
+                : {}),
+              // A recalculated route stays temporary across a reload: its status, original and identity are all kept,
+              // and nothing about restoring it writes to the library.
+              ...(value.selected.temporary ? { temporary: true as const } : {}),
+              ...(value.selected.geometryKey
+                ? { geometryKey: value.selected.geometryKey }
+                : {}),
+              ...(value.selected.plannedGeometryKey
+                ? { plannedGeometryKey: value.selected.plannedGeometryKey }
+                : {}),
+              ...(value.selected.recalculatedFrom
+                ? {
+                    recalculatedFrom: {
+                      key: value.selected.recalculatedFrom.key,
+                      title: value.selected.recalculatedFrom.title,
+                    },
+                  }
                 : {}),
             }
           : null,

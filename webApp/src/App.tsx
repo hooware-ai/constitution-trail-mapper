@@ -137,6 +137,15 @@ const routeOkay = (value: RouteResult & { error?: string }): RouteResult => {
     );
   return value;
 };
+/**
+ * A recalculated route gets an identity of its own, minted ONCE when it is made: the geometry key alone would make saving
+ * it overwrite the route it came from (or any saved route that happens to share the geometry). The geometry key is kept
+ * beside it, because that is what a reversal is checked against.
+ */
+const mintedKey = (geometryKey: string) =>
+  `${geometryKey}~r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+const recalculatedTitle = (title: string) =>
+  title.endsWith(" (recalculated)") ? title : `${title} (recalculated)`;
 export function App() {
   const panelRef = useRef<HTMLElement>(null);
   const canShare = typeof navigator.share === "function";
@@ -913,36 +922,61 @@ export function App() {
     const token = ++operation.current;
     setChecking(true);
     setError("");
+    const client = clientRef.current;
+    // The route being recalculated, and the SAVED route it stands for: recalculating a temporary result again still
+    // leaves the original untouched, so the original is what a later save is measured against.
     const before = selected;
+    const planned = reverseOf ?? selected;
+    const original = planned.recalculatedFrom ?? {
+      key: planned.key,
+      title: planned.title,
+    };
     try {
       const result = routeOkay(
-        await clientRef.current.call<RouteResult>({
+        await client.call<RouteResult>({
           op: "recalculate",
-          route: selected.route,
-          ...((selected.route as { kind?: string }).kind === "ExerciseLoop"
+          route: before.route,
+          ...((before.route as { kind?: string }).kind === "ExerciseLoop"
             ? { completedSessions: loopHistory() }
             : {}),
           now: Date.now(),
         }),
       );
       if (token !== operation.current) return;
-      const replacement = makeRecord(result, draft, selected.title);
+      // The result is a TEMPORARY route with a freshly minted identity. Nothing is written to the library here: not the
+      // original (it is kept exactly as it was), not Recent, and not the result. Only an explicit Save makes a record.
+      const made = makeRecord(result, draft, recalculatedTitle(original.title));
+      const candidate: RouteRecord = {
+        ...made,
+        key: mintedKey(made.key),
+        geometryKey: made.key,
+        temporary: true,
+        recalculatedFrom: original,
+      };
       setPreview(result);
       setReverseOf(null);
-      setSelected(replacement);
-      applyStore(
-        storeRef.current!.replace(before.key, replacement),
-        "Route recalculated",
-        () => {
-          applyStore(
-            storeRef.current!.replace(replacement.key, before),
-            "Previous route restored",
-          );
-          void openRoute(before, origin === "saved" ? "saved" : "plan");
-        },
+      setSelected(candidate);
+      success(
+        result.canNavigate
+          ? "Recalculated route ready. It is not saved, and your saved route is unchanged."
+          : "A recalculated route was found but it cannot be started yet. Your saved route is unchanged.",
       );
     } catch (e) {
-      if (token === operation.current) setError(errorText(e));
+      if (token !== operation.current) return;
+      setError(`${errorText(e)} Your saved route is unchanged.`);
+      // The route on screen is what Start would use, so its eligibility is checked again now rather than left as it was.
+      try {
+        const current = routeOkay(
+          await client.call<RouteResult>({
+            op: "inspect",
+            route: before.route,
+            now: Date.now(),
+          }),
+        );
+        if (token === operation.current) setPreview(current);
+      } catch {
+        if (token === operation.current) setPreview(null);
+      }
     } finally {
       if (token === operation.current) setChecking(false);
     }
@@ -1097,10 +1131,34 @@ export function App() {
       }
       const planned = reverseOf ?? selected;
       const reversing = reverseOf === null;
-      const record = {
-        ...makeRecord(result, draft, selected.title),
-        ...(reversing ? { plannedKey: planned.key } : {}),
-      };
+      const fresh = makeRecord(result, draft, selected.title);
+      const record: RouteRecord = reversing
+        ? {
+            ...fresh,
+            plannedKey: planned.key,
+            // The reversal is proved against the planned route's GEOMETRY, which is not its key when it has a minted one.
+            ...(planned.geometryKey
+              ? { plannedGeometryKey: planned.geometryKey }
+              : {}),
+            ...(planned.temporary ? { temporary: true as const } : {}),
+            ...(planned.recalculatedFrom
+              ? { recalculatedFrom: planned.recalculatedFrom }
+              : {}),
+          }
+        : planned.geometryKey && planned.geometryKey === fresh.key
+          ? // Reversing back is the planned route again, under its own identity, status and original.
+            {
+              ...fresh,
+              key: planned.key,
+              geometryKey: planned.geometryKey,
+              title: planned.title,
+              createdAt: planned.createdAt,
+              ...(planned.temporary ? { temporary: true as const } : {}),
+              ...(planned.recalculatedFrom
+                ? { recalculatedFrom: planned.recalculatedFrom }
+                : {}),
+            }
+          : fresh;
       setPreview(result);
       setSelected(record);
       // Reversing back is the planned direction again.
@@ -1136,16 +1194,25 @@ export function App() {
       );
       if (!isCurrent()) return;
       // Built from the restored record, not from live state: it keeps the data identity the route was planned on.
-      const { plannedKey: _reversed, ...own } = record;
-      const planned: RouteRecord = {
-        ...own,
-        key: stableRouteKey({
-          kind: result.kind,
-          segments: (result.route as { segments: unknown }).segments,
-        }),
-        route: result.route,
-      };
-      if (planned.key === record.plannedKey) {
+      const {
+        plannedKey: _reversed,
+        plannedGeometryKey: _geometry,
+        ...own
+      } = record;
+      const geometryKey = stableRouteKey({
+        kind: result.kind,
+        segments: (result.route as { segments: unknown }).segments,
+      });
+      // The proof is the planned route's geometry; its identity (a minted key for a recalculated route) is the stored one.
+      if (geometryKey === (record.plannedGeometryKey ?? record.plannedKey)) {
+        const planned: RouteRecord = {
+          ...own,
+          key: record.plannedKey,
+          route: result.route,
+          ...(record.plannedGeometryKey
+            ? { geometryKey: record.plannedGeometryKey }
+            : {}),
+        };
         setReverseOf(planned);
         return;
       }
@@ -1155,12 +1222,28 @@ export function App() {
     if (!isCurrent()) return;
     setSelected((current) =>
       current && current.key === record.key
-        ? (({ plannedKey: _dropped, ...rest }) => rest)(current)
+        ? (({ plannedKey: _dropped, plannedGeometryKey: _unproved, ...rest }) =>
+            rest)(current)
         : current,
     );
   }
   function saveRecord(record: RouteRecord) {
-    applyStore(storeRef.current!.save(record), "Saved to Saved routes");
+    const ok = applyStore(
+      storeRef.current!.save(record),
+      record.temporary
+        ? "Saved as a new route. Your earlier saved route is kept."
+        : "Saved to Saved routes",
+    );
+    // Only after the library accepted it is the route no longer temporary (a quota failure leaves it temporary, the
+    // original untouched, and no success announced).
+    if (ok && record.temporary) {
+      const settled = (item: RouteRecord): RouteRecord => {
+        const { temporary: _temporary, ...rest } = item;
+        return rest;
+      };
+      setSelected((current) => (current ? settled(current) : current));
+      setReverseOf((current) => (current ? settled(current) : current));
+    }
   }
   function removeRoute(record: RouteRecord, saved: boolean) {
     const result = saved
@@ -2022,6 +2105,28 @@ export function App() {
                       </button>
                     </div>
                   )}
+                  {selected?.temporary && (
+                    <div
+                      className={
+                        preview.canNavigate
+                          ? "success-note recalculated-route"
+                          : "warning recalculated-route"
+                      }
+                      role="status"
+                    >
+                      <h3>Recalculated route · not saved</h3>
+                      <p>
+                        This is a temporary preview
+                        {selected.recalculatedFrom
+                          ? ` recalculated from “${selected.recalculatedFrom.title}”`
+                          : ""}
+                        . Your saved route is unchanged.{" "}
+                        {preview.canNavigate
+                          ? "Start it now, or save it as a new route."
+                          : "It cannot be started yet (see below), but you can still save it as a new route."}
+                      </p>
+                    </div>
+                  )}
                   {olderData && !stale && (
                     <p className="caption">
                       Planned on an earlier version of the trail data (
@@ -2055,6 +2160,22 @@ export function App() {
                           </SafeLink>
                         </article>
                       ))}
+                    </div>
+                  )}
+                  {preview.closures.length > 0 && !stale && (
+                    <div className="recalculate-offer">
+                      <button
+                        className="primary"
+                        disabled={checking}
+                        onClick={() => void recalculate()}
+                      >
+                        Recalculate around the closure
+                      </button>
+                      <p className="caption">
+                        Your saved route is kept as it is. The recalculated
+                        route is a temporary preview you can start or save as a
+                        new route.
+                      </p>
                     </div>
                   )}
                   {!checking && (
@@ -2092,9 +2213,13 @@ export function App() {
                     <p className="caption">
                       {stale
                         ? "Navigation is unavailable until this route is recalculated on the current trail data."
-                        : preview.accessGaps?.length
-                          ? "Navigation needs a continuously mapped route. The connections listed above are still unverified."
-                          : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
+                        : selected?.temporary
+                          ? preview.accessGaps?.length
+                            ? "This recalculated route cannot be started: its connections listed above are still unverified. Your saved route is unchanged."
+                            : "This recalculated route cannot be started: review the notices above. Your saved route is unchanged."
+                          : preview.accessGaps?.length
+                            ? "Navigation needs a continuously mapped route. The connections listed above are still unverified."
+                            : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
                     </p>
                   )}
                   <div className="actions preview-actions">
@@ -2106,7 +2231,11 @@ export function App() {
                         } else if (selected) saveRecord(reverseOf ?? selected);
                       }}
                     >
-                      {isSaved ? "Saved · View" : "Save"}
+                      {isSaved
+                        ? "Saved · View"
+                        : selected?.temporary
+                          ? "Save as new route"
+                          : "Save"}
                     </button>
                     <button
                       onClick={() => {

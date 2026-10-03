@@ -269,7 +269,7 @@ test("recalculating a stale route plans on the current data and re-enables navig
   await page
     .getByRole("button", { name: "Recalculate on current data" })
     .click();
-  await expect(page.getByText("Route recalculated")).toBeVisible();
+  await expect(page.getByText(/Recalculated route ready/)).toBeVisible();
   await expect(page.locator(".stale-route")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
@@ -464,7 +464,7 @@ test("a routing worker that dies and restarts reloads the same packaged data, ne
   await page.getByRole("button", { name: "Restart route planning" }).click();
   await expect(page.getByText("Route planning restarted")).toBeVisible();
   await page.getByRole("button", { name: "Recalculate route" }).click();
-  await expect(page.getByText("Route recalculated")).toBeVisible();
+  await expect(page.getByText(/Recalculated route ready/)).toBeVisible();
   await expect(page.locator(".review-banner")).toContainText(
     "Review candidate",
   );

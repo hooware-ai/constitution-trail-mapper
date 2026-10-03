@@ -43,6 +43,8 @@ The corrected Tipton Park North entrance to Culver's Hershey Road calculation pr
 
 A second manual browser route used an explicit mapped start on Route 66 & Illinois Central. Its 3-mile exercise request returned a 2.95-mile loop with 0.36 miles retraced, no street access, and navigation enabled after the catalog check. This verifies the actual local graph as well as the synthetic end-to-end flows.
 
+Baseline note (2026-10-03): this positive mapped-start 2.95-mile loop is the preserved working web baseline. The "facility 0 of 15" figure from the catalog-point probes describes those six catalog points, not Jesse's own trips and not all routing; nothing here widens or narrows the network. Installed native identity (Pixel 9 Pro, APK and asset hashes) is recorded in `docs/web/native-parity.md` and is APK identity, not web physical or outdoor acceptance.
+
 The separate licensed extractor verified all 254 approved existing county features against a source explicitly licensed CC BY 4.0. Geometry is not committed or included in the default static build. Six proposed features and the combined OSM-derived graph retain the release gates in [data-rights.md](data-rights.md).
 
 ## Remaining acceptance boundaries

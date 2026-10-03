@@ -4109,3 +4109,116 @@ test("a renamed route's title is not painted unless exact endpoints are approved
   const exact = await paintedByImage(page);
   expect(exact).toContain("Aunt Carol 4412 Private Lane");
 });
+
+// ---- Recalculate keeps the Saved original: a temporary result, saved only on request as a NEW record ----------------------
+
+test("a recalculated loop stays temporary through reverse, reload and reverse back, and Save as new route keeps the original", async ({
+  page,
+}) => {
+  await planLoopPreview(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const original = (await libraryOf(page)).saved[0];
+  const firstLeg = (record: any) => record.route.segments[0].points.slice(0, 2);
+  const banner = page.locator(".recalculated-route");
+
+  await page.getByRole("button", { name: "Recalculate route" }).click();
+  await expect(banner).toContainText("Recalculated route · not saved");
+  // The same geometry as the saved loop, so the geometry key alone would have overwritten it.
+  expect((await libraryOf(page)).saved).toEqual([original]);
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect(banner).toBeVisible();
+  expect((await libraryOf(page)).saved).toEqual([original]);
+
+  // Reload: the direction is proved again by geometry, the route is still temporary, and nothing was written.
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect(banner).toBeVisible();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  expect((await libraryOf(page)).saved).toEqual([original]);
+
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Planned direction", { exact: true }),
+  ).toBeVisible();
+  await expect(banner).toBeVisible();
+  await page.getByRole("button", { name: "Save as new route" }).click();
+  await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+  const saved = (await libraryOf(page)).saved;
+  expect(saved).toHaveLength(2);
+  const added = saved.find((item: any) => item.key !== original.key);
+  // A minted identity, the planned direction, the same geometry as the original, and the original untouched.
+  expect(added.key.startsWith(original.key + "~r")).toBe(true);
+  expect(added.geometryKey).toBe(original.key);
+  expect(firstLeg(added)).toEqual(firstLeg(original));
+  expect(added.temporary).toBeUndefined();
+  expect(saved.find((item: any) => item.key === original.key)).toEqual(
+    original,
+  );
+  await expect(banner).toHaveCount(0);
+  await page.reload();
+  expect((await libraryOf(page)).saved).toHaveLength(2);
+});
+
+test("a held recalculation that returns after the rider moved on or cancelled adopts nothing and writes nothing", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await planLoopPreview(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const before = await libraryOf(page);
+  for (const outcome of ["success", "failure"] as const) {
+    await page.evaluate((kind) => {
+      (window as any).__ops = {
+        recalculate:
+          kind === "failure"
+            ? {
+                hold: true,
+                patch: {
+                  route: null,
+                  error: "No safe route avoids the active trail closure.",
+                },
+              }
+            : { hold: true },
+      };
+    }, outcome);
+    await page.getByRole("button", { name: "Recalculate route" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => !!(window as any).__ops.recalculate.pending),
+      )
+      .toBe(true);
+    // The rider leaves before the answer arrives.
+    await page.getByRole("button", { name: "← Back" }).click();
+    await releaseHeld(page, "recalculate");
+    await page.waitForTimeout(300);
+    await expect(page.locator(".recalculated-route")).toHaveCount(0);
+    await expect(
+      page.getByText(/Recalculated route ready|was found but it cannot/),
+    ).toHaveCount(0);
+    await expect(page.getByText(/No safe route avoids/)).toHaveCount(0);
+    expect(await libraryOf(page)).toEqual(before);
+    // Back to the route for the next round (opened from Saved, so the original is what is shown).
+    await page.evaluate(() => {
+      delete (window as any).__ops;
+    });
+    await page.getByRole("button", { name: "Trail Mapper home" }).click();
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Saved", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: /mi loop from/ })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Route preview" }),
+    ).toBeVisible();
+  }
+});
