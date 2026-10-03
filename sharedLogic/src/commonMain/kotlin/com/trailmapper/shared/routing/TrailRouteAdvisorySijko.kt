@@ -237,19 +237,23 @@ object TrailRouteAdvisorySijko {
         return route.segments.filter { !it.isRouted }.any { segment ->
             // An estimated hop has no source: it is judged with the same reach as a derived trail line.
             segment.points.any { frame.insideInterval(it, low, high, DerivedLineToleranceMeters) } ||
-                segment.points.zipWithNext().any { (a, b) ->
-                    frame.travelsAlong(a, b, low, high, DerivedLineToleranceMeters)
-                }
+                frame.travelsAlongPath(segment.points, low, high, DerivedLineToleranceMeters, requireExtent = false)
         }
     }
 
-    /** Legs of trail travel that could be on [closure]'s feature, with whether their source is known to be it. */
-    private fun candidateLegs(route: TrailRoute, closure: TrailRouteClosure): List<Pair<Pair<MapPoint, MapPoint>, Boolean>> {
+    /** One polyline of trail travel, with whether its source is known to be the closure's feature. */
+    private class Candidate(val points: List<MapPoint>, val known: Boolean)
+
+    /**
+     * Polylines of trail travel that could be on [closure]'s feature. They stay whole: a decision about travel is made on
+     * the continuous polyline, so it cannot depend on how many collinear vertices the geometry happens to keep.
+     */
+    private fun candidates(route: TrailRoute, closure: TrailRouteClosure): List<Candidate> {
         if (route.edges.isEmpty()) {
             // A route without per-edge provenance: its merged trail segments, judged by geometry alone.
             return route.segments
                 .filter { it.type == TrailRouteSegmentType.Trail && TrailNetworkRole.SharedRoadways !in it.routeRoles }
-                .flatMap { segment -> segment.points.zipWithNext().map { it to false } }
+                .map { Candidate(it.points, false) }
         }
         return route.edges
             // The closure's own feature, or an edge with no recorded source (a snap connector made along it).
@@ -260,7 +264,7 @@ object TrailRouteAdvisorySijko {
                 // is not the closed trail whatever edge carries it.
                 edge.routeSegments
                     .filter { it.type == TrailRouteSegmentType.Trail }
-                    .flatMap { segment -> segment.points.zipWithNext().map { it to known } }
+                    .map { Candidate(it.points, known) }
             }
     }
 
@@ -271,10 +275,13 @@ object TrailRouteAdvisorySijko {
      */
     private fun traversesCrossing(route: TrailRoute, closure: TrailRouteClosure): Boolean {
         val frame = frameOf(closure)
-        return candidateLegs(route, closure).any { (leg, known) ->
-            TrailDistanceSijko.projectToSegment(closure.closedFrom, leg.first, leg.second).distanceMeters <=
-                CrossingToleranceMeters ||
-                (known && frame != null && frame.spansPosition(leg.first, leg.second, frame.along(closure.closedFrom)))
+        return candidates(route, closure).any { candidate ->
+            candidate.points.zipWithNext().any { (start, end) ->
+                TrailDistanceSijko.projectToSegment(closure.closedFrom, start, end).distanceMeters <=
+                    CrossingToleranceMeters ||
+                    (candidate.known && frame != null &&
+                        frame.spansPosition(start, end, frame.along(closure.closedFrom)))
+            }
         }
     }
 
@@ -289,12 +296,11 @@ object TrailRouteAdvisorySijko {
     private fun ridesClosedSection(route: TrailRoute, closure: TrailRouteClosure): Boolean {
         val frame = frameOf(closure) ?: return false
         val (low, high) = intervalOf(frame, closure)
-        return candidateLegs(route, closure).any { (leg, known) ->
-            if (known) {
-                frame.withinExtent(leg.first, leg.second, DerivedLineToleranceMeters) &&
-                    frame.travelsAlong(leg.first, leg.second, low, high, DerivedLineToleranceMeters)
+        return candidates(route, closure).any { candidate ->
+            if (candidate.known) {
+                frame.travelsAlongPath(candidate.points, low, high, DerivedLineToleranceMeters, requireExtent = true)
             } else {
-                frame.travelsAlong(leg.first, leg.second, low, high, OnSectionLineToleranceMeters)
+                frame.travelsAlongPath(candidate.points, low, high, OnSectionLineToleranceMeters, requireExtent = false)
             }
         }
     }
@@ -336,11 +342,12 @@ object TrailRouteAdvisorySijko {
         fun along(point: MapPoint) = x(point) * directionX + y(point) * directionY
         private fun across(point: MapPoint) = kotlin.math.abs(x(point) * directionY - y(point) * directionX)
 
-        private fun alignment(start: MapPoint, end: MapPoint): Double {
+        /** Cosine of the angle between the leg and the line; null for a leg with no length. */
+        private fun alignment(start: MapPoint, end: MapPoint): Double? {
             val legX = x(end) - x(start)
             val legY = y(end) - y(start)
             val legLength = kotlin.math.hypot(legX, legY)
-            return if (legLength <= 0.0) 0.0 else kotlin.math.abs((legX * directionX + legY * directionY) / legLength)
+            return if (legLength <= 0.0) null else kotlin.math.abs((legX * directionX + legY * directionY) / legLength)
         }
 
         /** A point strictly inside [low]..[high] along the line, within [tolerance] of it. */
@@ -355,28 +362,63 @@ object TrailRouteAdvisorySijko {
             return listOf(along(start), along(end)).all { it >= -tolerance && it <= length + tolerance }
         }
 
-        /** The leg runs along the line (within [tolerance], aligned) over more than noise of [low]..[high]. */
-        fun travelsAlong(start: MapPoint, end: MapPoint, low: Double, high: Double, tolerance: Double): Boolean {
-            val alignment = alignment(start, end)
-            if (across(start) > tolerance || across(end) > tolerance || alignment < LongitudinalCosine) {
-                return false
+        /**
+         * The polyline travels along the line over more than the transfer error of [low]..[high]. The decision is made on
+         * each maximal run of consecutive legs that lie on the line (within [tolerance], aligned, inside the extent when
+         * required) and sums the run's overlap, so subdividing a continuous geometry into any number of collinear legs
+         * cannot change it. Projection onto the source line is off by the run's distance from the line times its slope
+         * against it; overlap below that, or below numerical noise on the raw line, is the transfer and not travel.
+         */
+        fun travelsAlongPath(
+            points: List<MapPoint>,
+            low: Double,
+            high: Double,
+            tolerance: Double,
+            requireExtent: Boolean,
+        ): Boolean {
+            var inRun = false
+            var overlap = 0.0
+            var distance = 0.0
+            var slope = 0.0
+
+            fun runTravels() = inRun && overlap > kotlin.math.max(SectionOverlapEpsilonMeters, distance * slope)
+
+            points.zipWithNext().forEach { (start, end) ->
+                val legAlignment = alignment(start, end)
+                if (legAlignment == null) {
+                    // A repeated vertex has no direction and no length: it neither continues nor breaks a run.
+                    return@forEach
+                }
+                val onLine = across(start) <= tolerance && across(end) <= tolerance &&
+                    legAlignment >= LongitudinalCosine && (!requireExtent || withinExtent(start, end, tolerance))
+                if (!onLine) {
+                    if (runTravels()) {
+                        return true
+                    }
+                    inRun = false
+                    overlap = 0.0
+                    distance = 0.0
+                    slope = 0.0
+                    return@forEach
+                }
+                inRun = true
+                val a = along(start)
+                val b = along(end)
+                overlap += kotlin.math.max(
+                    0.0,
+                    kotlin.math.min(kotlin.math.max(a, b), high) - kotlin.math.max(kotlin.math.min(a, b), low),
+                )
+                distance = kotlin.math.max(distance, kotlin.math.max(across(start), across(end)))
+                slope = kotlin.math.max(slope, kotlin.math.sqrt(kotlin.math.max(0.0, 1.0 - legAlignment * legAlignment)))
             }
-            val a = along(start)
-            val b = along(end)
-            // Positions on a chord are transferred to the source line by projection, which is off by the leg's distance
-            // from the line times its slope against it: overlap below that is the transfer, not travel. On the raw line
-            // (no distance, no slope) this is the numerical epsilon alone.
-            val slope = kotlin.math.sqrt(kotlin.math.max(0.0, 1.0 - alignment * alignment))
-            val transfer = kotlin.math.max(across(start), across(end)) * slope
-            return kotlin.math.min(kotlin.math.max(a, b), high) - kotlin.math.max(kotlin.math.min(a, b), low) >
-                kotlin.math.max(SectionOverlapEpsilonMeters, transfer)
+            return runTravels()
         }
 
         /** The leg runs along the line, within the line's extent, across [position] (touching, within the crossing tolerance). */
         fun spansPosition(start: MapPoint, end: MapPoint, position: Double): Boolean {
             if (!withinExtent(start, end, DerivedLineToleranceMeters) ||
                 across(start) > DerivedLineToleranceMeters || across(end) > DerivedLineToleranceMeters ||
-                alignment(start, end) < LongitudinalCosine
+                (alignment(start, end) ?: 0.0) < LongitudinalCosine
             ) {
                 return false
             }

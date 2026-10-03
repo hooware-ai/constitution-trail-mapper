@@ -513,10 +513,122 @@ class TrailRouteTimedClosureSijkoTest {
         assertEquals(setOf(closure.id, camelback.id), gated(route, camelback.activeFromEpochMillis).toSet())
     }
 
+    @Test
+    fun theDecisionIsInvariantUnderCollinearSubdivisionOfTheSameGeometry() {
+        val now = closure.activeFromEpochMillis
+        val estimate = assertNotNull(closure.estimatedEndEpochMillis)
+        val legMeters = TrailDistanceSijko.metersBetween(vertex97, vertex98)
+        // The northern node 14 m east of the raw endpoint: the largest displacement the graph allows, where the transfer
+        // error of a single sparse leg is at its largest. The dense copy of a route is the same physical geometry.
+        val spur = trail("54:9100", eastOf(vertex98, 14.0), eastOf(vertex98, 60.0))
+        var denseChecked = 0
+        listOf(listOf(spur, rawLeg), listOf(rawLeg, spur)).forEach { features ->
+            listOf(1.0, 5.0, 20.0, 100.0).forEach { meters ->
+                val a = mapped(features, along(0.6 * legMeters))
+                val b = mapped(features, along(0.6 * legMeters + meters))
+                listOf(a to b, b to a).forEach { (from, to) ->
+                    val sparse = assertNotNull(findRoute(features, from, to, now - 1))
+                    assertTrue(sparse.segments.none { !it.isRouted })
+                    listOf(0.1, 0.01).forEach { spacing ->
+                        val dense = subdivided(sparse, spacing)
+                        assertTrue(dense.segments.sumOf { it.points.size } > sparse.segments.sumOf { it.points.size })
+                        denseChecked++
+                        assertTrue(gated(dense, now - 1).isEmpty())
+                        listOf(now, estimate + 1).forEach { at ->
+                            assertEquals(listOf(closure.id), gated(sparse, at), "sparse $meters m at $at")
+                            assertEquals(gated(sparse, at), gated(dense, at), "dense $meters m ($spacing m legs) at $at")
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(denseChecked >= 32)
+        // The same on the raw source line, and with no recorded source (judged by geometry alone).
+        val raw = assertNotNull(findRoute(listOf(rawLeg), along(0.6 * legMeters), along(0.6 * legMeters + 5.0), now - 1))
+        listOf(raw, raw.copy(edges = emptyList())).forEach { route ->
+            assertEquals(listOf(closure.id), gated(route, now))
+            assertEquals(listOf(closure.id), gated(subdivided(route, 0.001), now))
+        }
+    }
+
+    @Test
+    fun collinearSubdivisionDoesNotChangeTheBoundaryControlsOrTheCrossingOrAnEstimatedHop() {
+        val now = closure.activeFromEpochMillis
+        val south = TrailDistanceSijko.metersBetween(vertex97, closure.closedFrom)
+        val north = south + TrailDistanceSijko.metersBetween(closure.closedFrom, closure.closedTo)
+        val spur = trail("54:9100", eastOf(vertex98, 14.0), eastOf(vertex98, 60.0))
+        listOf(listOf(rawLeg), listOf(spur, rawLeg)).forEach { features ->
+            fun route(from: Double, to: Double) =
+                assertNotNull(findRoute(features, mapped(features, along(from)), mapped(features, along(to)), now - 1))
+            // Penetration at either bound is refused sparse and dense; an approach that ends at a bound is open in both.
+            listOf(
+                route(south - 4.0, south + 3.0), route(north + 4.0, north - 3.0), route(south - 20.0, north + 20.0),
+            ).forEach { sparse ->
+                assertEquals(listOf(closure.id), gated(sparse, now))
+                assertEquals(listOf(closure.id), gated(subdivided(sparse, 0.05), now))
+            }
+            listOf(
+                route(south - 30.0, south), route(south, south - 30.0), route(north, north + 30.0), route(north + 30.0, north),
+            ).forEach { sparse ->
+                assertTrue(gated(sparse, now).isEmpty())
+                assertTrue(gated(subdivided(sparse, 0.05), now).isEmpty(), "an approach that stops at a bound stays open when dense")
+            }
+        }
+        // The Camelback crossing, on a derived chord and on the raw line, sparse and dense.
+        val crossing = TrailRouteClosureSijko.camelbackCrossing
+        val camelStart = crossing.activeFromEpochMillis
+        val leg = trail("54:1305", southEnd, vertex6, vertex7, vertex8, northEnd)
+        val camelSpur = trail("54:9100", eastOf(vertex7, 14.0), eastOf(vertex7, 60.0))
+        listOf(listOf(leg), listOf(camelSpur, leg)).forEach { features ->
+            val a = mapped(features, MapPoint(crossing.closedFrom.latitude - 15.0 / 111_194.93, crossing.closedFrom.longitude))
+            val b = mapped(features, MapPoint(vertex8.latitude + 0.0005, vertex8.longitude))
+            listOf(a to b, b to a).forEach { (from, to) ->
+                val sparse = assertNotNull(findRoute(features, from, to, camelStart - 1))
+                assertEquals(listOf(crossing.id), gated(sparse, camelStart))
+                assertEquals(listOf(crossing.id), gated(subdivided(sparse, 0.05), camelStart))
+            }
+        }
+        // An estimated hop that starts inside the section is refused whatever vertices it keeps.
+        val inside = along(south + 40.0)
+        val hop = TrailRoute(
+            segments = listOf(
+                TrailRouteSegment(type = TrailRouteSegmentType.Access, isRouted = false, points = listOf(inside, closure.closedFrom)),
+            ),
+            totalDistanceMeters = 40.0, ordinaryAccessDistanceMeters = 40.0, totalCost = 40.0,
+        )
+        assertTrue(TrailRouteAdvisorySijko.entersClosedSection(hop, now))
+        assertTrue(TrailRouteAdvisorySijko.entersClosedSection(subdivided(hop, 0.05, allTypes = true), now))
+    }
+
     private fun gated(route: TrailRoute, now: Long) = TrailRouteClosureGateSijko.blockingAdvisories(route, now).map { it.id }
 
     private fun camel(route: TrailRoute, now: Long) =
         TrailRouteAdvisorySijko.forRoute(route, now).singleOrNull { it.id == TrailRouteClosureSijko.camelbackCrossing.id }
+
+    /**
+     * The same physical geometry with every two-point trail segment (in the route and in its edges) subdivided into
+     * collinear legs about [spacing] meters long; with [allTypes] every two-point segment, estimated hops included.
+     */
+    private fun subdivided(route: TrailRoute, spacing: Double, allTypes: Boolean = false): TrailRoute {
+        fun dense(segment: TrailRouteSegment): TrailRouteSegment {
+            if (segment.points.size != 2 || (!allTypes && segment.type != TrailRouteSegmentType.Trail)) return segment
+            val (from, to) = segment.points
+            val steps = maxOf(1, kotlin.math.ceil(TrailDistanceSijko.metersBetween(from, to) / spacing).toInt())
+            return segment.copy(
+                points = (0..steps).map { step ->
+                    val fraction = step.toDouble() / steps
+                    MapPoint(
+                        latitude = from.latitude + (to.latitude - from.latitude) * fraction,
+                        longitude = from.longitude + (to.longitude - from.longitude) * fraction,
+                    )
+                },
+            )
+        }
+        return route.copy(
+            segments = route.segments.map(::dense),
+            edges = route.edges.map { edge -> edge.copy(routeSegments = edge.routeSegments.map(::dense)) },
+        )
+    }
 
     /** The point the app's map picker returns for [point]: projected onto the loaded network's own (node-anchored) line. */
     private fun mapped(features: List<TrailNetworkFeature>, point: MapPoint): MapPoint =

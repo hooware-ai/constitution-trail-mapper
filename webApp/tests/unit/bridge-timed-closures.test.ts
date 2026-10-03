@@ -1556,3 +1556,165 @@ test(
     assert.ok(derived >= 8, `only ${derived} routes followed a derived chord`);
   },
 );
+
+// ---- Collinear subdivision: the same continuous geometry gets the same decision -------------------------------------
+
+/** The same physical route with every two-point Trail segment (in the route and its edges) split into `points` points. */
+const subdivide = (route: any, points: number) => {
+  const dense = (segment: any) => {
+    if (segment.type !== "Trail" || segment.points.length !== 2) return segment;
+    const [a, b] = segment.points;
+    return {
+      ...segment,
+      points: Array.from({ length: points }, (_, i) => ({
+        latitude: a.latitude + ((b.latitude - a.latitude) * i) / (points - 1),
+        longitude:
+          a.longitude + ((b.longitude - a.longitude) * i) / (points - 1),
+      })),
+    };
+  };
+  return {
+    ...route,
+    segments: route.segments.map(dense),
+    edges: route.edges.map((e: any) => ({
+      ...e,
+      routeSegments: e.routeSegments.map(dense),
+    })),
+  };
+};
+
+test(
+  "Willow: a dense (collinear subdivided) copy of a saved route on a derived chord is refused exactly like the sparse one, in both directions, after a reload, at 5, 20 and 100 m",
+  { skip },
+  async () => {
+    // The northern node 14 m east of the raw endpoint: the largest displacement the graph allows.
+    const spur = feature("54:9100", [eastOf(V98, 14), eastOf(V98, 60)]);
+    const leg = feature("54:1305", [V97, V98]);
+    let compared = 0;
+    for (const features of [
+      [spur, leg],
+      [leg, spur],
+    ]) {
+      const { call } = await engine(network(...features));
+      const reloaded = await engine(network(...features), WILLOW_START);
+      const first = snap(call, along(0.6 * LEG_METERS), WILLOW_START - 1);
+      for (const meters of [5, 20, 100]) {
+        const other = snap(
+          call,
+          along(0.6 * LEG_METERS + meters),
+          WILLOW_START - 1,
+        );
+        for (const [from, to] of [
+          [first, other],
+          [other, first],
+        ]) {
+          const sparse = plan(call, from, to, WILLOW_START - 1);
+          assert.ok(sparse.route);
+          assert.equal(sparse.accessGaps.length, 0);
+          assert.equal(sparse.canNavigate, true);
+          for (const count of [51, 201, 1000]) {
+            const dense = subdivide(sparse.route, count);
+            assert.ok(
+              dense.segments.some((s: any) => s.points.length === count),
+              "the dense copy really is denser",
+            );
+            // Eligible before the closure, sparse and dense.
+            assert.equal(
+              call({ op: "inspect", route: dense, now: WILLOW_START - 1 })
+                .canNavigate,
+              true,
+            );
+            assert.equal(startAt(call, dense, from, WILLOW_START - 1).ok, true);
+            for (const now of [WILLOW_START, WILLOW_END + 1]) {
+              for (const engineCall of [call, reloaded.call]) {
+                for (const route of [sparse.route, dense]) {
+                  const inspected = engineCall({ op: "inspect", route, now });
+                  assert.equal(
+                    inspected.canNavigate,
+                    false,
+                    `${meters} m, ${route === dense ? count : "sparse"} points at ${now}`,
+                  );
+                  assert.equal(inspected.closures[0].id, WILLOW_ID);
+                  assert.equal(startAt(engineCall, route, from, now).ok, false);
+                }
+              }
+            }
+            compared++;
+          }
+        }
+      }
+    }
+    assert.equal(compared, 36);
+  },
+);
+
+test(
+  "Willow and Camelback: dense copies keep the approach-at-a-bound controls open and the crossing refused",
+  { skip },
+  async () => {
+    const spur = feature("54:9100", [eastOf(V98, 14), eastOf(V98, 60)]);
+    const { call } = await engine(
+      network(spur, feature("54:1305", [V97, V98])),
+    );
+    const at = (meters: number) => snap(call, along(meters), WILLOW_START - 1);
+    for (const [a, b] of [
+      [FROM_METERS - 30, FROM_METERS],
+      [FROM_METERS, FROM_METERS - 30],
+      [TO_METERS, TO_METERS + 30],
+      [TO_METERS + 30, TO_METERS],
+    ]) {
+      const sparse = plan(call, at(a), at(b), WILLOW_START - 1);
+      assert.ok(sparse.route, `${a} to ${b}`);
+      assert.equal(sparse.accessGaps.length, 0);
+      for (const route of [sparse.route, subdivide(sparse.route, 400)]) {
+        const inspected = call({ op: "inspect", route, now: WILLOW_START });
+        assert.equal(inspected.canNavigate, true, `${a} to ${b} stays open`);
+        assert.deepEqual(inspected.closures, []);
+      }
+    }
+    for (const [a, b] of [
+      [FROM_METERS - 4, FROM_METERS + 3],
+      [TO_METERS + 4, TO_METERS - 3],
+      [FROM_METERS - 20, TO_METERS + 20],
+    ]) {
+      const sparse = plan(call, at(a), at(b), WILLOW_START - 1);
+      assert.ok(sparse.route);
+      for (const route of [sparse.route, subdivide(sparse.route, 400)]) {
+        assert.equal(
+          call({ op: "inspect", route, now: WILLOW_START }).canNavigate,
+          false,
+          `${a} to ${b} refused`,
+        );
+      }
+    }
+    const camel = await engine(
+      network(
+        feature("54:9100", [eastOf(V7, 14), eastOf(V7, 60)]),
+        camelbackTrail(),
+      ),
+      CAMEL_START - 1,
+    );
+    const south = snap(
+      camel.call,
+      {
+        latitude: CROSSING.latitude - 15 / 111_194.93,
+        longitude: CROSSING.longitude,
+      },
+      CAMEL_START - 1,
+    );
+    const north = snap(
+      camel.call,
+      { latitude: V8.latitude + 0.0005, longitude: V8.longitude },
+      CAMEL_START - 1,
+    );
+    const sparse = plan(camel.call, south, north, CAMEL_START - 1);
+    assert.ok(sparse.route);
+    for (const route of [sparse.route, subdivide(sparse.route, 300)]) {
+      assert.equal(
+        camel.call({ op: "inspect", route, now: CAMEL_START }).canNavigate,
+        false,
+      );
+      assert.equal(startAt(camel.call, route, south, CAMEL_START).ok, false);
+    }
+  },
+);
