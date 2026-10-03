@@ -109,13 +109,17 @@ object TrailRouteAdvisorySijko {
     /**
      * The notices that apply to [route] at [nowEpochMillis]. [derived] is where the loaded graph's derived geometry stands
      * for a closure's source leg ([TrailRouteClosureDerivationSijko.legsFor]); a front end that has the graph passes it so
-     * a route snapped onto displaced node anchors is judged against the interval transferred onto them. Without it only the
-     * unchanged source line is judged.
+     * a route snapped onto displaced node anchors is judged against the interval transferred onto them exactly (an empty
+     * list says the graph was checked and has none). Null, the default, says the correspondence is UNAVAILABLE, and the
+     * gate is then conservative for the one case it cannot place: a leg of the closure's own feature that is off the
+     * unchanged source line but within the graph's reach of it (a displaced node anchor) counts as riding the section when
+     * it overlaps the interval widened by that reach. Legs on the source line keep the exact rule, so ordinary approaches
+     * are unaffected; nothing is invented, and the over-refusal is limited to routes on displaced chords near a closure.
      */
     fun forRoute(
         route: TrailRoute,
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
-        derived: List<TrailRouteDerivedClosureLeg> = emptyList(),
+        derived: List<TrailRouteDerivedClosureLeg>? = null,
     ): List<TrailRouteAdvisory> {
         return listOfNotNull(
             hamiltonAdvisory(route, nowEpochMillis),
@@ -130,7 +134,7 @@ object TrailRouteAdvisorySijko {
      * closure; from its start it is the blocking advisory the gate uses, and it stays so after the estimated end
      * until an official status update is reviewed.
      */
-    private fun willowAdvisory(route: TrailRoute, nowEpochMillis: Long, derived: List<TrailRouteDerivedClosureLeg>): TrailRouteAdvisory? {
+    private fun willowAdvisory(route: TrailRoute, nowEpochMillis: Long, derived: List<TrailRouteDerivedClosureLeg>?): TrailRouteAdvisory? {
         val closure = TrailRouteClosureSijko.willowTrailCrossing
         if (!ridesClosedSection(route, closure, derived)) {
             return null
@@ -176,7 +180,7 @@ object TrailRouteAdvisorySijko {
      * after the estimated end (an estimate is not a reopening). Without published limits nothing is cut or drawn, so the
      * router does not plan around it: the route can be previewed, and cannot be started.
      */
-    private fun camelbackAdvisory(route: TrailRoute, nowEpochMillis: Long, derived: List<TrailRouteDerivedClosureLeg>): TrailRouteAdvisory? {
+    private fun camelbackAdvisory(route: TrailRoute, nowEpochMillis: Long, derived: List<TrailRouteDerivedClosureLeg>?): TrailRouteAdvisory? {
         val closure = TrailRouteClosureSijko.camelbackCrossing
         if (!traversesCrossing(route, closure, derived)) {
             return null
@@ -297,22 +301,38 @@ object TrailRouteAdvisorySijko {
             }
     }
 
-    /** A line to judge travel against, with the closure's interval (or crossing position) expressed on it. */
-    private class Reference(val frame: TrailRouteSourceFrame, val low: Double, val high: Double)
+    /**
+     * A line to judge travel against, with the closure's interval (or crossing position) expressed on it. A conservative
+     * reference ([offSourceLineOnly]) judges only legs that are off the line but within [tolerance] of it.
+     */
+    private class Reference(
+        val frame: TrailRouteSourceFrame,
+        val low: Double,
+        val high: Double,
+        val tolerance: Double = OnSectionLineToleranceMeters,
+        val offSourceLineOnly: Boolean = false,
+    )
 
     /**
      * The lines a candidate may travel on: the unchanged source line, and, for a leg of the closure's own feature, each
      * derived leg the current graph defines for the closure's source leg, with the interval transferred onto it by the
      * graph's own correspondence ([TrailRouteClosureDerivationSijko]). Nothing here projects the bounds onto a chord.
      */
-    private fun references(candidate: Candidate, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>): List<Reference> {
+    private fun references(candidate: Candidate, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>?): List<Reference> {
         val own = frameOf(closure)?.let { frame -> intervalOf(frame, closure).let { Reference(frame, it.first, it.second) } }
-        val transferred = if (candidate.known) {
-            derived.filter { it.closureId == closure.id }.mapNotNull { leg ->
-                TrailRouteSourceFrame(leg.from, leg.to).takeIf { it.length > 0.0 }?.let { Reference(it, leg.low, leg.high) }
+        if (!candidate.known) {
+            return listOfNotNull(own)
+        }
+        if (derived == null) {
+            // The correspondence is unavailable: the only thing that can be said of a leg off the source line is that the
+            // graph moved it by at most its reach, so the interval it could be carried to is the interval widened by that.
+            val conservative = own?.let {
+                Reference(it.frame, it.low - GraphReachMeters, it.high + GraphReachMeters, GraphReachMeters, offSourceLineOnly = true)
             }
-        } else {
-            emptyList()
+            return listOfNotNull(own, conservative)
+        }
+        val transferred = derived.filter { it.closureId == closure.id }.mapNotNull { leg ->
+            TrailRouteSourceFrame(leg.from, leg.to).takeIf { it.length > 0.0 }?.let { Reference(it, leg.low, leg.high) }
         }
         return listOfNotNull(own) + transferred
     }
@@ -321,13 +341,15 @@ object TrailRouteAdvisorySijko {
      * Does the route travel through the closure's crossing point on its feature? Touching the point counts (within the
      * crossing tolerance). On a derived leg the crossing's position is the one the graph's correspondence transfers.
      */
-    private fun traversesCrossing(route: TrailRoute, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>): Boolean {
+    private fun traversesCrossing(route: TrailRoute, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>?): Boolean {
         return candidates(route, closure).any { candidate ->
             candidate.points.zipWithNext().any { (start, end) ->
                 TrailDistanceSijko.projectToSegment(closure.closedFrom, start, end).distanceMeters <=
                     CrossingToleranceMeters
             } || references(candidate, closure, derived).any { reference ->
-                candidate.points.zipWithNext().any { (start, end) -> spansPosition(reference.frame, start, end, reference.low) }
+                candidate.points.zipWithNext().any { (start, end) ->
+                    spansPosition(reference.frame, start, end, reference.low, reference.high, reference.tolerance, reference.offSourceLineOnly)
+                }
             }
         }
     }
@@ -340,17 +362,19 @@ object TrailRouteAdvisorySijko {
      * along the section. There is no error allowance: the line each leg is judged against is the line it lies on, and the
      * interval on it is the closure's own, transferred exactly.
      */
-    private fun ridesClosedSection(route: TrailRoute, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>): Boolean {
+    private fun ridesClosedSection(route: TrailRoute, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>?): Boolean {
         return candidates(route, closure).any { candidate ->
             references(candidate, closure, derived).any { reference ->
-                travelsAlongPath(reference.frame, candidate.points, reference.low, reference.high, OnSectionLineToleranceMeters)
+                travelsAlongPath(
+                    reference.frame, candidate.points, reference.low, reference.high, reference.tolerance, reference.offSourceLineOnly,
+                )
             }
         }
     }
 
-    /** The line of the closure's own section, from its bounds. Null when it has no extent (a crossing). */
+    /** The line the closure sits on: its source leg, else its own section. Null when it has no extent. */
     private fun frameOf(closure: TrailRouteClosure): TrailRouteSourceFrame? {
-        val line = closure.closedPath
+        val line = closure.sourceLine.ifEmpty { closure.closedPath }
         if (line.size < 2) {
             return null
         }
@@ -377,12 +401,22 @@ object TrailRouteAdvisorySijko {
      * subdividing a continuous geometry into any number of collinear legs cannot change it, and geometry outside the
      * interval can never hide travel inside it: a leg contributes only its own overlap with the interval.
      */
-    private fun travelsAlongPath(frame: TrailRouteSourceFrame, points: List<MapPoint>, low: Double, high: Double, tolerance: Double): Boolean {
+    private fun travelsAlongPath(
+        frame: TrailRouteSourceFrame,
+        points: List<MapPoint>,
+        low: Double,
+        high: Double,
+        tolerance: Double,
+        offSourceLineOnly: Boolean = false,
+    ): Boolean {
         var overlap = 0.0
         points.zipWithNext().forEach { (start, end) ->
             // A repeated vertex has no direction and no length: it neither continues nor breaks a run.
             val alignment = frame.alignment(start, end) ?: return@forEach
-            if (frame.across(start) > tolerance || frame.across(end) > tolerance || alignment < LongitudinalCosine) {
+            val onSourceLine = frame.across(start) <= OnSectionLineToleranceMeters && frame.across(end) <= OnSectionLineToleranceMeters
+            if (frame.across(start) > tolerance || frame.across(end) > tolerance || alignment < LongitudinalCosine ||
+                (offSourceLineOnly && onSourceLine)
+            ) {
                 if (overlap > SectionOverlapEpsilonMeters) {
                     return true
                 }
@@ -400,17 +434,26 @@ object TrailRouteAdvisorySijko {
     }
 
     /** The leg lies on the line and spans [position] (touching, within the crossing tolerance). */
-    private fun spansPosition(frame: TrailRouteSourceFrame, start: MapPoint, end: MapPoint, position: Double): Boolean {
+    private fun spansPosition(
+        frame: TrailRouteSourceFrame,
+        start: MapPoint,
+        end: MapPoint,
+        low: Double,
+        high: Double,
+        tolerance: Double = OnSectionLineToleranceMeters,
+        offSourceLineOnly: Boolean = false,
+    ): Boolean {
         val alignment = frame.alignment(start, end) ?: return false
-        if (frame.across(start) > OnSectionLineToleranceMeters || frame.across(end) > OnSectionLineToleranceMeters ||
-            alignment < LongitudinalCosine
+        val onSourceLine = frame.across(start) <= OnSectionLineToleranceMeters && frame.across(end) <= OnSectionLineToleranceMeters
+        if (frame.across(start) > tolerance || frame.across(end) > tolerance || alignment < LongitudinalCosine ||
+            (offSourceLineOnly && onSourceLine)
         ) {
             return false
         }
         val a = frame.along(start)
         val b = frame.along(end)
-        return position >= kotlin.math.min(a, b) - CrossingToleranceMeters &&
-            position <= kotlin.math.max(a, b) + CrossingToleranceMeters
+        return high >= kotlin.math.min(a, b) - CrossingToleranceMeters &&
+            low <= kotlin.math.max(a, b) + CrossingToleranceMeters
     }
 
     private fun hamiltonAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {

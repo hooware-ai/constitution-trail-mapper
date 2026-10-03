@@ -1862,3 +1862,83 @@ test(
     }
   },
 );
+
+test(
+  "Willow: a route on a partial junction connector (the southern bound lies behind the connector's projection) is refused by inspect and Start, both directions, dense and after a cold restore",
+  { skip },
+  async () => {
+    const lerp = (
+      a: { latitude: number; longitude: number },
+      b: { latitude: number; longitude: number },
+      t: number,
+    ) => ({
+      latitude: a.latitude + (b.latitude - a.latitude) * t,
+      longitude: a.longitude + (b.longitude - a.longitude) * t,
+    });
+    const north = eastOf(V98, 14);
+    const junction = lerp(V97, V98, 0.6);
+    const trails = network(
+      feature("54:9100", [north, eastOf(V98, 60)]),
+      feature("54:9200", [junction, eastOf(junction, 60)]),
+      feature("54:1305", [V97, V98]),
+    );
+    const { call } = await engine(trails);
+    const reloaded = await engine(trails, WILLOW_START);
+    const onChord = (meters: number) =>
+      lerp(junction, north, meters / (LEG_METERS * 0.4));
+    let connectorRoutes = 0;
+    for (const [from, to] of [
+      [20, 25],
+      [30, 50],
+      [50, 100],
+    ]) {
+      const a = snap(call, onChord(from), WILLOW_START - 1);
+      const b = snap(call, onChord(to), WILLOW_START - 1);
+      for (const [start, end] of [
+        [a, b],
+        [b, a],
+      ]) {
+        const planned = plan(call, start, end, WILLOW_START - 1);
+        // Nonvacuous: current network, zero gaps, Start-eligible before, on the source feature, on a junction connector.
+        assert.ok(planned.route, `${from} to ${to} route exists`);
+        assert.equal(planned.accessGaps.length, 0);
+        assert.equal(planned.canNavigate, true);
+        assert.ok(
+          planned.route.edges.every(
+            (e: any) => e.sourceFeatureId === "54:1305",
+          ),
+        );
+        if (planned.route.edges.some((e: any) => e.connectorOfEdgeId != null))
+          connectorRoutes++;
+        assert.equal(
+          call({ op: "inspect", route: planned.route, now: WILLOW_START - 1 })
+            .network.status,
+          "current",
+        );
+        assert.equal(
+          startAt(call, planned.route, start, WILLOW_START - 1).ok,
+          true,
+        );
+        for (const route of [planned.route, subdivide(planned.route, 300)]) {
+          for (const engineCall of [call, reloaded.call]) {
+            for (const now of [WILLOW_START, WILLOW_END + 1]) {
+              const inspected = engineCall({ op: "inspect", route, now });
+              assert.equal(inspected.network.status, "current");
+              assert.equal(
+                inspected.canNavigate,
+                false,
+                `${from} to ${to} at ${now}`,
+              );
+              assert.equal(inspected.closures[0].id, WILLOW_ID);
+              assert.equal(startAt(engineCall, route, start, now).ok, false);
+            }
+          }
+        }
+      }
+    }
+    assert.ok(
+      connectorRoutes >= 6,
+      `only ${connectorRoutes} routes rode a connector`,
+    );
+  },
+);

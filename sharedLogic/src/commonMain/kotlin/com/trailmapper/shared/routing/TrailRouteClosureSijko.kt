@@ -41,6 +41,12 @@ data class TrailRouteClosure(
      * plan around it, so such a route can be previewed but not started.
      */
     val isCrossing: Boolean = false,
+    /**
+     * The unchanged source leg the closure sits on, from its two source vertices. Used as the line a route leg is judged
+     * against, and, when the graph's correspondence is unavailable, to recognise a leg of this feature that the graph moved
+     * off that line. Empty: the closure's own section is the line.
+     */
+    val sourceLine: List<MapPoint> = emptyList(),
 )
 
 object TrailRouteClosureSijko {
@@ -88,6 +94,11 @@ object TrailRouteClosureSijko {
         mappingNote = "Approximate: the Town's online closure map line (object 919) projected onto the county " +
             "trail, about 202 m. Not surveyed barricade locations.",
         checkedOn = "October 2, 2026",
+        // The actual source vertices 97 and 98 of county trail 54:1305, path 0.
+        sourceLine = listOf(
+            MapPoint(latitude = 40.5096012799, longitude = -88.9843690241),
+            MapPoint(latitude = 40.5166840740, longitude = -88.9849653323),
+        ),
     )
 
     // Town of Normal notice 3353, posted September 30, 2026: Constitution Trail is closed at Virginia Avenue (Camelback
@@ -114,6 +125,11 @@ object TrailRouteClosureSijko {
             "The closure's limits along the trail are not published and are not drawn or assumed.",
         checkedOn = "October 2, 2026",
         isCrossing = true,
+        // The actual source vertices 6 and 7 of county trail 54:1305, path 0: the leg the crossing lies on.
+        sourceLine = listOf(
+            MapPoint(latitude = 40.4979744336, longitude = -88.9833910595),
+            MapPoint(latitude = 40.4982765696, longitude = -88.9834168982),
+        ),
     )
 
     val closures: List<TrailRouteClosure> = listOf(uptownUnderpass, willowTrailCrossing, camelbackCrossing)

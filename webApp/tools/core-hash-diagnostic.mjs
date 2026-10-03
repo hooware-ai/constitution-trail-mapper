@@ -3,6 +3,7 @@
 // next to the other release evidence in dist-report/:
 //   - an unchanged copy of the core manifest (the release check's negative step deletes the original),
 //   - per output file: path, raw SHA-256, bytes, SHA-256 of the LF-normalized bytes, and counts of CRLF and bare CR,
+//   - the raw bytes of the source maps (raw-source-maps/), so their contents can be compared across machines,
 //   - commit and platform (OS, architecture, Node, Git autocrlf).
 // It judges nothing and changes nothing: comparing two machines' files is a later, separate step.
 import { spawnSync } from "node:child_process";
@@ -62,11 +63,20 @@ export function collect({
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   mkdirSync(reportDir, { recursive: true });
   copyFileSync(manifestPath, join(reportDir, "trail-core.manifest.json"));
-  const outputs = manifest.outputs.files.map((entry) => ({
-    ...describeOutput(entry.path, readFileSync(join(outputDir, entry.path))),
-    manifestSha256: entry.sha256,
-    manifestBytes: entry.bytes,
-  }));
+  // The source maps are where two machines' outputs were seen to differ (the executable files matched byte for byte), so
+  // their raw bytes are kept for a later content comparison. Nothing else is copied.
+  const rawDir = join(reportDir, "raw-source-maps");
+  mkdirSync(rawDir, { recursive: true });
+  const outputs = manifest.outputs.files.map((entry) => {
+    const bytes = readFileSync(join(outputDir, entry.path));
+    if (entry.path.endsWith(".map"))
+      writeFileSync(join(rawDir, entry.path), bytes);
+    return {
+      ...describeOutput(entry.path, bytes),
+      manifestSha256: entry.sha256,
+      manifestBytes: entry.bytes,
+    };
+  });
   const diagnostic = {
     schema: 1,
     note: "Evidence only. Two machines' files are compared by a later step; nothing here asserts why an output hash differs.",

@@ -676,8 +676,9 @@ class WebRoutingBridge {
      * transferred onto it: computed from the CURRENT graph (never from the saved route), so a route snapped onto a displaced
      * node anchor is judged against the interval the graph itself puts there. Empty unless the route touches a closure's feature.
      */
-    private fun derivedClosureLegs(route: TrailRoute): List<TrailRouteDerivedClosureLeg> {
-        if (features == null) return emptyList()
+    private fun derivedClosureLegs(route: TrailRoute): List<TrailRouteDerivedClosureLeg>? {
+        // No network loaded: the correspondence is unavailable, which the gate answers conservatively (null), not "none".
+        if (features == null) return null
         val featureIds = TrailRouteClosureSijko.closures.filter { it.boundsProjected || it.isCrossing }.mapTo(mutableSetOf()) { it.featureId }
         if (route.edges.none { it.sourceFeatureId in featureIds }) return emptyList()
         val layers = route.routeLayers ?: RouteLayerDefaultsSijko.defaultSelection()

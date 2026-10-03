@@ -106,7 +106,13 @@ object TrailRouteClosureDerivationSijko {
         return Pair(geometry.dropLast(1) + rawEnd, geometry)
     }
 
-    /** Where the closure lies along the raw leg, as fractions of it (lowest first), or null when it is not on this leg. */
+    /**
+     * The part of the closure that lies along this raw leg, as fractions of the leg (lowest first), or null when none of it
+     * does. The raw leg may be only part of the closure's source leg (a junction connector starts at a projection point
+     * partway along it), so the interval is intersected with the leg rather than required to lie inside it: a bound that is
+     * behind the leg's start or beyond its end clamps to that end, because from there the leg is inside the closure. The
+     * closure's bounds lie on one source line, so a leg that is not on that line has no part of it.
+     */
     private fun fractionsOn(frame: TrailRouteSourceFrame, closure: TrailRouteClosure): Pair<Double, Double>? {
         val tolerance = if (closure.isCrossing) CrossingOnLegMeters else BoundOnLegMeters
         val points = if (closure.isCrossing) listOf(closure.closedFrom) else listOf(closure.closedFrom, closure.closedTo)
@@ -114,7 +120,14 @@ object TrailRouteClosureDerivationSijko {
             return null
         }
         val positions = points.map { frame.along(it) }
-        if (positions.any { it < -tolerance || it > frame.length + tolerance }) {
+        val low = positions.min()
+        val high = positions.max()
+        if (closure.isCrossing) {
+            if (low < -tolerance || low > frame.length + tolerance) {
+                return null
+            }
+        } else if (high <= 0.0 || low >= frame.length) {
+            // Touching at a point, or wholly behind or beyond this leg: none of the interval is on it.
             return null
         }
         val fractions = positions.map { (it / frame.length).coerceIn(0.0, 1.0) }
