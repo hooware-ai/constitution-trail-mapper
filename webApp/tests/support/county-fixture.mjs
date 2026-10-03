@@ -161,6 +161,13 @@ export function makeCounty({
     license: "CC BY 4.0",
     licenseUrl: LICENSE_URL,
     licenseEvidenceUrl: "https://example.test/synthetic/item.json",
+    sourceContract: {
+      changes:
+        "Reviewed subset selected; attributes decoded and normalized; source geometry retained.",
+      disclaimer:
+        "Source data is for display and reference. Current access and accuracy are not guaranteed.",
+      licenseEvidenceObservation: { sha256: hex("license-evidence") },
+    },
     licensedDomainsSha256: canonicalSha256(DOMAINS),
     reviewedFeatureCount: entries.length,
     reviewedLayerCounts: layerCounts,

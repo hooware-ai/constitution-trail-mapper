@@ -70,6 +70,7 @@ test("the reviewed subset packages deterministically, hash-named, with truthful 
     approved: false,
     approvedBy: null,
     approvedOn: null,
+    approvedComposition: null,
     blockers: ["Synthetic data is never releasable."],
   });
   const network = JSON.parse(first.body.toString("utf8"));

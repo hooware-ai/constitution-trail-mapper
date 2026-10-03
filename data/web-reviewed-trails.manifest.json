@@ -8,6 +8,17 @@
   "license": "CC BY 4.0",
   "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
   "licenseEvidenceUrl": "https://www.arcgis.com/sharing/rest/content/items/a2a54b1f94704061abc90686fbc5c220?f=json",
+  "sourceContract": {
+    "scope": "What the extract's own descriptive fields must say, so a source descriptor cannot drift under an old approval. The licence item, source URL, licence, licence URL, licence-evidence URL and review dates above are pinned reviewed facts. licenseEvidenceObservation is NOT a pinned fact: it is the licence-evidence hash the extractor observed on the extraction run recorded below, kept so that a different value forces a new review. It is not a licence grant and not legal permission.",
+    "changes": "Reviewed subset selected; attributes decoded and normalized; source geometry retained.",
+    "disclaimer": "Source data is for display and reference. Current access and accuracy are not guaranteed.",
+    "licenseEvidenceObservation": {
+      "sha256": "5123f51c9a79f75e3b386b108437e383b99702c78a63cc60dc2f077253c28845",
+      "itemModifiedMs": 1735588559000,
+      "observedAtUtc": "2026-09-30T13:39:04.167202+00:00",
+      "meaning": "Recorded from the real extract's own sources block at that run (the extraction time, which is distinct from the review date reviewedOn). Not independently re-fetched."
+    }
+  },
   "licensedDomainsSha256": "a1ff430dacef5f63d3e0eb1da0c494c6af0b81b15836e75c96db85442601edd5",
   "reviewedFeatureCount": 254,
   "reviewedLayerCounts": {

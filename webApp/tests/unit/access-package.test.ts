@@ -11,7 +11,10 @@ import {
   verifyPackageDir,
 } from "../../tools/lib/dataset-package.mjs";
 import { makeCounty } from "../support/county-fixture.mjs";
-import { makeAccessExtract } from "../support/access-fixture.mjs";
+import {
+  makeAccessExtract,
+  makeAccessManifest,
+} from "../support/access-fixture.mjs";
 import {
   DatasetError,
   identityOf,
@@ -28,11 +31,17 @@ async function workspace(extract = makeAccessExtract()) {
     manifest: join(dir, "manifest.json"),
     approval: join(dir, "approval.json"),
     access: join(dir, "access.json"),
+    accessManifest: join(dir, "access-manifest.json"),
   };
   await writeFile(files.input, JSON.stringify(county.input));
   await writeFile(files.manifest, JSON.stringify(county.manifest));
   await writeFile(files.approval, JSON.stringify(county.approval));
-  await writeFile(files.access, JSON.stringify(extract));
+  const accessText = JSON.stringify(extract);
+  await writeFile(files.access, accessText);
+  await writeFile(
+    files.accessManifest,
+    JSON.stringify(makeAccessManifest(accessText)),
+  );
   const make = (name: string, withAccess: boolean) =>
     packageFromFiles({
       inputFile: files.input,
@@ -40,6 +49,7 @@ async function workspace(extract = makeAccessExtract()) {
       approvalPath: files.approval,
       outDir: join(dir, name),
       accessInput: withAccess ? files.access : null,
+      accessManifestPath: files.accessManifest,
     }).then((built) => ({ built, out: join(dir, name) }));
   return { dir, files, make, county };
 }
@@ -72,7 +82,11 @@ test("a package with access pins every part by hash, moves the identity, and ver
     2 + 1 + 1 + record.access.index.tileCount,
     "dataset.json, the network, the base, the index and the tiles",
   );
-  const verified = await verifyPackageDir(withAccess.out, files.manifest);
+  const verified = await verifyPackageDir(
+    withAccess.out,
+    files.manifest,
+    files.accessManifest,
+  );
   assert.equal(verified.accessFiles.length, 2 + record.access.index.tileCount);
   // The browser-side identity is the combined one.
   assert.equal(
@@ -102,9 +116,12 @@ test("the audit refuses a package whose access parts were altered, removed or ad
     undo: () => Promise<void>,
   ) => {
     await change();
-    await assert.rejects(verifyPackageDir(out, files.manifest), AdmissionError);
+    await assert.rejects(
+      verifyPackageDir(out, files.manifest, files.accessManifest),
+      AdmissionError,
+    );
     await undo();
-    await verifyPackageDir(out, files.manifest); // restored: verifies again
+    await verifyPackageDir(out, files.manifest, files.accessManifest); // restored: verifies again
   };
   const tile = join(
     out,
@@ -142,6 +159,7 @@ test("a record with access parts cannot be checked without them, and its identit
   const { make, files } = await workspace();
   const { built, out } = await make("with", true);
   const manifestBytes = await readFile(files.manifest);
+  const accessManifestBytes = await readFile(files.accessManifest);
   const read = (name: string) =>
     readFile(join(out, name)).catch(() => undefined);
   const preloaded = new Map<string, Buffer>();
@@ -153,17 +171,43 @@ test("a record with access parts cannot be checked without them, and its identit
     () => checkPackage(built.record, built.body, manifestBytes),
     AdmissionError,
   );
-  checkPackage(built.record, built.body, manifestBytes, null, fromMap);
+  checkPackage(
+    built.record,
+    built.body,
+    manifestBytes,
+    null,
+    fromMap,
+    null,
+    accessManifestBytes,
+  );
   const wrongIdentity = clone(built.record);
   wrongIdentity.access.combinedSha256 = "0".repeat(64);
   assert.throws(
-    () => checkPackage(wrongIdentity, built.body, manifestBytes, null, fromMap),
+    () =>
+      checkPackage(
+        wrongIdentity,
+        built.body,
+        manifestBytes,
+        null,
+        fromMap,
+        null,
+        accessManifestBytes,
+      ),
     AdmissionError,
   );
   const wrongVersion = clone(built.record);
   wrongVersion.version = `2026-01-01.${built.record.content.sha256.slice(0, 12)}`;
   assert.throws(
-    () => checkPackage(wrongVersion, built.body, manifestBytes, null, fromMap),
+    () =>
+      checkPackage(
+        wrongVersion,
+        built.body,
+        manifestBytes,
+        null,
+        fromMap,
+        null,
+        accessManifestBytes,
+      ),
     AdmissionError,
   );
 });

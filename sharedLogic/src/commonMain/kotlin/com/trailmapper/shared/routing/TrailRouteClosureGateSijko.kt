@@ -27,9 +27,10 @@ object TrailRouteClosureGateSijko {
     fun blockingAdvisories(
         route: TrailRoute,
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
+        derived: List<TrailRouteDerivedClosureLeg>? = null,
     ): List<TrailRouteAdvisory> {
         val activeClosureIds = TrailRouteClosureSijko.activeClosures(nowEpochMillis).mapTo(mutableSetOf()) { it.id }
-        return TrailRouteAdvisorySijko.forRoute(route, nowEpochMillis).filter { it.id in activeClosureIds }
+        return TrailRouteAdvisorySijko.forRoute(route, nowEpochMillis, derived).filter { it.id in activeClosureIds }
     }
 
     fun startOf(route: TrailRoute): MapPoint? = route.segments.firstOrNull()?.points?.firstOrNull()
@@ -55,6 +56,7 @@ object TrailRouteClosureGateSijko {
         access: TrailRouteRerouteAccess,
         completedSessions: List<CompletedExerciseSession> = emptyList(),
         nowEpochMillis: Long = Clock.System.now().toEpochMilliseconds(),
+        derived: List<TrailRouteDerivedClosureLeg>? = null,
         cancellationCheckpoint: () -> Unit = {},
     ): TrailRouteRecalculationOutcome {
         val accessFeatures = when (access) {
@@ -62,7 +64,18 @@ object TrailRouteClosureGateSijko {
             TrailRouteRerouteAccess.NotAvailable -> null
             TrailRouteRerouteAccess.LoadFailed -> return TrailRouteRecalculationOutcome.RoadDataFailed
         }
-        val start = startOf(route) ?: return noRouteFor(route, nowEpochMillis)
+        // The graph is in hand here, so the correspondence is never unavailable: the saved route is judged against the
+        // legs of the uncut graph it was planned on, and a replacement against those of the graph it was planned on now.
+        val enabled = TrailFeatureFilterSijko.enabledFeatures(features, TrailRouteRerouteSijko.layersFor(route))
+        val routeLegs = derived
+            ?: TrailRouteClosureDerivationSijko.legsFor(TrailGraphBuilderSijko.buildGraph(enabled, cancellationCheckpoint = cancellationCheckpoint))
+        val replacementLegs = TrailRouteClosureDerivationSijko.legsFor(
+            TrailGraphBuilderSijko.buildGraph(
+                TrailRouteClosureSijko.openFeatures(enabled, nowEpochMillis).features,
+                cancellationCheckpoint = cancellationCheckpoint,
+            ),
+        )
+        val start = startOf(route) ?: return noRouteFor(route, nowEpochMillis, routeLegs)
         val replacement = if (route.kind == TrailRouteKind.ExerciseLoop) {
             val targetMeters = route.requestedDistanceMeters ?: route.totalDistanceMeters
             val accessGraph = accessFeatures?.let { roads ->
@@ -91,16 +104,26 @@ object TrailRouteClosureGateSijko {
             }
         }
         return replacement
-            ?.takeIf { blockingAdvisories(it, nowEpochMillis).isEmpty() }
+            // Not a way around a closure: a route that travels it, or whose own geometry (an estimated hop included)
+            // starts or ends inside a closed section.
+            ?.takeIf { blockingAdvisories(it, nowEpochMillis, replacementLegs).isEmpty() }
+            ?.takeIf { !TrailRouteAdvisorySijko.entersClosedSection(it, nowEpochMillis) }
             ?.let(TrailRouteRecalculationOutcome::Replacement)
-            ?: noRouteFor(route, nowEpochMillis)
+            ?: noRouteFor(route, nowEpochMillis, routeLegs)
     }
 
     private fun noRouteFor(
         route: TrailRoute,
         nowEpochMillis: Long,
+        derived: List<TrailRouteDerivedClosureLeg>?,
     ): TrailRouteRecalculationOutcome.NoSafeRoute {
-        val blockingIds = blockingAdvisories(route, nowEpochMillis).mapTo(mutableSetOf()) { it.id }
+        val blockingIds = blockingAdvisories(route, nowEpochMillis, derived).mapTo(mutableSetOf()) { it.id }.also { ids ->
+            // A route that only starts or ends inside a closed section (an estimated hop is its sole geometry there) is
+            // stopped by that closure too, so the rider is told which one.
+            TrailRouteClosureSijko.activeClosures(nowEpochMillis)
+                .filter { TrailRouteAdvisorySijko.entersClosedSection(route, it) }
+                .forEach { ids += it.id }
+        }
         return TrailRouteRecalculationOutcome.NoSafeRoute(
             TrailRouteClosureSijko.activeClosures(nowEpochMillis).filter { it.id in blockingIds },
         )

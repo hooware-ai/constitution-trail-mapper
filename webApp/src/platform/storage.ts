@@ -24,6 +24,22 @@ export interface RouteRecord {
    * reload show the right direction and keep Save on the planned one; it is checked against a fresh reversal on restore.
    */
   plannedKey?: string;
+  /**
+   * Set only on a route that was recalculated from another and is held TEMPORARILY: it is in no library list until the
+   * rider saves it, and the library never stores this flag (a save mints a new record from it). It survives a reload
+   * through the session and the active ride so the route is still shown for what it is.
+   */
+  temporary?: true;
+  /** The route this one was recalculated from (display only: the original is never touched by the recalculation). */
+  recalculatedFrom?: { key: string; title: string };
+  /**
+   * Set when `key` is an identity minted for a recalculated route rather than the geometry key: the stableRouteKey of
+   * the route's geometry, which is what a reversal is checked against. Absent: `key` is the geometry key (every route
+   * saved before recalculated routes had identities of their own).
+   */
+  geometryKey?: string;
+  /** On a reversed record: the planned route's geometry key, when that differs from `plannedKey` (a minted identity). */
+  plannedGeometryKey?: string;
 }
 export interface RouteDataset {
   kind: string;
@@ -89,6 +105,14 @@ function isRoute(value: unknown): value is RouteRecord {
     object(value.route) &&
     isDraft(value.draft) &&
     (value.plannedKey === undefined || text(value.plannedKey)) &&
+    (value.temporary === undefined || value.temporary === true) &&
+    (value.geometryKey === undefined || text(value.geometryKey)) &&
+    (value.plannedGeometryKey === undefined ||
+      text(value.plannedGeometryKey)) &&
+    (value.recalculatedFrom === undefined ||
+      (object(value.recalculatedFrom) &&
+        text(value.recalculatedFrom.key) &&
+        text(value.recalculatedFrom.title))) &&
     (value.dataset === undefined ||
       (object(value.dataset) &&
         text(value.dataset.kind) &&
@@ -388,6 +412,8 @@ export class LocalRouteStore {
   recordSuccess(record: RouteRecord): StoreResult<RouteLibrary> {
     if (!isRoute(record))
       return { ...this.read(), ok: false, error: "invalid-record" };
+    // A temporary (recalculated, unsaved) route is never written to Recent: only an explicit save makes it a record.
+    if (record.temporary) return { ok: true, state: this.read().state };
     return this.change((state) =>
       state.saved.some((item) => item.key === record.key)
         ? state
@@ -400,9 +426,12 @@ export class LocalRouteStore {
           },
     );
   }
-  save(record: RouteRecord): StoreResult<RouteLibrary> {
-    if (!isRoute(record))
+  save(given: RouteRecord): StoreResult<RouteLibrary> {
+    if (!isRoute(given))
       return { ...this.read(), ok: false, error: "invalid-record" };
+    // The library never stores the temporary flag: saving a recalculated route makes it an ordinary record under its own
+    // identity, and that identity never collides with the route it was recalculated from.
+    const { temporary: _temporary, ...record } = given;
     return this.change((state) => ({
       ...state,
       saved: [
@@ -420,7 +449,8 @@ export class LocalRouteStore {
       const saved = state.saved.some(
         (item) => item.key === oldKey || item.key === record.key,
       );
-      const next = { ...record, usedAt: this.now() };
+      const { temporary: _temporary, ...kept } = record;
+      const next = { ...kept, usedAt: this.now() };
       const without = (items: RouteRecord[]) =>
         items.filter((item) => item.key !== oldKey && item.key !== record.key);
       return {

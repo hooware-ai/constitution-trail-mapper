@@ -5,7 +5,9 @@
 // map credit say where the road data came from.
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { accessPlaces } from "../support/access-fixture.mjs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { accessPlaces, closureTrailEntry } from "../support/access-fixture.mjs";
 
 const LIBRARY_KEY = "trail-mapper.county:trail-mapper.web.library.v1";
 const places = [accessPlaces.start, accessPlaces.end].map((p, i) => ({
@@ -164,7 +166,9 @@ test("Help and the map credit say where the road data came from, with no accessi
   await page.getByRole("button", { name: /^Help/ }).first().click();
   const help = page.getByRole("dialog", { name: "Help and about" });
   await expect(help).toContainText("Road access:");
-  await expect(help).toContainText("service roads load only for the area");
+  await expect(help).toContainText(
+    "service roads load only for the map squares",
+  );
   await expect(
     help.getByRole("link", { name: /OpenStreetMap contributors \(ODbL\)/ }),
   ).toHaveAttribute("href", "https://www.openstreetmap.org/copyright");
@@ -173,6 +177,8 @@ test("Help and the map credit say where the road data came from, with no accessi
     .analyze();
   expect(results.violations).toEqual([]);
 });
+
+const WILLOW_START = Date.parse("2026-10-05T11:00:00Z");
 
 // RENDERING evidence only: the build carries a synthetic trail with the closure's feature id so the closure has geometry
 // to draw. Whether a route over it may start navigation is the shared core's gate, covered with the real core (and real
@@ -194,7 +200,8 @@ test("Explore draws the reported closure with its official notice link, and its 
   });
   const markers = page.locator(".closure-marker");
   await expect(closures).toBeChecked();
-  await expect(markers).toHaveCount(1);
+  // Uptown is in force from September 21; the scheduled Willow closure joins it from its own instant (see below).
+  await expect(markers).toHaveCount(Date.now() >= WILLOW_START ? 2 : 1);
   // The marker opens the closure's details with a link to the town's official notice, opened safely.
   await markers.first().click();
   const notice = page.getByRole("link", { name: "Review official notice" });
@@ -208,7 +215,7 @@ test("Explore draws the reported closure with its official notice link, and its 
   await closures.uncheck();
   await expect(markers).toHaveCount(0);
   await closures.check();
-  await expect(markers).toHaveCount(1);
+  await expect(markers).toHaveCount(Date.now() >= WILLOW_START ? 2 : 1);
 });
 
 test("control: the same journey on the build WITHOUT access data cannot be navigated", async ({
@@ -232,4 +239,207 @@ test("control: the same journey on the build WITHOUT access data cannot be navig
   if (await start.count()) await expect(start).toBeDisabled();
   expect(files).toEqual([]);
   await context.close();
+});
+
+// The routing worker reads its own clock, which a page cannot move, so the closures it would report at a chosen instant
+// are asked of the REAL core here and handed to the page in place of the worker's own answer to its boot. The page
+// is the real built app; what is checked is how it draws and words what the core reports. The instants themselves
+// (and Start, new plans and recalculation) are proved against the core in tests/unit/bridge-timed-closures.test.ts.
+async function closuresAt(iso: string) {
+  const corePath = join(
+    resolve(process.cwd(), ".."),
+    "webBridge",
+    "build",
+    "dist",
+    "js",
+    "productionLibrary",
+    "TrailMapper-webBridge.mjs",
+  );
+  const core: any = await import(
+    `${pathToFileURL(corePath).href}?county-willow=${iso}`
+  );
+  const trail = {
+    source: {},
+    layers: [
+      {
+        id: 54,
+        name: "Synthetic",
+        features: [
+          {
+            id: "54:1305",
+            name: "Synthetic",
+            status: "Existing",
+            routeRoles: ["TrailBranches"],
+            paths: closureTrailEntry[3],
+          },
+        ],
+      },
+    ],
+  };
+  const answer = JSON.parse(
+    core.dispatch(
+      JSON.stringify({
+        op: "initialize",
+        trails: JSON.stringify(trail),
+        now: Date.parse(iso),
+      }),
+    ),
+  );
+  expect(answer.ok).toBe(true);
+  return answer.closures;
+}
+async function patchInitialize(page: Page, closures: unknown) {
+  await page.addInitScript((patched) => {
+    const NativeWorker = window.Worker;
+    class Spy extends NativeWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        const ops = new Map<number, string>();
+        let handler: ((event: MessageEvent) => void) | null = null;
+        const post = this.postMessage.bind(this);
+        (this as any).postMessage = (message: any, ...rest: any[]) => {
+          if (message?.request) ops.set(message.id, message.request.op);
+          return (post as any)(message, ...rest);
+        };
+        Object.defineProperty(this, "onmessage", {
+          set: (fn) => {
+            handler = fn;
+          },
+          get: () => handler,
+        });
+        this.addEventListener("message", (event: MessageEvent) => {
+          const deliver = (data: unknown) =>
+            handler?.call(this, new MessageEvent("message", { data }));
+          if (ops.get(event.data?.id) === "boot")
+            return deliver({
+              ...event.data,
+              result: { ...event.data.result, closures: patched },
+            });
+          deliver(event.data);
+        });
+      }
+    }
+    (window as any).Worker = Spy;
+  }, closures);
+}
+async function openExplore(page: Page) {
+  await seedPlaces(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Explore", exact: true })
+    .click();
+}
+
+test("the Willow closure is drawn from the core's report at its instant, with its approximation label and a safely opened official link, and not one second earlier", async ({
+  page,
+  browser,
+}) => {
+  const early = await closuresAt("2026-10-05T10:59:59Z");
+  const active = await closuresAt("2026-10-05T11:00:00Z");
+  expect(early.map((c: any) => c.id)).toEqual([
+    "uptown-underpass-detour-2026-09-21",
+  ]);
+  expect(active.map((c: any) => c.id)).toEqual([
+    "uptown-underpass-detour-2026-09-21",
+    "willow-trail-crossing-2026-10-05",
+  ]);
+  // One second before: only the closure already in force is drawn.
+  const earlyContext = await browser.newContext();
+  const earlyPage = await earlyContext.newPage();
+  await patchInitialize(earlyPage, early);
+  await openExplore(earlyPage);
+  await expect(earlyPage.locator(".closure-marker")).toHaveCount(1);
+  await earlyContext.close();
+  // At the instant: both, the second with its label, check date and official link.
+  await patchInitialize(page, active);
+  await openExplore(page);
+  const markers = page.locator(".closure-marker");
+  await expect(markers).toHaveCount(2);
+  // The Willow section lies north of the first view; the click is delivered to its marker wherever it is.
+  await markers.last().dispatchEvent("click");
+  const note = page.getByText(/Approximate: the Town's online closure map/);
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("Notice checked October 2, 2026");
+  const links = page.getByRole("link", { name: "Review official notice" });
+  await expect(links.last()).toHaveAttribute(
+    "href",
+    "https://www.normalil.gov/m/newsflash/home/detail/3356",
+  );
+  await expect(links.last()).toHaveAttribute("target", "_blank");
+  await expect(links.last()).toHaveAttribute("rel", /noopener/);
+});
+
+test("Help on the build WITH road data says what it loads and what its requests reveal, and the real requests match that copy", async ({
+  page,
+}) => {
+  const urls: string[] = [];
+  page.on("request", (request) => urls.push(request.url()));
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.abort(),
+  );
+  await seedPlaces(page);
+  await openPlanner(page);
+  await findRoute(page).click();
+  await expect(
+    page.getByRole("button", { name: "Start navigation", exact: true }),
+  ).toBeEnabled();
+  const tiles = urls.filter((url) => /\/data\/access-tile\./.test(url));
+  expect(tiles.length).toBeGreaterThan(0);
+  for (const url of tiles) {
+    const parsed = new URL(url);
+    // Same origin only, named for a map square and a content hash, and carrying no coordinate, label or typed text.
+    expect(parsed.origin).toBe(new URL(page.url()).origin);
+    expect(parsed.pathname).toMatch(
+      /^\/data\/access-tile\.-?\d+_-?\d+\.[0-9a-f]{12}\.json$/,
+    );
+    expect(parsed.search).toBe("");
+    expect(url).not.toContain(String(accessPlaces.start.latitude));
+    expect(url).not.toContain(accessPlaces.start.label.replace(/ /g, "%20"));
+  }
+  // Only a bounded area was asked for: at most a 3 x 3 block around each of the trip's two ends, never every tile.
+  const index = await (
+    await page.request.get(
+      "/data/" +
+        (await (await page.request.get("/data/dataset.json")).json()).access
+          .index.file,
+    )
+  ).json();
+  expect(new Set(tiles).size).toBeLessThanOrEqual(18);
+  expect(new Set(tiles).size).toBeLessThan(index.tiles.length + 1);
+  expect(urls.filter((url) => /tile\.openstreetmap\.org/.test(url))).toEqual(
+    [],
+  );
+  await page.getByRole("button", { name: /^Help/ }).first().click();
+  const help = page.getByRole("dialog", { name: "Help and about" });
+  await expect(help).toContainText("This build also loads road data");
+  await expect(help).toContainText(
+    "Outside the loaded features and road data there is nothing to route on",
+  );
+  await expect(help).toContainText(
+    "road files that cover the map squares (about 1 km across, three by three)",
+  );
+  await expect(help).toContainText(
+    "around your position while you ride or reroute",
+  );
+  await expect(help).toContainText(
+    "The file names carry each square's grid numbers",
+  );
+  await expect(help).toContainText(
+    "Exact GPS fixes, typed searches and saved records are not part of those requests",
+  );
+  await expect(help).toContainText(
+    "road files are fetched by map square, and those requests show this site approximately where you are",
+  );
+  const copy = await help.innerText();
+  expect(copy).not.toContain("is not sent by the app anywhere");
+  expect(copy).not.toContain("This build has no street-access data");
+  expect(copy).not.toContain("it has no road network");
+  // The Data section's description names every position that actually fetches tiles (ensure() over a request's points).
+  await expect(help).toContainText("around its start and destination");
+  await expect(help).toContainText("your position while you ride or reroute");
+  await expect(help).toContainText("a saved route's first and last points");
 });

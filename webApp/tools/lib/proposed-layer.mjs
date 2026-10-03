@@ -205,6 +205,16 @@ export function admitProposed(inputText, manifest) {
  * Audits a packaged proposed layer against the manifest again, from the shipped bytes: same rights gate, same segments,
  * recomputed geometry hashes, off by default, record and layer agreeing.
  */
+/** JSON text with every object's keys in a fixed order, so two descriptions can be compared whatever order they came in. */
+const stable = (value) =>
+  JSON.stringify(value, (_key, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : v,
+  );
+
 export function checkProposedLayer(layer, record, manifest, manifestBytes) {
   const rights = requireRights(manifest);
   const entries = listed(manifest);
@@ -245,11 +255,22 @@ export function checkProposedLayer(layer, record, manifest, manifestBytes) {
         `${feature.id} does not carry the granted rights it was admitted under.`,
       );
   }
+  // The layer and the record's description are both recomputed from the manifest's granted rights and the geometry in
+  // hand: review date, basis, evidence URL and hash, grantor and date, licence, licence URL and attribution are not
+  // copied claims. Only the manifest hash is the record's own.
+  const recomputed = admitProposed(
+    JSON.stringify({ layers: [layer] }),
+    manifest,
+  );
+  if (stable(layer) !== stable(recomputed.layer))
+    refuse(
+      "The packaged proposed layer is not the verified, allow-listed form.",
+    );
+  const { manifestSha256: _own, ...claimed } = part;
   if (
     part.featureCount !== layer.features.length ||
     JSON.stringify(part.segmentIds) !== JSON.stringify(ids) ||
-    part.evidenceSha256 !== rights.evidenceSha256 ||
-    part.license !== rights.license
+    stable(claimed) !== stable(recomputed.facts)
   )
     refuse("The record's description of the proposed layer is wrong.");
   return layer.features.length;

@@ -37,7 +37,10 @@ export function buildPackage(args: {
     manifest: any;
     manifestBytes: Uint8Array;
   } | null;
-  access?: { inputText: string } | null;
+  access?: {
+    inputText: string;
+    manifestBytes: Uint8Array;
+  } | null;
   proposed?: {
     inputText: string;
     manifest: any;
@@ -70,12 +73,14 @@ export function packageFromFiles(options?: {
   osmInput?: string | null;
   osmManifestPath?: string;
   accessInput?: string | null;
+  accessManifestPath?: string;
   proposedInput?: string | null;
   proposedManifestPath?: string;
 }): Promise<{ record: any; body: Buffer; file: string }>;
 export function verifyPackageDir(
   dir?: string,
   manifestPath?: string,
+  accessManifestPath?: string,
 ): Promise<{
   record: any;
   body: Buffer;
@@ -89,4 +94,12 @@ export function checkPackage(
   osmManifestBytes?: Uint8Array | null,
   readPart?: (file: string) => Buffer | undefined,
   proposedManifestBytes?: Uint8Array | null,
+  accessManifestBytes?: Uint8Array | null,
 ): any;
+export const accessManifestFile: string;
+export const committedAccessManifestFile: string;
+export function sourceContractOf(manifest: any): {
+  changes: string;
+  disclaimer: string;
+  evidenceSha256: string | null;
+};

@@ -144,8 +144,38 @@ test("the fixture dataset is never publishable and a file scan does not approve 
     attribution: "Trail data: example",
     approvedBy: "owner",
     approvedOn: "2026-10-01",
+    // An approval covers one composition: the actual parts must equal the expected ones the record carries.
+    composition: {
+      networkSha256: "b".repeat(64),
+      countyManifestSha256: "c".repeat(64),
+      layerCounts: { "8": 3 },
+      accessBaseSha256: null,
+      accessIndexSha256: null,
+      accessCombinedSha256: null,
+      accessSourceInputSha256: null,
+      accessSourceManifestSha256: null,
+      supplementManifestSha256: null,
+      proposedManifestSha256: null,
+    },
+    approvedComposition: {
+      networkSha256: "b".repeat(64),
+      countyManifestSha256: "c".repeat(64),
+      layerCounts: { "8": 3 },
+      accessBaseSha256: null,
+      accessIndexSha256: null,
+      accessCombinedSha256: null,
+      accessSourceInputSha256: null,
+      accessSourceManifestSha256: null,
+      supplementManifestSha256: null,
+      proposedManifestSha256: null,
+    },
   };
   assert.deepEqual(publicReleaseBlockers(complete, clean), []);
+  // The same approval flags WITHOUT a bound composition fail closed: a legacy approval covers nothing.
+  assert.ok(
+    publicReleaseBlockers({ ...complete, approvedComposition: null }, clean)
+      .length > 0,
+  );
   // A dirty tree or unknown commit also blocks publication.
   assert.ok(
     publicReleaseBlockers(complete, { commit: "a".repeat(40), dirty: true })

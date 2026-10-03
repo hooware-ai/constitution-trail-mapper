@@ -153,11 +153,16 @@ test("fixture network data inside a county artifact is a blocker", async () => {
 });
 
 test("a fully approved committed record still blocks a package made from other than the committed manifest", async () => {
+  // A hypothetical approval must name the composition it covers; learn it from an unapproved build of the same data.
+  const probe = await shipped();
+  const composition = probe.built.record.composition;
+  await rm(probe.dir, { recursive: true, force: true });
   const approved = {
     ...makeCounty().approval,
     approved: true,
     approvedBy: "Owner",
     approvedOn: "2026-06-01",
+    approvedComposition: composition,
     blockers: [],
   };
   const { dir, paths } = await shipped(approved);

@@ -303,6 +303,9 @@ export function checkAccessParts(descriptor, read) {
   const seenFeatures = new Set();
   const idsByCell = new Map();
   const featureById = new Map();
+  // The extract position of every service road is global, not per tile: the core relies on it to rebuild the whole-file
+  // order, so two roads may never share one and, together, they must use every position from 0 with no gap.
+  const idByOrd = new Map();
   let assignments = 0;
   let bytes = 0;
   for (const tile of index.tiles) {
@@ -329,6 +332,11 @@ export function checkAccessParts(descriptor, read) {
       )
         refuse(`Access tile ${key} does not list its roads in extract order.`);
       previousOrd = feature.ord;
+      if (idByOrd.has(feature.ord) && idByOrd.get(feature.ord) !== feature.id)
+        refuse(
+          `Access roads ${idByOrd.get(feature.ord)} and ${feature.id} share extract position ${feature.ord}.`,
+        );
+      idByOrd.set(feature.ord, feature.id);
       const earlier = featureById.get(feature.id);
       if (earlier && JSON.stringify(earlier) !== JSON.stringify(feature))
         refuse(
@@ -354,6 +362,11 @@ export function checkAccessParts(descriptor, read) {
         refuse(
           `Access road ${id} is missing from tile ${cellKey(cell)} that its bounding box intersects.`,
         );
+  for (let ord = 0; ord < seenFeatures.size; ord++)
+    if (!idByOrd.has(ord))
+      refuse(
+        `Access road extract positions are not dense: ${ord} is missing among ${seenFeatures.size} service roads.`,
+      );
   if (
     seenFeatures.size !== descriptor.index.localFeatureCount ||
     assignments !== descriptor.index.tileAssignments ||

@@ -60,9 +60,13 @@ export function DataSources({
         and this app does not know when it last did.
       </p>
       <p>
-        {content.featureCount} existing trail features
+        {content.featureCount - (record.proposedLayer?.featureCount ?? 0)}{" "}
+        existing trail features
         {record.supplements?.length
           ? ` (${record.supplements.reduce((n, part) => n + part.featureCount, 0)} of them reviewed OpenStreetMap paths, below)`
+          : ""}
+        {record.proposedLayer
+          ? `, plus ${record.proposedLayer.featureCount} proposed segments (preview only, below)`
           : ""}
         . {source.disclaimer}
       </p>
@@ -91,8 +95,9 @@ export function DataSources({
           <strong>Road access:</strong> {record.access.base.featureCount} base
           road features load with the trail data;{" "}
           {record.access.index.localFeatureCount} service roads load only for
-          the area around a trip&apos;s start and destination. Sources: U.S.
-          Census Bureau TIGER/Line roads and{" "}
+          the map squares a trip needs: around its start and destination, your
+          position while you ride or reroute, and a saved route&apos;s first and
+          last points. Sources: U.S. Census Bureau TIGER/Line roads and{" "}
           <SafeLink href="https://www.openstreetmap.org/copyright">
             OpenStreetMap contributors (ODbL)
           </SafeLink>

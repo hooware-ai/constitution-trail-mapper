@@ -88,9 +88,15 @@ test("unverified connections have measured details and accessible map focus", as
   await page
     .getByRole("button", { name: "Recalculate route", exact: true })
     .click();
+  // The still-unverified connection means the temporary result cannot be started, and it says so.
   await expect(
-    page.getByText("Route recalculated", { exact: true }),
+    page.getByText(
+      /A recalculated route was found but it cannot be started yet/,
+    ),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start navigation", exact: true }),
+  ).toBeDisabled();
   await expect(page.locator(".leaflet-popup")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
