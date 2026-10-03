@@ -194,6 +194,8 @@ export function App() {
   // route on screen is the REVERSED record (its own geometry key), so nothing that depends on the planned route (Save,
   // the Saved indicator, reversing again) may act on it: each would resolve to the wrong record.
   const [pendingDirection, setPendingDirection] = useState<string | null>(null),
+    // Bumped whenever a proof ends, so a retry waiting for it (the rider came back while it was still held) can run.
+    [proofEnded, setProofEnded] = useState(0),
     [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
     [showClosures, setShowClosures] = useState(true),
     [fitSignal, setFitSignal] = useState(0),
@@ -243,6 +245,7 @@ export function App() {
     finishLoopRef = useRef<(record: RouteRecord) => void>(() => {}),
     operation = useRef(0),
     directionPendingRef = useRef(false),
+    proofRunning = useRef(false),
     selectedRef = useRef<RouteRecord | null>(null),
     snapshotState = useRef<unknown>(undefined);
   const success = (message: string, undo?: () => void) =>
@@ -1190,12 +1193,25 @@ export function App() {
     isCurrent: () => boolean,
   ) {
     if (!record.plannedKey) return;
-    // Pending from now until the proof ends, whatever the outcome and whether or not the rider has moved on.
+    // Pending from now until the proof is settled.
     setPendingDirection(record.key);
+    proofRunning.current = true;
     try {
       await proveDirection(client, record, isCurrent);
     } finally {
-      setPendingDirection((key) => (key === record.key ? null : key));
+      proofRunning.current = false;
+      setProofEnded((count) => count + 1);
+      // A proof that ended because the rider LEFT (not because it finished) settled nothing: if the same restored route is
+      // still the one retained (browser Back shows it again) its direction stays unresolved, and the proof is run again
+      // when it is shown. Any other route clears it.
+      const kept = selectedRef.current;
+      const retained =
+        !isCurrent() &&
+        !!kept &&
+        kept.key === record.key &&
+        kept.plannedKey === record.plannedKey;
+      if (!retained)
+        setPendingDirection((key) => (key === record.key ? null : key));
     }
   }
   async function proveDirection(
@@ -1604,6 +1620,22 @@ export function App() {
     pendingDirection === selected.key;
   directionPendingRef.current = directionPending;
   selectedRef.current = selected;
+  // Shown again with its direction still unresolved (the first proof was cancelled by leaving): prove it afresh, under this
+  // showing's own operation, so the abandoned answer is never adopted.
+  useEffect(() => {
+    const client = clientRef.current;
+    if (
+      screen !== "preview" ||
+      !directionPending ||
+      checking ||
+      proofRunning.current ||
+      !client ||
+      !selected
+    )
+      return;
+    const token = ++operation.current;
+    void restoreDirection(client, selected, () => token === operation.current);
+  }, [screen, directionPending, selected, checking, proofEnded]);
   const isSaved =
       !!selected &&
       !directionPending &&
