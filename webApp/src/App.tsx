@@ -190,7 +190,11 @@ export function App() {
       if (epoch === dialogEpoch.current) setDialogNotice(notice);
     });
   }
-  const [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
+  // The key of the restored route whose planned direction is still being proved after a reload. While it is pending the
+  // route on screen is the REVERSED record (its own geometry key), so nothing that depends on the planned route (Save,
+  // the Saved indicator, reversing again) may act on it: each would resolve to the wrong record.
+  const [pendingDirection, setPendingDirection] = useState<string | null>(null),
+    [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
     [showClosures, setShowClosures] = useState(true),
     [fitSignal, setFitSignal] = useState(0),
     [retryPlan, setRetryPlan] = useState(false),
@@ -238,6 +242,8 @@ export function App() {
     } | null>(null),
     finishLoopRef = useRef<(record: RouteRecord) => void>(() => {}),
     operation = useRef(0),
+    directionPendingRef = useRef(false),
+    selectedRef = useRef<RouteRecord | null>(null),
     snapshotState = useRef<unknown>(undefined);
   const success = (message: string, undo?: () => void) =>
     setToast({ message, undo });
@@ -1184,6 +1190,20 @@ export function App() {
     isCurrent: () => boolean,
   ) {
     if (!record.plannedKey) return;
+    // Pending from now until the proof ends, whatever the outcome and whether or not the rider has moved on.
+    setPendingDirection(record.key);
+    try {
+      await proveDirection(client, record, isCurrent);
+    } finally {
+      setPendingDirection((key) => (key === record.key ? null : key));
+    }
+  }
+  async function proveDirection(
+    client: RoutingClient,
+    record: RouteRecord,
+    isCurrent: () => boolean,
+  ) {
+    if (!record.plannedKey) return;
     try {
       const result = routeOkay(
         await client.call<RouteResult>({
@@ -1213,6 +1233,10 @@ export function App() {
             ? { geometryKey: record.plannedGeometryKey }
             : {}),
         };
+        // A status settled while the proof ran (saved) is not undone by the captured, older record.
+        const live = selectedRef.current;
+        if (live && live.key === record.key && !live.temporary)
+          delete planned.temporary;
         setReverseOf(planned);
         return;
       }
@@ -1223,11 +1247,18 @@ export function App() {
     setSelected((current) =>
       current && current.key === record.key
         ? (({ plannedKey: _dropped, plannedGeometryKey: _unproved, ...rest }) =>
-            rest)(current)
+            // Shown as the route it is. A temporary one must not later save under its bare geometry key, which could
+            // be the key of a route already saved: it gets an identity of its own, minted once.
+            rest.temporary && !rest.geometryKey
+              ? { ...rest, key: mintedKey(rest.key), geometryKey: rest.key }
+              : rest)(current)
         : current,
     );
   }
   function saveRecord(record: RouteRecord) {
+    // Not while the planned direction is still being proved: the route on screen is the reversed record, and saving it
+    // would store the reversed geometry key instead of the planned route's identity.
+    if (directionPendingRef.current) return;
     const ok = applyStore(
       storeRef.current!.save(record),
       record.temporary
@@ -1567,8 +1598,15 @@ export function App() {
     });
     return () => cancelAnimationFrame(frame);
   }, [screen, network]);
+  const directionPending =
+    !!selected &&
+    pendingDirection !== null &&
+    pendingDirection === selected.key;
+  directionPendingRef.current = directionPending;
+  selectedRef.current = selected;
   const isSaved =
       !!selected &&
+      !directionPending &&
       library.saved.some((item) => item.key === (reverseOf ?? selected).key),
     isPlanner = draft.mode === "loop",
     validMiles =
@@ -2197,7 +2235,7 @@ export function App() {
                   {preview.kind === "ExerciseLoop" && (
                     <DirectionControl
                       reversed={reverseOf !== null}
-                      busy={busy || checking}
+                      busy={busy || checking || directionPending}
                       onReverse={() => void reverseDirection()}
                     />
                   )}
@@ -2222,8 +2260,22 @@ export function App() {
                             : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
                     </p>
                   )}
+                  {directionPending && (
+                    <p
+                      className="caption"
+                      id="direction-pending-note"
+                      role="status"
+                    >
+                      Checking which direction this route was planned in. Save
+                      and Reverse are available as soon as that is known.
+                    </p>
+                  )}
                   <div className="actions preview-actions">
                     <button
+                      disabled={directionPending}
+                      aria-describedby={
+                        directionPending ? "direction-pending-note" : undefined
+                      }
                       onClick={() => {
                         if (isSaved) {
                           setSavedTab("saved");
@@ -2325,7 +2377,7 @@ export function App() {
               {preview?.kind === "ExerciseLoop" && (
                 <DirectionControl
                   reversed={reverseOf !== null}
-                  busy={busy}
+                  busy={busy || directionPending}
                   onReverse={() => void reverseDirection()}
                 />
               )}
