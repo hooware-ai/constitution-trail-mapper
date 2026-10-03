@@ -70,8 +70,10 @@ object LocalTrailGuide {
                 "Monday, October 5 for bridge inspection and maintenance, and Constitution Trail is also closed at " +
                 "Virginia Avenue (Camelback Bridge). Completion is estimated by 5 p.m. CDT on Tuesday, October 6, " +
                 "weather permitting; an estimate does not confirm reopening. The notice gives no trail detour and no " +
-                "closure limits along the trail, so Trail Mapper shows an advisory on routes that cross there and does " +
-                "not block or reroute them; follow posted signs. The road closure does not define the trail closure.",
+                "closure limits along the trail, so Trail Mapper cannot plan around it: once the closure begins, a route " +
+                "that crosses there can be previewed but not started. The road closure does not define the trail closure, and Trail Mapper " +
+                "marks no additional neighboring trail interval from this notice; that is a statement about what this " +
+                "app draws, not that any other road or trail is open. Follow posted signs.",
             "Scheduled · closure begins October 5, 8 a.m.",
             TrailResourceLink("Normal bridge closure notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3353"),
             effectiveAtEpochMillis = epoch("2026-10-05T13:00:00Z"),
@@ -115,8 +117,8 @@ object LocalTrailGuide {
             "Repaving from the south entrance of Fairview Park at Adelaide Street to Heartland Community College at " +
                 "Millennium Boulevard was expected to begin September 28 or 29, weather permitting. Repairs, patching and " +
                 "milling need targeted, temporary closures in individual sections before the overlay. The September 24 " +
-                "notice expected the closures to end by October 2; that estimate has passed and completion was not " +
-                "confirmed. See the October 2 trail paving notice below. Follow posted closure and detour signs.",
+                "notice estimated the closures would end by October 2. No confirmed completion was found, and the " +
+                "October 2 trail paving notice below is the latest evidence checked. Follow posted closure and detour signs.",
             "Scheduled · from September 28, 2026",
             TrailResourceLink("Normal repaving notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3345"),
             effectiveAtEpochMillis = epoch("2026-09-28T05:00:00Z"),

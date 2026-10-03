@@ -19,22 +19,23 @@ object TrailRouteAdvisorySijko {
     // 6 p.m. CDT; the older city notice said September 30. Either is an estimate, never a confirmed reopening.
     private const val HamiltonEstimatedEndEpochMillis = 1_793_487_600_000L
 
-    // Town of Normal notice 3353 (September 30, 2026): the trail is closed at Virginia Avenue (Camelback Bridge) from
-    // 8 a.m. CDT on October 5, completion estimated 5 p.m. CDT on October 6. The notice gives no trail detour and no
-    // closure limits along the trail, and the city map's line for it is a ROAD line (object 916), so this is an advisory
-    // for trail travel through the crossing, not a mapped exclusion.
-    private const val CamelbackAdvisoryId = "camelback-virginia-trail-crossing-2026-10-05"
-    private const val CamelbackNoticeUrl = "https://www.normalil.gov/m/newsflash/Home/Detail/3353"
-    private const val CamelbackStartEpochMillis = 1_791_205_200_000L
-    private const val CamelbackEstimatedEndEpochMillis = 1_791_324_000_000L
-    private const val CamelbackMatchToleranceMeters = 15.0
+    // How close a route leg must be to the Camelback crossing point to count as traversing it. The point comes from the
+    // intersection of the city's road line with the county trail leg, so a few meters absorb the map's own precision.
+    private const val CrossingToleranceMeters = 3.0
 
-    // Where the city's Virginia Avenue line crosses county trail 54:1305 (leg 6 to 7), near the Camelback Bridge.
-    private val camelbackCrossing = MapPoint(latitude = 40.4982689784, longitude = -88.9834162490)
+    // A leg is "on" a closed section when both its ends are within this distance of the section's line: the section
+    // lies on the unchanged source leg, so travel along it is exact to rounding, and a perpendicular crossing is not.
+    private const val OnSectionLineToleranceMeters = 0.5
 
-    private const val ClosedSectionToleranceMeters = 3.0
-    private const val ClosedSectionMinimumOverlapMeters = 15.0
-    private const val ClosedSectionSampleSpacingMeters = 2.0
+    // Overlap with the section's interval counts above this: numerical noise only, never a minimum riding distance.
+    private const val SectionOverlapEpsilonMeters = 0.01
+
+    // Direction alignment (cosine) needed to call a leg longitudinal when a route has no per-edge provenance.
+    private const val LongitudinalCosine = 0.9
+    private const val MetersPerDegree = 111_194.93
+
+    // A requested start or destination counts as inside a closed section within this distance of its line.
+    private const val InsideSectionToleranceMeters = 2.0
     private const val CorridorMatchToleranceMeters = 25.0
 
     // The advisory warns about the same closure that new route searches exclude.
@@ -119,7 +120,7 @@ object TrailRouteAdvisorySijko {
      */
     private fun willowAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {
         val closure = TrailRouteClosureSijko.willowTrailCrossing
-        if (!usesClosedSection(route, closure)) {
+        if (!ridesClosedSection(route, closure)) {
             return null
         }
         val estimate = closure.estimatedEndEpochMillis
@@ -157,79 +158,170 @@ object TrailRouteAdvisorySijko {
         }
     }
 
-    /** Trail travel through the Camelback Bridge crossing; informs, never blocks, because no closure limits are given. */
+    /**
+     * The Camelback Bridge crossing. A route that travels through the crossing on the county trail is a route over a
+     * trail the Town says is closed: scheduled before 8 a.m. CDT on October 5, a refused route from then on, including
+     * after the estimated end (an estimate is not a reopening). Without published limits nothing is cut or drawn, so the
+     * router does not plan around it: the route can be previewed, and cannot be started.
+     */
     private fun camelbackAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {
-        val usesCrossing = route.segments.any { segment ->
-            segment.type == TrailRouteSegmentType.Trail &&
-                TrailNetworkRole.SharedRoadways !in segment.routeRoles &&
-                segment.points.zipWithNext().any { (first, second) ->
-                    TrailDistanceSijko.projectToSegment(camelbackCrossing, first, second).distanceMeters <=
-                        CamelbackMatchToleranceMeters
-                }
-        }
-        if (!usesCrossing) {
+        val closure = TrailRouteClosureSijko.camelbackCrossing
+        if (!traversesCrossing(route, closure)) {
             return null
         }
-        val end = if (nowEpochMillis > CamelbackEstimatedEndEpochMillis) {
+        val estimate = closure.estimatedEndEpochMillis
+        val end = if (estimate != null && nowEpochMillis > estimate) {
             "The Town's estimated completion, 5 p.m. CDT on Tuesday, October 6, has passed; reopening has not been confirmed."
         } else {
             "The Town estimates completion by 5 p.m. CDT on Tuesday, October 6, weather permitting; an estimate does not confirm reopening."
         }
-        val limits = "The notice gives no trail detour and no closure limits along the trail, so this route has not " +
-            "been changed or blocked; follow posted signs."
-        return if (nowEpochMillis >= CamelbackStartEpochMillis) {
+        val limits = "The notice gives no trail detour and no closure limits along the trail, so Trail Mapper cannot " +
+            "plan around it and does not start this route; follow the Town's posted signs."
+        // Before the closure begins nothing is refused yet: say what WILL happen, not that it is happening.
+        val scheduledLimits = "The notice gives no trail detour and no closure limits along the trail, so Trail Mapper " +
+            "cannot plan around it. This route can still be started until then; from 8 a.m. CDT on October 5 Trail " +
+            "Mapper will not start a route that crosses there. Follow the Town's posted signs."
+        return if (nowEpochMillis >= closure.activeFromEpochMillis) {
             TrailRouteAdvisory(
-                id = CamelbackAdvisoryId,
+                id = closure.id,
                 title = "Virginia Avenue (Camelback Bridge) trail closure advisory",
                 message = "This route crosses Virginia Avenue at the Camelback Bridge, where the Town of Normal closed " +
                     "Constitution Trail from 8 a.m. CDT on Monday, October 5, 2026, with Virginia Avenue closed between " +
                     "South Linden and Hillcrest Streets for bridge inspection and maintenance. $limits $end",
-                sourceUrl = CamelbackNoticeUrl,
+                sourceUrl = closure.noticeUrl,
                 locationDescription = "Constitution Trail at Virginia Avenue (Camelback Bridge), Normal. Notice posted " +
-                    "September 30, 2026; checked October 2, 2026.",
+                    "September 30, 2026; checked ${closure.checkedOn}.",
             )
         } else {
             TrailRouteAdvisory(
-                id = CamelbackAdvisoryId,
+                id = closure.id,
                 title = "Scheduled trail closure at Virginia Avenue (Camelback Bridge)",
                 message = "Scheduled, not closed yet: the Town of Normal will close Constitution Trail at Virginia " +
                     "Avenue (Camelback Bridge) from 8 a.m. CDT on Monday, October 5, 2026, with Virginia Avenue closed " +
                     "between South Linden and Hillcrest Streets for bridge inspection and maintenance. This route " +
-                    "crosses there. $limits $end",
-                sourceUrl = CamelbackNoticeUrl,
+                    "crosses there. $scheduledLimits $end",
+                sourceUrl = closure.noticeUrl,
                 locationDescription = "Constitution Trail at Virginia Avenue (Camelback Bridge), Normal. Notice posted " +
-                    "September 30, 2026; checked October 2, 2026.",
+                    "September 30, 2026; checked ${closure.checkedOn}.",
             )
         }
     }
 
-    /** Trail travel along a closure's mapped section; a crossing street or a neighboring trail does not count. */
-    private fun usesClosedSection(route: TrailRoute, closure: TrailRouteClosure): Boolean {
-        val section = closure.closedPath.zipWithNext()
-        var overlapMeters = 0.0
-        route.segments
-            .filter { segment -> segment.type == TrailRouteSegmentType.Trail }
-            .forEach { segment ->
-                segment.points.zipWithNext().forEach { (start, end) ->
-                    val legMeters = TrailDistanceSijko.metersBetween(start, end)
-                    val samples = maxOf(1, (legMeters / ClosedSectionSampleSpacingMeters).toInt())
-                    repeat(samples) { sample ->
-                        val ratio = (sample + 0.5) / samples
-                        val point = MapPoint(
-                            latitude = start.latitude + (end.latitude - start.latitude) * ratio,
-                            longitude = start.longitude + (end.longitude - start.longitude) * ratio,
-                        )
-                        if (section.any { (from, to) ->
-                                TrailDistanceSijko.projectToSegment(point, from, to).distanceMeters <=
-                                    ClosedSectionToleranceMeters
-                            }
-                        ) {
-                            overlapMeters += legMeters / samples
-                        }
-                    }
-                }
+    /**
+     * True when any point of [route], of ANY segment type (an unrouted, estimated hop included), lies strictly inside the
+     * mapped section of a closure that is in force at [nowEpochMillis]. A replacement route whose start or destination is
+     * inside a closed section is not a way around it, even when its only geometry is an estimated hop to the nearest bound
+     * and back: that hop is not travel along the trail, so the travel gate alone does not see it.
+     */
+    fun entersClosedSection(route: TrailRoute, nowEpochMillis: Long): Boolean {
+        return TrailRouteClosureSijko.activeClosures(nowEpochMillis).any { entersClosedSection(route, it) }
+    }
+
+    /** The same, for one closure (false for a closure with no mapped section). */
+    fun entersClosedSection(route: TrailRoute, closure: TrailRouteClosure): Boolean {
+        if (!closure.boundsProjected || closure.isCrossing) {
+            return false
+        }
+        val points = route.segments.flatMap { it.points }
+        return closure.closedPath.zipWithNext().any { (from, to) ->
+            points.any { point -> insideSection(point, from, to) }
+        }
+    }
+
+    private fun insideSection(point: MapPoint, from: MapPoint, to: MapPoint): Boolean {
+        val cosLatitude = kotlin.math.cos(from.latitude * kotlin.math.PI / 180.0)
+        fun x(p: MapPoint) = (p.longitude - from.longitude) * cosLatitude * MetersPerDegree
+        fun y(p: MapPoint) = (p.latitude - from.latitude) * MetersPerDegree
+        val length = kotlin.math.hypot(x(to), y(to))
+        if (length <= 0.0) {
+            return false
+        }
+        val directionX = x(to) / length
+        val directionY = y(to) / length
+        val along = x(point) * directionX + y(point) * directionY
+        val across = kotlin.math.abs(x(point) * directionY - y(point) * directionX)
+        return across <= InsideSectionToleranceMeters &&
+            along > SectionOverlapEpsilonMeters && along < length - SectionOverlapEpsilonMeters
+    }
+
+    /** Legs of trail travel that could be on [closure]'s feature, with whether their source is known to be it. */
+    private fun candidateLegs(route: TrailRoute, closure: TrailRouteClosure): List<Pair<Pair<MapPoint, MapPoint>, Boolean>> {
+        if (route.edges.isEmpty()) {
+            // A route without per-edge provenance: its merged trail segments, judged by geometry alone.
+            return route.segments
+                .filter { it.type == TrailRouteSegmentType.Trail && TrailNetworkRole.SharedRoadways !in it.routeRoles }
+                .flatMap { segment -> segment.points.zipWithNext().map { it to false } }
+        }
+        return route.edges
+            // The closure's own feature, or an edge with no recorded source (a snap connector made along it).
+            .filter { it.sourceFeatureId == closure.featureId || it.sourceFeatureId == null }
+            .flatMap { edge ->
+                val known = edge.sourceFeatureId == closure.featureId
+                edge.routeSegments
+                    .filter { it.type == TrailRouteSegmentType.Trail }
+                    .flatMap { segment -> segment.points.zipWithNext().map { it to known } }
             }
-        return overlapMeters >= ClosedSectionMinimumOverlapMeters
+    }
+
+    /** Does the route travel through the closure's crossing point on its feature? Touching the point counts. */
+    private fun traversesCrossing(route: TrailRoute, closure: TrailRouteClosure): Boolean {
+        return candidateLegs(route, closure).any { (leg, _) ->
+            TrailDistanceSijko.projectToSegment(closure.closedFrom, leg.first, leg.second).distanceMeters <=
+                CrossingToleranceMeters
+        }
+    }
+
+    /**
+     * Positive travel ALONG the closed section: some leg of the route lies on the section's line and covers part of its
+     * interval. Any amount counts (a short route wholly inside it, or a few meters past either bound), with numerical
+     * tolerance only. A perpendicular crossing, a junction hop or an approach that ends at a bound has no leg on the line
+     * that overlaps the interval, so it is not travel along the section.
+     */
+    private fun ridesClosedSection(route: TrailRoute, closure: TrailRouteClosure): Boolean {
+        val legsOfSection = closure.closedPath.zipWithNext()
+        if (legsOfSection.isEmpty()) {
+            return false
+        }
+        return candidateLegs(route, closure).any { (leg, known) ->
+            legsOfSection.any { (from, to) -> overlapsSection(leg.first, leg.second, from, to, requireAlignment = !known) }
+        }
+    }
+
+    private fun overlapsSection(
+        start: MapPoint,
+        end: MapPoint,
+        from: MapPoint,
+        to: MapPoint,
+        requireAlignment: Boolean,
+    ): Boolean {
+        val cosLatitude = kotlin.math.cos(from.latitude * kotlin.math.PI / 180.0)
+        fun x(point: MapPoint) = (point.longitude - from.longitude) * cosLatitude * MetersPerDegree
+        fun y(point: MapPoint) = (point.latitude - from.latitude) * MetersPerDegree
+        val sectionX = x(to)
+        val sectionY = y(to)
+        val length = kotlin.math.hypot(sectionX, sectionY)
+        if (length <= 0.0) {
+            return false
+        }
+        val directionX = sectionX / length
+        val directionY = sectionY / length
+        fun along(point: MapPoint) = x(point) * directionX + y(point) * directionY
+        fun across(point: MapPoint) = kotlin.math.abs(x(point) * directionY - y(point) * directionX)
+        if (across(start) > OnSectionLineToleranceMeters || across(end) > OnSectionLineToleranceMeters) {
+            return false
+        }
+        val a = along(start)
+        val b = along(end)
+        if (requireAlignment) {
+            val legX = x(end) - x(start)
+            val legY = y(end) - y(start)
+            val legLength = kotlin.math.hypot(legX, legY)
+            if (legLength <= 0.0 || kotlin.math.abs((legX * directionX + legY * directionY) / legLength) < LongitudinalCosine) {
+                return false
+            }
+        }
+        val overlap = kotlin.math.min(kotlin.math.max(a, b), length) - kotlin.math.max(kotlin.math.min(a, b), 0.0)
+        return overlap > SectionOverlapEpsilonMeters
     }
 
     private fun hamiltonAdvisory(route: TrailRoute, nowEpochMillis: Long): TrailRouteAdvisory? {

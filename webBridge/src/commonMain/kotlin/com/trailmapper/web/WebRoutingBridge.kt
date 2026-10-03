@@ -841,6 +841,8 @@ class WebRoutingBridge {
         put("estimatedEnd", closure.estimatedEndEpochMillis?.let { JsonPrimitive(it) } ?: JsonNull)
         put("activeFrom", closure.activeFromEpochMillis)
         put("mappingNote", closure.mappingNote)
+        // A crossing-only closure has a known place but no interval: nothing is drawn as a section and none is assumed.
+        put("crossing", closure.isCrossing)
         put("checkedOn", closure.checkedOn)
     } })
 }

@@ -34,6 +34,13 @@ data class TrailRouteClosure(
     val mappingNote: String = "",
     /** When the schedule was last checked against the official notice, for display. */
     val checkedOn: String = "",
+    /**
+     * True when the notice closes the trail AT a known crossing but publishes no limits along the trail. [closedFrom]
+     * and [closedTo] are then both the crossing point and nothing is cut (no interval is invented): the closure only
+     * gates a route that actually travels through the crossing on [featureId], from its start, and the router does not
+     * plan around it, so such a route can be previewed but not started.
+     */
+    val isCrossing: Boolean = false,
 )
 
 object TrailRouteClosureSijko {
@@ -83,7 +90,33 @@ object TrailRouteClosureSijko {
         checkedOn = "October 2, 2026",
     )
 
-    val closures: List<TrailRouteClosure> = listOf(uptownUnderpass, willowTrailCrossing)
+    // Town of Normal notice 3353, posted September 30, 2026: Constitution Trail is closed at Virginia Avenue (Camelback
+    // Bridge) from 8 a.m. Monday, October 5, completion estimated 5 p.m. Tuesday, October 6 (weather permitting). The
+    // notice gives no trail detour and no north/south limits, and the city map line for it (object 916) is a ROAD line,
+    // so the only supported fact is the crossing itself: where that line meets county trail 54:1305 (leg 6 to 7 of
+    // path 0). No interval is cut and no road or neighboring trail is closed.
+    val camelbackCrossing = TrailRouteClosure(
+        id = "camelback-virginia-trail-crossing-2026-10-05",
+        title = "The trail is closed at Virginia Avenue (Camelback Bridge)",
+        guidance = "The Town of Normal closed Constitution Trail at Virginia Avenue (Camelback Bridge) from 8 a.m. " +
+            "CDT on Monday, October 5, 2026, with Virginia Avenue closed between South Linden and Hillcrest Streets " +
+            "for bridge inspection and maintenance. The notice gives no trail detour and no closure limits along " +
+            "the trail, so Trail Mapper cannot plan around it and does not start a route that crosses there. The " +
+            "Town estimates completion by 5 p.m. CDT on Tuesday, October 6, weather permitting; an estimate does " +
+            "not confirm reopening. Follow the Town's posted signs.",
+        noticeUrl = "https://www.normalil.gov/m/newsflash/Home/Detail/3353",
+        featureId = "54:1305",
+        closedFrom = MapPoint(latitude = 40.4982689784, longitude = -88.9834162490),
+        closedTo = MapPoint(latitude = 40.4982689784, longitude = -88.9834162490),
+        activeFromEpochMillis = 1_791_205_200_000L,
+        estimatedEndEpochMillis = 1_791_324_000_000L,
+        mappingNote = "The crossing point is where the Town's Virginia Avenue closure line meets the county trail. " +
+            "The closure's limits along the trail are not published and are not drawn or assumed.",
+        checkedOn = "October 2, 2026",
+        isCrossing = true,
+    )
+
+    val closures: List<TrailRouteClosure> = listOf(uptownUnderpass, willowTrailCrossing, camelbackCrossing)
 
     fun activeClosures(nowEpochMillis: Long): List<TrailRouteClosure> {
         return closures.filter { closure -> nowEpochMillis >= closure.activeFromEpochMillis }
@@ -100,7 +133,8 @@ object TrailRouteClosureSijko {
         }
         val applied = mutableSetOf<TrailRouteClosure>()
         val open = features.map { feature ->
-            val closuresForFeature = active.filter { it.featureId == feature.id }
+            // A crossing-only closure cuts nothing: it has no interval, only a gate on routes that traverse it.
+            val closuresForFeature = active.filter { it.featureId == feature.id && !it.isCrossing }
             if (closuresForFeature.isEmpty()) {
                 return@map feature
             }
