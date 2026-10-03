@@ -266,7 +266,8 @@ test(
   { skip },
   async () => {
     const call = await engine(hamiltonTrail(), hamiltonAccess());
-    const ESTIMATED_END = 1_790_809_200_000;
+    // The official city map now estimates 2026-10-31 18:00 CDT (the older notice said September 30).
+    const ESTIMATED_END = 1_793_487_600_000;
     const preStart = call({
       op: "plan",
       start: onRoad,

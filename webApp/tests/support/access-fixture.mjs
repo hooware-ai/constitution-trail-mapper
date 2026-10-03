@@ -72,6 +72,13 @@ export const closureTrailEntry = [
       [-88.984178, 40.508339],
       [-88.984155, 40.509023],
     ],
+    // The ACTUAL source leg 97 to 98 of county trail 54:1305 (two unchanged source vertices, nothing inserted between
+    // them): the scheduled Willow Street trail closure (from 2026-10-05T11:00:00Z) is clipped inside it at run time.
+    // Rendering evidence only; the gate is proved with the real core in tests/unit/bridge-timed-closures.test.ts.
+    [
+      [-88.9843690241, 40.5096012799],
+      [-88.9849653323, 40.516684074],
+    ],
   ],
 ];
 

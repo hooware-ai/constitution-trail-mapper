@@ -76,6 +76,12 @@ jobs:
         env:
           CI: "true"
 
+      # Evidence only, from the one core build above (no second build): an unchanged copy of the manifest and per-output
+      # hashes and line-ending counts, kept in the existing dist-report artifact before the negative check deletes it.
+      - name: Record core hash evidence (no second build)
+        working-directory: webApp
+        run: node tools/core-hash-diagnostic.mjs
+
       - name: Reject a stale or missing Kotlin core (negative check)
         working-directory: webApp
         run: |

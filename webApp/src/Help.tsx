@@ -9,6 +9,7 @@ import {
   coverageOf,
   datasetText,
   extentText,
+  featureMix,
   reportTemplate,
   withBrowserDetails,
   type BuildInfo,
@@ -30,11 +31,18 @@ export function HelpDialog({
 }) {
   const [view, setView] = useState<"help" | "report">("help");
   const [notice, setNotice] = useState<DialogNotice | null>(null);
+  // Coverage counts what is actually loaded: existing features only, with proposed ones (off by default) said apart.
+  const mix = useMemo(() => featureMix(network?.features ?? []), [network]);
   const coverage = useMemo(
-    () => coverageOf(network?.features ?? []),
+    () =>
+      coverageOf(
+        (network?.features ?? []).filter((f) => f.status !== "Proposed"),
+      ),
     [network],
   );
   const mode = network?.mode;
+  // Road access exists only when the loaded dataset record says so; it is never assumed from the build.
+  const access = network?.datasetRecord?.access ?? null;
   const heading = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
   // Feedback belongs to one visit to one view: every view change starts a new session and late results are dropped.
@@ -144,8 +152,17 @@ export function HelpDialog({
               <p>
                 Bloomington–Normal and nearby McLean County, Illinois. The
                 loaded data holds {coverage.trails} existing trail features
-                (about {coverage.km} km) between {extentText(coverage)}. The app
-                can only route on those trails; it has no road network.
+                (about {coverage.km} km) between {extentText(coverage)}
+                {mix.shared > 0
+                  ? `; ${mix.shared} of them are shared roadways, mapped streets or lanes shared with traffic`
+                  : ""}
+                .
+                {mix.proposed > 0
+                  ? ` ${mix.proposed} proposed features are loaded too, hidden unless you turn them on.`
+                  : ""}{" "}
+                {access
+                  ? `This build also loads road data (${access.base.featureCount} base roads, plus ${access.index.localFeatureCount} service roads fetched only for the map squares a trip needs), so the app can plan access between a point and a trail along mapped roads. Where no road connects, it shows an unverified connection, never an invented line.`
+                  : "This build has no street-access data: the app routes only on the loaded features, and shows an unverified connection where they do not join."}
               </p>
             ) : mode === "fixture" ? (
               <p>
@@ -161,8 +178,9 @@ export function HelpDialog({
               <p>Trail data has not loaded yet.</p>
             )}
             <p>
-              Outside the loaded trails there is nothing to route on, even where
-              the map shows streets.
+              {access
+                ? "Outside the loaded features and road data there is nothing to route on, even where the map shows streets."
+                : "Outside the loaded features there is nothing to route on, even where the map shows streets."}
             </p>
           </section>
 
@@ -185,7 +203,9 @@ export function HelpDialog({
               <dt>Street access and shared roadway</dt>
               <dd>
                 {mode === "county"
-                  ? "The county data has no street or shared-roadway information, so the app never joins a trail to a street by itself; it shows an unverified connection instead."
+                  ? access
+                    ? `Roads come from the loaded road data (U.S. Census Bureau and OpenStreetMap). Where a mapped road connects a point to a trail the access is routed along it and shown dashed; where none does it is a labeled gap, never an invented line.${mix.shared > 0 ? ` ${mix.shared} county features are shared roadways, roads shared with traffic.` : ""}`
+                    : `This build has no street-access data, so the app never joins a trail to a street by itself; it shows an unverified connection instead.${mix.shared > 0 ? ` ${mix.shared} county features are shared roadways, roads shared with traffic.` : ""}`
                   : "Estimated links to streets, and roads shared with traffic. Estimated access is shown so you can judge it; the app does not treat it as a verified path."}
               </dd>
               <dt>Proposed · not built</dt>
@@ -230,8 +250,12 @@ export function HelpDialog({
               <li>
                 <strong>Location:</strong> the browser asks permission only when
                 you choose Use current location or start navigation. Your
-                position is used on this device to plan and guide and is not
-                sent by the app anywhere.
+                position is used on this device to plan and guide. The app never
+                uploads your exact GPS fixes, what you type or what you save
+                {access
+                  ? "; but road files are fetched by map square, and those requests show this site approximately where you are (see Requests the app makes)"
+                  : ""}
+                .
               </li>
               <li>
                 <strong>Removing it:</strong> Saved shows Delete for each saved
@@ -248,7 +272,11 @@ export function HelpDialog({
               </li>
               <li>
                 <strong>Requests the app makes:</strong> to this site, for the
-                app and its trail data. Nothing else, unless you turn on{" "}
+                app and its trail data.
+                {access
+                  ? " This build also has road data: it asks this site for the road files that cover the map squares (about 1 km across, three by three) around a trip's start and destination, around your position while you ride or reroute, and around a saved route's first and last points. The file names carry each square's grid numbers, so this site's host can tell roughly which area was requested and when. Exact GPS fixes, typed searches and saved records are not part of those requests."
+                  : ""}{" "}
+                Nothing else, unless you turn on{" "}
                 <strong>Street basemap (online)</strong>
                 {mode === "fixture"
                   ? " (not offered in the synthetic review build)"

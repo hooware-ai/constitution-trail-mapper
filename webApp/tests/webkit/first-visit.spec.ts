@@ -156,8 +156,11 @@ test("[sim-device] a route with an unverified connection explains it at the deci
     .getByRole("button", { name: "Recalculate route", exact: true })
     .click();
   await expect(
-    page.getByText("Route recalculated", { exact: true }),
+    page.getByText(
+      /A recalculated route was found but it cannot be started yet/,
+    ),
   ).toBeVisible();
+  await expect(startButton(page)).toBeDisabled();
 });
 
 test("[sim-device] a fully mapped route from the current location has no connection warning and can start", async ({

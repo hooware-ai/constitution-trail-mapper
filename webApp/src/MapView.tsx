@@ -225,6 +225,11 @@ export function MapView({
       const message = document.createElement("p");
       message.textContent = closure.message;
       details.append(heading, message);
+      if (closure.mappingNote) {
+        const note = document.createElement("p");
+        note.textContent = `${closure.mappingNote}${closure.checkedOn ? ` Notice checked ${closure.checkedOn}.` : ""}`;
+        details.append(note);
+      }
       if (/^https?:\/\//i.test(closure.sourceUrl)) {
         const source = document.createElement("a");
         source.href = closure.sourceUrl;

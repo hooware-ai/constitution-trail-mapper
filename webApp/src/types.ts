@@ -24,6 +24,12 @@ export type Closure = {
   closedFrom?: Point;
   closedTo?: Point;
   points?: Point[];
+  /** The notice's estimated completion (information only: it never reopens anything), and when the closure began. */
+  estimatedEnd?: number | null;
+  activeFrom?: number;
+  /** How approximate the drawn section is, and when the notice was last checked. */
+  mappingNote?: string;
+  checkedOn?: string;
 };
 export type Instruction = {
   text: string;

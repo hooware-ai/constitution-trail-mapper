@@ -216,6 +216,81 @@ class WebRoutingBridgeTest {
         assertEquals(JsonNull, after["route"])
     }
 
+    // The ACTUAL source leg 97 to 98 of county trail 54:1305 (790 m): two unchanged source vertices, nothing inserted.
+    private val willowSource = """{"layers":[{"features":[{"id":"54:1305","name":"Willow leg (actual source vertices)","status":"Existing","routeRoles":["TrailBranches"],"paths":[[[-88.9843690241,40.5096012799],[-88.9849653323,40.5166840740]]]}]}]}"""
+    private val willowSouth = MapPoint(40.5096012799, -88.9843690241)
+    private val willowNorth = MapPoint(40.5166840740, -88.9849653323)
+
+    @Test fun willowClosureGatesSavedStartNewPlansAndRecalculationAtItsInstantInsideTheRawLeg() {
+        val closure = TrailRouteClosureSijko.willowTrailCrossing
+        val activeFrom = closure.activeFromEpochMillis
+        val bridge = loaded(willowSource)
+        val before = plan(bridge, from = willowSouth, to = willowNorth, at = activeFrom - 1)
+        assertTrue(before["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(before["closures"]!!.jsonArray.isEmpty())
+        // Scheduled, not claimed as a closure: a warning says so, and nothing blocks.
+        assertTrue(before["warnings"]!!.jsonArray.any { it.jsonPrimitive.content.contains("Scheduled, not closed yet") })
+        val saved = before.getValue("route")
+        val atStart = call(bridge, buildJsonObject { put("op", "inspect"); put("route", saved); put("now", activeFrom) })
+        assertFalse(atStart["canNavigate"]!!.jsonPrimitive.boolean)
+        assertEquals(closure.id, atStart["closures"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content)
+        // Start itself (the snapshot op) refuses the gated route, even with the rider exactly on it.
+        val refused = call(bridge, buildJsonObject {
+            put("op", "snapshot"); put("route", saved); put("point", Json.encodeToJsonElement(willowSouth))
+            put("accuracy", 5.0); put("timestamp", activeFrom); put("now", activeFrom)
+        })
+        assertFalse(refused["ok"]!!.jsonPrimitive.boolean)
+        assertTrue(refused["error"]!!.jsonPrimitive.content.contains("cannot start navigation"))
+        // A new plan across the leg finds no route, and the guidance carries the closure and its approximation label.
+        val none = plan(bridge, from = willowSouth, to = willowNorth, at = activeFrom)
+        assertEquals(JsonNull, none["route"])
+        val shown = none["closures"]!!.jsonArray.single().jsonObject
+        assertEquals(closure.id, shown["id"]!!.jsonPrimitive.content)
+        assertTrue(shown["mappingNote"]!!.jsonPrimitive.content.startsWith("Approximate"))
+        assertEquals(closure.estimatedEndEpochMillis, shown["estimatedEnd"]!!.jsonPrimitive.long)
+        // Recalculating the earlier route gives the closure's detour guidance, not a replacement through it.
+        val recalculated = call(bridge, buildJsonObject { put("op", "recalculate"); put("route", saved); put("now", activeFrom) })
+        assertEquals(JsonNull, recalculated["route"])
+        // Both residual portions stay usable: each side of the section can still be planned, and neither is gated.
+        val southern = plan(bridge, from = willowSouth, to = closure.closedFrom, at = activeFrom)
+        val northern = plan(bridge, from = closure.closedTo, to = willowNorth, at = activeFrom)
+        listOf(southern, northern).forEach { result ->
+            assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
+            assertTrue(result["closures"]!!.jsonArray.isEmpty())
+        }
+        // After the estimated end nothing reopens by the date alone.
+        val estimate = closure.estimatedEndEpochMillis!!
+        val late = call(bridge, buildJsonObject { put("op", "inspect"); put("route", saved); put("now", estimate + 86_400_000L) })
+        assertFalse(late["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(late["warnings"]!!.jsonArray.any { it.jsonPrimitive.content.contains("has passed; reopening has not been confirmed") })
+    }
+
+    @Test fun willowClosureIsDrawnFromTheUnchangedSourceLineOnlyWhileActive() {
+        val closure = TrailRouteClosureSijko.willowTrailCrossing
+        fun closuresAt(at: Long) = call(WebRoutingBridge(), buildJsonObject { put("op", "initialize"); put("trails", willowSource); put("now", at) })["closures"]!!.jsonArray
+        assertTrue(closuresAt(closure.activeFromEpochMillis - 1).none { it.jsonObject["id"]!!.jsonPrimitive.content == closure.id })
+        val drawn = closuresAt(closure.activeFromEpochMillis).single { it.jsonObject["id"]!!.jsonPrimitive.content == closure.id }.jsonObject
+        val points = drawn["points"]!!.jsonArray
+        assertEquals(2, points.size)
+        assertEquals(Json.encodeToJsonElement(closure.closedFrom), points[0])
+        assertEquals(Json.encodeToJsonElement(closure.closedTo), points[1])
+    }
+
+    @Test fun guideListsTheScheduledNoticesAndSwitchesStatusAtTheirInstants() {
+        fun status(id: String, at: Long) = call(WebRoutingBridge(), buildJsonObject { put("op", "initialize"); put("trails", fixture); put("now", at) })["updates"]!!
+            .jsonArray.single { it.jsonObject["id"]!!.jsonPrimitive.content == id }.jsonObject["status"]!!.jsonPrimitive.content
+        val willow = TrailRouteClosureSijko.willowTrailCrossing
+        assertTrue(status("willow-trail-closure", willow.activeFromEpochMillis - 1).startsWith("Scheduled"))
+        assertTrue(status("willow-trail-closure", willow.activeFromEpochMillis).startsWith("Closed since October 5"))
+        assertEquals("Recheck needed", status("willow-trail-closure", willow.estimatedEndEpochMillis!! + 1))
+        assertTrue(status("camelback-trail-closure", 1_791_205_200_000L - 1).startsWith("Scheduled"))
+        assertTrue(status("camelback-trail-closure", 1_791_205_200_000L).startsWith("Closed at Virginia Avenue since October 5"))
+        assertEquals("Recheck needed", status("camelback-trail-closure", 1_791_324_000_001L))
+        assertTrue(status("trail-paving-raab", 1_791_025_200_000L - 1).startsWith("Scheduled"))
+        assertTrue(status("trail-paving-raab", 1_791_025_200_000L).startsWith("Paving under way"))
+        assertEquals("Recheck needed", status("hamilton-rhodes", 1_793_487_600_001L))
+    }
+
     @Test fun poorGpsCannotAdvanceProgressOrConfirmDeparture() {
         val bridge = loaded()
         val route = plan(bridge).getValue("route")

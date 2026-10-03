@@ -4109,3 +4109,541 @@ test("a renamed route's title is not painted unless exact endpoints are approved
   const exact = await paintedByImage(page);
   expect(exact).toContain("Aunt Carol 4412 Private Lane");
 });
+
+// ---- Recalculate keeps the Saved original: a temporary result, saved only on request as a NEW record ----------------------
+
+test("a recalculated loop stays temporary through reverse, reload and reverse back, and Save as new route keeps the original", async ({
+  page,
+}) => {
+  await planLoopPreview(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const original = (await libraryOf(page)).saved[0];
+  const firstLeg = (record: any) => record.route.segments[0].points.slice(0, 2);
+  const banner = page.locator(".recalculated-route");
+
+  await page.getByRole("button", { name: "Recalculate route" }).click();
+  await expect(banner).toContainText("Recalculated route · not saved");
+  // The same geometry as the saved loop, so the geometry key alone would have overwritten it.
+  expect((await libraryOf(page)).saved).toEqual([original]);
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect(banner).toBeVisible();
+  expect((await libraryOf(page)).saved).toEqual([original]);
+
+  // Reload: the direction is proved again by geometry, the route is still temporary, and nothing was written.
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect(banner).toBeVisible();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  expect((await libraryOf(page)).saved).toEqual([original]);
+
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Planned direction", { exact: true }),
+  ).toBeVisible();
+  await expect(banner).toBeVisible();
+  await page.getByRole("button", { name: "Save as new route" }).click();
+  await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+  const saved = (await libraryOf(page)).saved;
+  expect(saved).toHaveLength(2);
+  const added = saved.find((item: any) => item.key !== original.key);
+  // A minted identity, the planned direction, the same geometry as the original, and the original untouched.
+  expect(added.key.startsWith(original.key + "~r")).toBe(true);
+  expect(added.geometryKey).toBe(original.key);
+  expect(firstLeg(added)).toEqual(firstLeg(original));
+  expect(added.temporary).toBeUndefined();
+  expect(saved.find((item: any) => item.key === original.key)).toEqual(
+    original,
+  );
+  await expect(banner).toHaveCount(0);
+  await page.reload();
+  expect((await libraryOf(page)).saved).toHaveLength(2);
+});
+
+test("a held recalculation that returns after the rider moved on or cancelled adopts nothing and writes nothing", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await planLoopPreview(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const before = await libraryOf(page);
+  for (const outcome of ["success", "failure"] as const) {
+    await page.evaluate((kind) => {
+      (window as any).__ops = {
+        recalculate:
+          kind === "failure"
+            ? {
+                hold: true,
+                patch: {
+                  route: null,
+                  error: "No safe route avoids the active trail closure.",
+                },
+              }
+            : { hold: true },
+      };
+    }, outcome);
+    await page.getByRole("button", { name: "Recalculate route" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => !!(window as any).__ops.recalculate.pending),
+      )
+      .toBe(true);
+    // The rider leaves before the answer arrives.
+    await page.getByRole("button", { name: "← Back" }).click();
+    await releaseHeld(page, "recalculate");
+    await page.waitForTimeout(300);
+    await expect(page.locator(".recalculated-route")).toHaveCount(0);
+    await expect(
+      page.getByText(/Recalculated route ready|was found but it cannot/),
+    ).toHaveCount(0);
+    await expect(page.getByText(/No safe route avoids/)).toHaveCount(0);
+    expect(await libraryOf(page)).toEqual(before);
+    // Back to the route for the next round (opened from Saved, so the original is what is shown).
+    await page.evaluate(() => {
+      delete (window as any).__ops;
+    });
+    await page.getByRole("button", { name: "Trail Mapper home" }).click();
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Saved", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: /mi loop from/ })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Route preview" }),
+    ).toBeVisible();
+  }
+});
+
+// ---- A restored direction that is still being proved: Save and Reverse wait, and nothing resolves to the reversed record ----
+
+/** Holds ONLY the restoration's reverse answer: it is armed through the session so it applies after the next reload. */
+async function holdRestoreProof(page: Page, patch?: Record<string, unknown>) {
+  await page.addInitScript(
+    (patchJson) => {
+      if (!sessionStorage.getItem("hold-restore-proof")) return;
+      (window as any).__ops = {
+        reverse: {
+          hold: true,
+          patch: patchJson ? JSON.parse(patchJson) : undefined,
+        },
+      };
+    },
+    patch ? JSON.stringify(patch) : null,
+  );
+}
+async function recalculatedReversedLoop(page: Page) {
+  await planLoopPreview(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const original = (await libraryOf(page)).saved[0];
+  await page.getByRole("button", { name: "Recalculate route" }).click();
+  await expect(page.locator(".recalculated-route")).toBeVisible();
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  // The session is written as the page unloads: one ordinary reload (nothing held) makes it readable.
+  await page.reload();
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".recalculated-route")).toBeVisible();
+  return original;
+}
+/** A different saved route that happens to have exactly the geometry of the route on screen (its key is that geometry key). */
+async function saveCollidingReversedCopy(page: Page, selected: any) {
+  await page.evaluate(
+    (record) => {
+      const key = Object.keys(localStorage).find((k) =>
+        k.endsWith("trail-mapper.web.library.v1"),
+      )!;
+      const library = JSON.parse(localStorage.getItem(key)!);
+      library.saved.push(record);
+      localStorage.setItem(key, JSON.stringify(library));
+    },
+    {
+      key: selected.key,
+      title: "Reversed copy",
+      createdAt: Date.now(),
+      usedAt: Date.now() - 1000,
+      route: selected.route,
+      draft: selected.draft,
+      ...(selected.dataset ? { dataset: selected.dataset } : {}),
+    },
+  );
+}
+async function reloadWithProofHeld(page: Page) {
+  await page.evaluate(() => sessionStorage.setItem("hold-restore-proof", "1"));
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => !!(window as any).__ops?.reverse?.pending))
+    .toBe(true);
+}
+
+test("while a restored loop direction is still being proved, Save and Reverse wait; afterwards Save as new route stores the planned identity, never the reversed geometry key", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await holdRestoreProof(page);
+  const original = await recalculatedReversedLoop(page);
+  const reversedGeometryKey = (await sessionOf(page)).selected.key;
+  expect(reversedGeometryKey).not.toBe(original.key);
+  // The reversed geometry is NOT in Saved. Reload with the proof held after the preview is shown.
+  await reloadWithProofHeld(page);
+  const save = page.getByRole("button", { name: /^Save/ }).first();
+  await expect(save).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Reverse direction" }),
+  ).toBeDisabled();
+  await expect(page.locator("#direction-pending-note")).toBeVisible();
+  // Even a forced click changes nothing.
+  await save.click({ force: true });
+  expect((await libraryOf(page)).saved).toEqual([original]);
+
+  await releaseHeld(page, "reverse");
+  // Only the restoration proof was held: later reversals are answered normally.
+  await page.evaluate(() => {
+    delete (window as any).__ops;
+  });
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("#direction-pending-note")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Save as new route" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect(
+    page.getByText("Planned direction", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save as new route" }).click();
+  await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+  const saved = (await libraryOf(page)).saved;
+  expect(saved).toHaveLength(2);
+  const added = saved.find((item: any) => item.key !== original.key);
+  expect(added.key.startsWith(original.key + "~r")).toBe(true);
+  expect(added.key).not.toBe(reversedGeometryKey);
+  expect(saved.some((item: any) => item.key === reversedGeometryKey)).toBe(
+    false,
+  );
+  expect(saved.find((item: any) => item.key === original.key)).toEqual(
+    original,
+  );
+  await expect(page.locator(".recalculated-route")).toHaveCount(0);
+});
+
+test("with the reversed geometry already in Saved, a pending direction never shows Saved/View, and Save as new route adds the planned route without touching that record", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await holdRestoreProof(page);
+  const original = await recalculatedReversedLoop(page);
+  const collision = (await sessionOf(page)).selected;
+  await saveCollidingReversedCopy(page, collision);
+  const before = await libraryOf(page);
+  await reloadWithProofHeld(page);
+  // Pending: the route on screen is the reversed record, which IS in Saved, but that must not be shown as this route saved.
+  await expect(page.getByRole("button", { name: "Saved · View" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: /^Save/ }).first(),
+  ).toBeDisabled();
+  expect(await libraryOf(page)).toEqual(before);
+  await releaseHeld(page, "reverse");
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toBeVisible();
+  // Resolved: the planned route (not saved) is what Save acts on.
+  await expect(page.getByRole("button", { name: "Saved · View" })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Save as new route" }).click();
+  await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+  const saved = (await libraryOf(page)).saved;
+  expect(saved).toHaveLength(3);
+  expect(saved.find((item: any) => item.key === collision.key)).toEqual(
+    before.saved.find((item: any) => item.key === collision.key),
+  );
+  expect(saved.find((item: any) => item.key === original.key)).toEqual(
+    original,
+  );
+  expect(
+    saved.filter((item: any) => item.key.startsWith(original.key + "~r")),
+  ).toHaveLength(1);
+});
+
+test("when the restored direction cannot be proved the route is shown as itself, and a temporary one saves under its own minted identity, not a colliding geometry key", async ({
+  page,
+}) => {
+  await interceptOps(page);
+  await holdRestoreProof(page, {
+    route: null,
+    error: "The direction could not be checked.",
+  });
+  const original = await recalculatedReversedLoop(page);
+  const collision = (await sessionOf(page)).selected;
+  await saveCollidingReversedCopy(page, collision);
+  const before = await libraryOf(page);
+  await reloadWithProofHeld(page);
+  await expect(
+    page.getByRole("button", { name: /^Save/ }).first(),
+  ).toBeDisabled();
+  await releaseHeld(page, "reverse");
+  // Unproved: no direction is claimed, the route is its own temporary route, and Save is available again.
+  await expect(
+    page.getByText("Riding in reverse", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator("#direction-pending-note")).toHaveCount(0);
+  await expect(page.locator(".recalculated-route")).toBeVisible();
+  await page.getByRole("button", { name: "Save as new route" }).click();
+  await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+  const saved = (await libraryOf(page)).saved;
+  expect(saved).toHaveLength(3);
+  expect(saved.find((item: any) => item.key === collision.key)).toEqual(
+    before.saved.find((item: any) => item.key === collision.key),
+  );
+  expect(saved.find((item: any) => item.key === original.key)).toEqual(
+    original,
+  );
+  expect(
+    saved.filter((item: any) => item.key.startsWith(collision.key + "~r")),
+  ).toHaveLength(1);
+});
+
+// ---- Leaving while the restoration proof is held, then coming back: the retained route is never left unresolved ----------
+
+/**
+ * Reload with the restoration proof held, leave for Home, and come back with Back. The held answer is released either BEFORE
+ * coming back or AFTER (while the route is shown again and its direction is still unresolved).
+ */
+async function leaveAndReturn(
+  page: Page,
+  options: {
+    patchOnReturn?: Record<string, unknown>;
+    releaseAfterBack?: boolean;
+  } = {},
+) {
+  await reloadWithProofHeld(page);
+  await page.getByRole("button", { name: "Trail Mapper home" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toHaveCount(0);
+  // Only the abandoned answer is held: the proof run when the route is shown again is answered normally, or, for the
+  // failure control, with an error. The override is replaced in the same step as the release, before any retry answers.
+  const releaseAbandoned = () =>
+    page.evaluate((patch) => {
+      const held = (window as any).__ops.reverse;
+      held.release();
+      (window as any).__ops = patch ? { reverse: { patch } } : undefined;
+    }, options.patchOnReturn ?? null);
+  if (!options.releaseAfterBack) {
+    await expect
+      .poll(() =>
+        page.evaluate(() => !!(window as any).__ops?.reverse?.pending),
+      )
+      .toBe(true);
+    await releaseAbandoned();
+    await page.waitForTimeout(200);
+  }
+  await page.goBack();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  if (options.releaseAfterBack) {
+    // Back before the release: the route is shown with its direction unresolved, and nothing can be saved yet.
+    await expect(page.locator("#direction-pending-note")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Save/ }).first(),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Saved · View" }),
+    ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() => !!(window as any).__ops?.reverse?.pending),
+      )
+      .toBe(true);
+    await releaseAbandoned();
+  }
+}
+
+for (const releaseAfterBack of [false, true])
+  test(`a restoration proof abandoned by leaving is run again on return: the abandoned answer is not adopted, and Save as new route then stores the planned minted identity (${releaseAfterBack ? "Back before the release" : "release before Back"})`, async ({
+    page,
+  }) => {
+    await interceptOps(page);
+    await holdRestoreProof(page);
+    const original = await recalculatedReversedLoop(page);
+    const reversedGeometryKey = (await sessionOf(page)).selected.key;
+    await leaveAndReturn(page, { releaseAfterBack });
+    await expect(
+      page.getByText("Riding in reverse", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("#direction-pending-note")).toHaveCount(0);
+    await page.getByRole("button", { name: "Save as new route" }).click();
+    await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+    const saved = (await libraryOf(page)).saved;
+    expect(saved).toHaveLength(2);
+    const added = saved.find((item: any) => item.key !== original.key);
+    expect(added.key.startsWith(original.key + "~r")).toBe(true);
+    expect(saved.some((item: any) => item.key === reversedGeometryKey)).toBe(
+      false,
+    );
+    expect(saved.find((item: any) => item.key === original.key)).toEqual(
+      original,
+    );
+  });
+
+for (const releaseAfterBack of [false, true])
+  test(`while an abandoned proof is unresolved on return, a colliding saved copy is not shown as this route saved and Save as new route is not lost (${releaseAfterBack ? "Back before the release" : "release before Back"})`, async ({
+    page,
+  }) => {
+    await interceptOps(page);
+    await holdRestoreProof(page);
+    const original = await recalculatedReversedLoop(page);
+    const collision = (await sessionOf(page)).selected;
+    await saveCollidingReversedCopy(page, collision);
+    const before = await libraryOf(page);
+    await leaveAndReturn(page, { releaseAfterBack });
+    await expect(
+      page.getByText("Riding in reverse", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Saved · View" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Save as new route" }).click();
+    await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+    const saved = (await libraryOf(page)).saved;
+    expect(saved).toHaveLength(3);
+    expect(saved.find((item: any) => item.key === collision.key)).toEqual(
+      before.saved.find((item: any) => item.key === collision.key),
+    );
+    expect(saved.find((item: any) => item.key === original.key)).toEqual(
+      original,
+    );
+    expect(
+      saved.filter((item: any) => item.key.startsWith(original.key + "~r")),
+    ).toHaveLength(1);
+  });
+
+for (const releaseAfterBack of [false, true])
+  test(`when the proof run on return cannot establish the direction, the retained temporary route saves under its own minted identity, never the colliding geometry key (${releaseAfterBack ? "Back before the release" : "release before Back"})`, async ({
+    page,
+  }) => {
+    await interceptOps(page);
+    await holdRestoreProof(page);
+    const original = await recalculatedReversedLoop(page);
+    const collision = (await sessionOf(page)).selected;
+    await saveCollidingReversedCopy(page, collision);
+    const before = await libraryOf(page);
+    await leaveAndReturn(page, {
+      releaseAfterBack,
+      patchOnReturn: {
+        route: null,
+        error: "The direction could not be checked.",
+      },
+    });
+    await expect(
+      page.getByText("Riding in reverse", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator("#direction-pending-note")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Saved · View" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Save as new route" }).click();
+    await expect(page.getByText(/Saved as a new route/)).toBeVisible();
+    const saved = (await libraryOf(page)).saved;
+    expect(saved).toHaveLength(3);
+    expect(saved.find((item: any) => item.key === collision.key)).toEqual(
+      before.saved.find((item: any) => item.key === collision.key),
+    );
+    expect(saved.find((item: any) => item.key === original.key)).toEqual(
+      original,
+    );
+    expect(
+      saved.filter((item: any) => item.key.startsWith(collision.key + "~r")),
+    ).toHaveLength(1);
+  });
+
+// ---- Readiness belongs to the unresolved restored RECORD, not to another record that shares its geometry key ---------------
+
+for (const releaseAfterSelecting of [false, true])
+  test(`an ordinary saved copy with the same geometry key never inherits a retained route's pending direction, and a late answer cannot reapply it (${releaseAfterSelecting ? "released after opening the copy" : "released before opening the copy"})`, async ({
+    page,
+  }) => {
+    await interceptOps(page);
+    await holdRestoreProof(page);
+    const original = await recalculatedReversedLoop(page);
+    const collision = (await sessionOf(page)).selected;
+    await saveCollidingReversedCopy(page, collision);
+    const before = await libraryOf(page);
+    await reloadWithProofHeld(page);
+    await page.getByRole("button", { name: "Trail Mapper home" }).click();
+    const releaseAbandoned = () =>
+      page.evaluate(() => {
+        (window as any).__ops.reverse.release();
+        delete (window as any).__ops;
+      });
+    const pending = () =>
+      page.evaluate(() => !!(window as any).__ops?.reverse?.pending);
+    if (!releaseAfterSelecting) {
+      await expect.poll(pending).toBe(true);
+      await releaseAbandoned();
+      await page.waitForTimeout(200);
+    }
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Saved", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Reversed copy/ }).click();
+    const ordinary = async () => {
+      await expect(
+        page.getByRole("heading", { name: "Route preview" }),
+      ).toBeVisible();
+      await expect(page.getByText("Reversed copy").first()).toBeVisible();
+      // An ordinary saved record: no pending note, shown as saved, Reverse available, Start available.
+      await expect(page.locator("#direction-pending-note")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Saved · View" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Reverse direction" }),
+      ).toBeEnabled();
+      await expect(
+        page.getByRole("button", { name: "Start navigation", exact: true }),
+      ).toBeEnabled();
+    };
+    await ordinary();
+    if (releaseAfterSelecting) {
+      // The abandoned answer arrives while the copy is on screen: it must not reapply anything.
+      await expect.poll(pending).toBe(true);
+      await releaseAbandoned();
+      await page.waitForTimeout(300);
+      await ordinary();
+    }
+    // Nothing was written, and both old records are exactly as they were.
+    const after = await libraryOf(page);
+    const { usedAt: _a, ...copyBefore } = before.saved.find(
+      (item: any) => item.key === collision.key,
+    );
+    const { usedAt: _b, ...copyAfter } = after.saved.find(
+      (item: any) => item.key === collision.key,
+    );
+    expect(copyAfter).toEqual(copyBefore);
+    expect(after.saved.find((item: any) => item.key === original.key)).toEqual(
+      original,
+    );
+    expect(after.saved).toHaveLength(before.saved.length);
+  });

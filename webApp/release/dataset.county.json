@@ -22,6 +22,6 @@
     "The ODbL classification of a merged OpenStreetMap graph is unresolved; supplements and street access data are omitted.",
     "The owner has not approved this source composition for public release.",
     "Physical iPhone Safari and Android Chrome acceptance (#41) has not been done.",
-    "Hosting, basemap and sign-in decisions are open (docs/web/hosting-runbook.md)."
+    "Hosting and basemap decisions are open (docs/web/hosting-runbook.md); sign-in and sync are deferred by decision, as the first launch is guest-first."
   ]
 }
