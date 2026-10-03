@@ -4576,3 +4576,74 @@ for (const releaseAfterBack of [false, true])
       saved.filter((item: any) => item.key.startsWith(collision.key + "~r")),
     ).toHaveLength(1);
   });
+
+// ---- Readiness belongs to the unresolved restored RECORD, not to another record that shares its geometry key ---------------
+
+for (const releaseAfterSelecting of [false, true])
+  test(`an ordinary saved copy with the same geometry key never inherits a retained route's pending direction, and a late answer cannot reapply it (${releaseAfterSelecting ? "released after opening the copy" : "released before opening the copy"})`, async ({
+    page,
+  }) => {
+    await interceptOps(page);
+    await holdRestoreProof(page);
+    const original = await recalculatedReversedLoop(page);
+    const collision = (await sessionOf(page)).selected;
+    await saveCollidingReversedCopy(page, collision);
+    const before = await libraryOf(page);
+    await reloadWithProofHeld(page);
+    await page.getByRole("button", { name: "Trail Mapper home" }).click();
+    const releaseAbandoned = () =>
+      page.evaluate(() => {
+        (window as any).__ops.reverse.release();
+        delete (window as any).__ops;
+      });
+    const pending = () =>
+      page.evaluate(() => !!(window as any).__ops?.reverse?.pending);
+    if (!releaseAfterSelecting) {
+      await expect.poll(pending).toBe(true);
+      await releaseAbandoned();
+      await page.waitForTimeout(200);
+    }
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Saved", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Reversed copy/ }).click();
+    const ordinary = async () => {
+      await expect(
+        page.getByRole("heading", { name: "Route preview" }),
+      ).toBeVisible();
+      await expect(page.getByText("Reversed copy").first()).toBeVisible();
+      // An ordinary saved record: no pending note, shown as saved, Reverse available, Start available.
+      await expect(page.locator("#direction-pending-note")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Saved · View" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Reverse direction" }),
+      ).toBeEnabled();
+      await expect(
+        page.getByRole("button", { name: "Start navigation", exact: true }),
+      ).toBeEnabled();
+    };
+    await ordinary();
+    if (releaseAfterSelecting) {
+      // The abandoned answer arrives while the copy is on screen: it must not reapply anything.
+      await expect.poll(pending).toBe(true);
+      await releaseAbandoned();
+      await page.waitForTimeout(300);
+      await ordinary();
+    }
+    // Nothing was written, and both old records are exactly as they were.
+    const after = await libraryOf(page);
+    const { usedAt: _a, ...copyBefore } = before.saved.find(
+      (item: any) => item.key === collision.key,
+    );
+    const { usedAt: _b, ...copyAfter } = after.saved.find(
+      (item: any) => item.key === collision.key,
+    );
+    expect(copyAfter).toEqual(copyBefore);
+    expect(after.saved.find((item: any) => item.key === original.key)).toEqual(
+      original,
+    );
+    expect(after.saved).toHaveLength(before.saved.length);
+  });

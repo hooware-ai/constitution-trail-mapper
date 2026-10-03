@@ -193,7 +193,10 @@ export function App() {
   // The key of the restored route whose planned direction is still being proved after a reload. While it is pending the
   // route on screen is the REVERSED record (its own geometry key), so nothing that depends on the planned route (Save,
   // the Saved indicator, reversing again) may act on it: each would resolve to the wrong record.
-  const [pendingDirection, setPendingDirection] = useState<string | null>(null),
+  const [pendingDirection, setPendingDirection] = useState<{
+      key: string;
+      plannedKey: string;
+    } | null>(null),
     // Bumped whenever a proof ends, so a retry waiting for it (the rider came back while it was still held) can run.
     [proofEnded, setProofEnded] = useState(0),
     [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
@@ -1194,7 +1197,9 @@ export function App() {
   ) {
     if (!record.plannedKey) return;
     // Pending from now until the proof is settled.
-    setPendingDirection(record.key);
+    // Readiness belongs to THIS restored record (its key AND the planned identity it claims), never to another record
+    // that merely shares its geometry key, such as an ordinary saved copy.
+    setPendingDirection({ key: record.key, plannedKey: record.plannedKey });
     proofRunning.current = true;
     try {
       await proveDirection(client, record, isCurrent);
@@ -1211,7 +1216,13 @@ export function App() {
         kept.key === record.key &&
         kept.plannedKey === record.plannedKey;
       if (!retained)
-        setPendingDirection((key) => (key === record.key ? null : key));
+        setPendingDirection((pending) =>
+          pending &&
+          pending.key === record.key &&
+          pending.plannedKey === record.plannedKey
+            ? null
+            : pending,
+        );
     }
   }
   async function proveDirection(
@@ -1617,7 +1628,8 @@ export function App() {
   const directionPending =
     !!selected &&
     pendingDirection !== null &&
-    pendingDirection === selected.key;
+    pendingDirection.key === selected.key &&
+    pendingDirection.plannedKey === selected.plannedKey;
   directionPendingRef.current = directionPending;
   selectedRef.current = selected;
   // Shown again with its direction still unresolved (the first proof was cancelled by leaving): prove it afresh, under this
@@ -1636,6 +1648,12 @@ export function App() {
     const token = ++operation.current;
     void restoreDirection(client, selected, () => token === operation.current);
   }, [screen, directionPending, selected, checking, proofEnded]);
+  // The route on screen is no longer the unresolved restored record (another record was opened): its readiness is not
+  // inherited, and an answer that arrives later cannot reapply it. While a proof is still running its own end clears it.
+  useEffect(() => {
+    if (pendingDirection && !directionPending && !proofRunning.current)
+      setPendingDirection(null);
+  }, [pendingDirection, directionPending, proofEnded]);
   const isSaved =
       !!selected &&
       !directionPending &&
