@@ -20,6 +20,8 @@ import { join } from "node:path";
 import {
   AdmissionError,
   accessManifestFile,
+  buildPackage,
+  checkPackage,
   packageFromFiles,
   verifyPackageDir,
 } from "../../tools/lib/dataset-package.mjs";
@@ -40,7 +42,11 @@ import {
   buildAccessParts,
   checkAccessParts,
 } from "../../tools/lib/access-package.mjs";
-import { compositionProblems } from "../../tools/lib/composition.mjs";
+import {
+  compositionProblems,
+  manifestDigest,
+  reconstructComposition,
+} from "../../tools/lib/composition.mjs";
 import { makeCounty } from "../support/county-fixture.mjs";
 import {
   makeAccessExtract,
@@ -64,6 +70,8 @@ const substantive = (blockers: string[]) =>
 interface Parts {
   access?: boolean;
   accessMutate?: (extract: any) => void;
+  /** Changes the county manifest and the extract it was made from together (source evidence), geometry untouched. */
+  countyMutate?: (county: any) => void;
   supplement?: boolean;
   proposed?: boolean;
 }
@@ -88,6 +96,7 @@ async function lab(
 ): Promise<Lab> {
   const root = await mkdtemp(join(tmpdir(), "trail-composition-"));
   const county = makeCounty();
+  parts.countyMutate?.(county);
   const file = (name: string) => join(root, name);
   await writeFile(file("extract.json"), JSON.stringify(county.input));
   await writeFile(file("manifest.json"), JSON.stringify(county.manifest));
@@ -438,32 +447,64 @@ test("tampering with the shipped composition, its approval, or the provenance is
   );
 });
 
-test("an unapproved private package still builds, verifies and audits, with the composition recorded and no approval implied", async () => {
-  await withLab(
-    { access: true, supplement: true },
-    {},
-    async ({ paths, record, root }) => {
-      assert.equal(record.approval.approved, false);
-      assert.equal(record.approval.approvedComposition, null);
-      assert.ok(record.composition.accessCombinedSha256);
-      const verified = await verifyPackageDir(
-        join(root, "probe"),
-        paths.manifestFile,
-        paths.accessManifestFile,
-      ).catch((error) => error);
-      // (the supplement manifest is read from its module-level default here, so only the access path is asserted)
-      assert.ok(verified instanceof Error || verified.record);
-      const blockers = await blockersOf(paths);
-      assert.ok(blockers.some((b) => /dataset is not marked approved/.test(b)));
-      // Integrity and source review passed: nothing in the blockers says the package is inconsistent.
-      assert.deepEqual(
-        substantive(blockers).filter((b) =>
-          /content check failed|composition/.test(b),
-        ),
-        [],
-      );
-    },
-  );
+test("an unapproved private package still builds, round-trips through verifyPackageDir and audits, and tampered or mis-pinned copies are refused", async () => {
+  await withLab({ access: true }, {}, async ({ paths, record, root }) => {
+    assert.equal(record.approval.approved, false);
+    assert.equal(record.approval.approvedComposition, null);
+    assert.ok(record.composition.accessCombinedSha256);
+    // A real successful round trip: the very record that was built comes back, with every access part used.
+    const out = join(root, "probe");
+    const verified = await verifyPackageDir(
+      out,
+      paths.manifestFile,
+      paths.accessManifestFile,
+    );
+    assert.deepEqual(verified.record, record);
+    assert.equal(
+      verified.accessFiles.length,
+      2 + record.access.index.tileCount,
+    );
+    assert.equal(verified.network.schema, "trail-mapper.network/1");
+    const blockers = await blockersOf(paths);
+    assert.ok(blockers.some((b) => /dataset is not marked approved/.test(b)));
+    assert.deepEqual(
+      substantive(blockers).filter((b) =>
+        /content check failed|composition/.test(b),
+      ),
+      [],
+    );
+    // Rejected controls, each for its own reason (a refusal here must not be an accident of the setup).
+    const tile = (await readdir(out)).find((n) =>
+      n.startsWith("access-tile."),
+    )!;
+    const original = await readFile(join(out, tile));
+    const copy = Buffer.from(original);
+    copy[copy.length - 3] ^= 1;
+    await writeFile(join(out, tile), copy);
+    await assert.rejects(
+      verifyPackageDir(out, paths.manifestFile, paths.accessManifestFile),
+      (error: any) =>
+        error instanceof AdmissionError && /recorded hash/.test(error.message),
+    );
+    await writeFile(join(out, tile), original);
+    // The same package checked against the committed (real) access manifest is not that package's source review.
+    await assert.rejects(
+      verifyPackageDir(out, paths.manifestFile, committedAccessManifestFile),
+      (error: any) =>
+        error instanceof AdmissionError &&
+        /different source manifest/.test(error.message),
+    );
+    await verifyPackageDir(out, paths.manifestFile, paths.accessManifestFile);
+  });
+  // With an OpenStreetMap supplement too, the audit still judges the shipped files cleanly.
+  await withLab({ access: true, supplement: true }, {}, async ({ paths }) => {
+    assert.deepEqual(
+      substantive(await blockersOf(paths)).filter((b) =>
+        /content check failed|composition/.test(b),
+      ),
+      [],
+    );
+  });
 });
 
 // --- access source review ----------------------------------------------------------------------------------------
@@ -618,4 +659,219 @@ test("service-road extract positions must be unique across tiles and leave no ga
       error instanceof AccessPackageError &&
       /share extract position|not dense|extract order/.test(error.message),
   );
+});
+
+// --- the county source manifest is part of the composition ----------------------------------------------------
+
+test("changed county source evidence with identical network geometry is a different composition", async () => {
+  const county = makeCounty();
+  const make = (c: any, approval: any = c.approval) =>
+    buildPackage({
+      inputText: JSON.stringify(c.input),
+      manifest: c.manifest,
+      manifestBytes: Buffer.from(JSON.stringify(c.manifest)),
+      approval,
+    });
+  const original = await make(county);
+  const revised = clone(county);
+  revised.manifest.licensedItemId =
+    "different-hypothetical-rightsholder-source";
+  revised.input.sources.licensedItemId = revised.manifest.licensedItemId;
+  const rebuilt = await make(revised);
+  // The network the router reads is byte-for-byte the same, yet the reviewed source evidence differs...
+  assert.ok(rebuilt.body.equals(original.body));
+  assert.notEqual(
+    rebuilt.record.composition.countyManifestSha256,
+    original.record.composition.countyManifestSha256,
+  );
+  // ...so an approval of the old composition does not carry over: building from it is refused.
+  await assert.rejects(
+    make(revised, {
+      ...revised.approval,
+      approved: true,
+      approvedBy: "Synthetic test only",
+      approvedOn: "2026-01-01",
+      approvedComposition: original.record.composition,
+      blockers: [],
+    }),
+    (error: any) =>
+      error instanceof AdmissionError &&
+      /countyManifestSha256 is not the approved composition/.test(
+        error.message,
+      ),
+  );
+  // And through the audit, with a regenerated package and a fresh provenance.
+  await staleApproval(
+    {},
+    {
+      countyMutate: (c: any) => {
+        c.manifest.licensedItemId =
+          "different-hypothetical-rightsholder-source";
+        c.input.sources.licensedItemId = c.manifest.licensedItemId;
+      },
+    },
+    /composition countyManifestSha256 is not the approved/,
+  );
+});
+
+test("a manifest digest ignores line endings (Windows checkout vs GitHub LF) and nothing else", () => {
+  const lf = Buffer.from('{"a":1,\n"b":2}\n');
+  assert.equal(
+    manifestDigest(lf),
+    manifestDigest(Buffer.from(lf.toString().replace(/\n/g, "\r\n"))),
+  );
+  assert.notEqual(
+    manifestDigest(lf),
+    manifestDigest(Buffer.from('{"a":1,\n"b":3}\n')),
+  );
+  assert.notEqual(
+    manifestDigest(lf),
+    manifestDigest(Buffer.from('{"a":1, \n"b":2}\n')),
+  );
+});
+
+// --- the access source audit judges the TRANSFORM, not the labels ---------------------------------------------
+
+/**
+ * A package as an attacker (or a bug) could forge it: content replaced, then every hash rehashed to be consistent (tile,
+ * index, base, combined identity, version, composition) while the genuine source labels are kept. Nothing about it is
+ * inconsistent except that it is not the reviewed content.
+ */
+async function forged(change: {
+  base?: (base: any) => void;
+  tile?: (features: any[]) => void;
+}) {
+  const county = makeCounty();
+  const extract: any = makeAccessExtract();
+  // A second base road, so base order and identity can be replaced without changing any count.
+  extract.layers[0].features.push({
+    id: "tiger:second",
+    name: "Second synthetic base road",
+    mtfcc: "S1400",
+    paths: [
+      [
+        [-88.9, 40.55],
+        [-88.89, 40.55],
+      ],
+    ],
+  });
+  const inputText = JSON.stringify(extract);
+  const accessManifestBytes = Buffer.from(
+    JSON.stringify(makeAccessManifest(inputText)),
+  );
+  const manifestBytes = Buffer.from(JSON.stringify(county.manifest));
+  const built = await buildPackage({
+    inputText: JSON.stringify(county.input),
+    manifest: county.manifest,
+    manifestBytes,
+    approval: county.approval,
+    access: { inputText, manifestBytes: accessManifestBytes },
+  });
+  const map = new Map<string, Buffer>(
+    built.accessFiles.map((p: any) => [p.file, Buffer.from(p.body)]),
+  );
+  const record = clone(built.record);
+  const named = (prefix: string, body: Buffer) =>
+    `${prefix}.${sha(body).slice(0, 12)}.json`;
+  if (change.base) {
+    const base = JSON.parse(map.get(record.access.base.file)!.toString());
+    change.base(base);
+    const body = Buffer.from(JSON.stringify(base));
+    record.access.base = {
+      ...record.access.base,
+      file: named("access-base", body),
+      sha256: sha(body),
+      bytes: body.length,
+    };
+    map.set(record.access.base.file, body);
+  }
+  const index = JSON.parse(map.get(record.access.index.file)!.toString());
+  index.base = { ...record.access.base };
+  let tileBytes = 0;
+  // A change to a tile applies to every cell the road is in, so the tiles stay consistent with one another.
+  const edits = new Map<string, any>();
+  for (const entry of index.tiles) {
+    const parsed = JSON.parse(map.get(entry.file)!.toString());
+    const features = parsed.layers[0].features;
+    if (change.tile) change.tile(features);
+    const body = Buffer.from(JSON.stringify(parsed));
+    entry.file = `access-tile.${entry.lat}_${entry.lon}.${sha(body).slice(0, 12)}.json`;
+    entry.sha256 = sha(body);
+    entry.bytes = body.length;
+    tileBytes += body.length;
+    map.set(entry.file, body);
+    edits.set(entry.file, true);
+  }
+  const indexBody = Buffer.from(JSON.stringify(index));
+  record.access.index = {
+    ...record.access.index,
+    file: named("access-index", indexBody),
+    sha256: sha(indexBody),
+    bytes: indexBody.length,
+    tileBytes,
+  };
+  map.set(record.access.index.file, indexBody);
+  record.access.combinedSha256 = sha(
+    Buffer.from(`${record.content.sha256}:${record.access.index.sha256}`),
+  );
+  record.version = `${record.version.slice(0, record.version.lastIndexOf(".") + 1)}${record.access.combinedSha256.slice(0, 12)}`;
+  record.composition = reconstructComposition({
+    record,
+    body: built.body,
+    network: JSON.parse(built.body.toString()),
+    readPart: (name: string) => map.get(name),
+    manifestBytes,
+    accessManifestBytes,
+  });
+  const check = () =>
+    checkPackage(
+      record,
+      built.body,
+      manifestBytes,
+      null,
+      (name: string) => map.get(name),
+      null,
+      accessManifestBytes,
+    );
+  return { record, check };
+}
+const notTheTransform = (error: any) =>
+  error instanceof AdmissionError &&
+  /reviewed transform of the reviewed source input/.test(error.message);
+
+test("control: the forging helper itself, with no change, produces a package that checks", async () => {
+  const { check } = await forged({});
+  check();
+});
+
+test("consistent same-count replacements of the base roads, with genuine source labels, are refused", async () => {
+  for (const change of [
+    // a moved vertex
+    (base: any) => (base.layers[0].features[0].paths[0][0][0] += 0.0001),
+    // a replaced identity
+    (base: any) => (base.layers[0].features[0].id = "tiger:other"),
+    // a replaced order
+    (base: any) => base.layers[0].features.reverse(),
+  ]) {
+    const { record, check } = await forged({ base: change });
+    assert.equal(record.access.source.inputSha256.length, 64); // the genuine label is still there
+    assert.throws(check, notTheTransform);
+  }
+});
+
+test("consistent same-count replacements of the service roads (geometry, identity, order), with genuine source labels, are refused", async () => {
+  const everywhere =
+    (apply: (feature: any) => void, only?: string) => (features: any[]) =>
+      features.forEach((f) => (!only || f.id === only) && apply(f));
+  for (const change of [
+    // a moved vertex (the middle one: it stays in its cells)
+    everywhere((f) => (f.paths[0][1][1] += 0.0001), "osm:service:1"),
+    // a replaced identity
+    everywhere((f) => (f.id = "osm:service:renamed"), "osm:service:far"),
+    // a swapped extract order between the two roads
+    everywhere((f) => (f.ord = 1 - f.ord)),
+  ]) {
+    const { check } = await forged({ tile: change });
+    assert.throws(check, notTheTransform);
+  }
 });

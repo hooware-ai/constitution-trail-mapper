@@ -1,5 +1,6 @@
 export interface Composition {
   networkSha256: string;
+  countyManifestSha256: string;
   layerCounts: Record<string, number>;
   accessBaseSha256: string | null;
   accessIndexSha256: string | null;
@@ -10,11 +11,13 @@ export interface Composition {
   proposedManifestSha256: string | null;
 }
 export const COMPOSITION_FIELDS: string[];
+export function manifestDigest(bytes: Uint8Array): string;
 export function reconstructComposition(args: {
   record: any;
   body: Uint8Array;
   network: any;
   readPart?: (file: string) => Uint8Array | undefined;
+  manifestBytes: Uint8Array;
   osmManifestBytes?: Uint8Array | null;
   proposedManifestBytes?: Uint8Array | null;
   accessManifestBytes?: Uint8Array | null;

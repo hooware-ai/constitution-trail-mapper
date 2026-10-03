@@ -38,6 +38,7 @@ import {
   AccessSourceError,
   admitAccessSource,
   checkAccessSource,
+  checkAccessTransform,
   committedAccessManifestFile,
 } from "./access-source.mjs";
 import {
@@ -443,6 +444,9 @@ export async function buildPackage({
       accessSource = admitAccessSource(access.inputText, access.manifestBytes);
     }
     accessParts = access ? buildAccessParts(access.inputText) : null;
+    // ...and the parts made from it must be the reviewed transform of that input, not merely well-formed.
+    if (accessParts)
+      checkAccessTransform(accessParts.descriptor, accessSource.manifest);
   } catch (error) {
     if (
       error instanceof AccessPackageError ||
@@ -562,6 +566,7 @@ export async function buildPackage({
     body,
     network: JSON.parse(body.toString("utf8")),
     readPart: (name) => partBytes.get(name),
+    manifestBytes,
     osmManifestBytes: supplement?.manifestBytes ?? null,
     proposedManifestBytes: proposed?.manifestBytes ?? null,
     accessManifestBytes: access?.manifestBytes ?? null,
@@ -880,6 +885,7 @@ export function checkPackage(
       body,
       network,
       readPart,
+      manifestBytes,
       osmManifestBytes,
       proposedManifestBytes,
       accessManifestBytes,

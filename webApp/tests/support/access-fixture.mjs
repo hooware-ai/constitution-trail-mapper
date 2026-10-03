@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { buildAccessParts } from "../../tools/lib/access-package.mjs";
 // SYNTHETIC ordinary-road access for the county fixture (tests/support/county-fixture.mjs): one TIGER-style base road far
 // from everything, and an endpoint-local service road that is the ONLY way from a cul-de-sac start to the west end of the
 // west trail. Self-authored geometry; it is not road data and proves nothing about any real extract.
@@ -79,6 +80,28 @@ export const closureTrailEntry = [
  * It pins that file the way the committed manifest pins the real one; the release audit refuses any package made from
  * it, because it is not the committed manifest, and it says testOnly so no one can mistake it for a review.
  */
+export function expectedTransformOf(text) {
+  let descriptor;
+  try {
+    ({ descriptor } = buildAccessParts(text));
+  } catch {
+    // An extract the builder itself refuses has no transform; the packager then refuses it with the builder's reason.
+    const none = "0".repeat(64);
+    return {
+      baseSha256: none,
+      indexSha256: none,
+      tileCount: 0,
+      tileAssignments: 0,
+    };
+  }
+  return {
+    baseSha256: descriptor.base.sha256,
+    indexSha256: descriptor.index.sha256,
+    tileCount: descriptor.index.tileCount,
+    tileAssignments: descriptor.index.tileAssignments,
+  };
+}
+
 export function makeAccessManifest(text) {
   const extract = JSON.parse(text);
   const layerCounts = {};
@@ -95,5 +118,7 @@ export function makeAccessManifest(text) {
       .update(Buffer.from(text, "utf8"))
       .digest("hex"),
     sourceInput: { layerCounts },
+    // The expected transform digests of THIS synthetic input, as the committed manifest has for the real one.
+    expectedTransform: expectedTransformOf(text),
   };
 }

@@ -38,6 +38,16 @@
     "extractor": "tools/fetch-tigerweb-access-roads.ps1 in the native repository (git blob 3d5e9a35144e2110eb1b047b91371372e68c6620 at this review)",
     "perWayTimestamps": "UNKNOWN. The extract carries no per-way source timestamps or OpenStreetMap way versions; only the extractor's run time above. Historical per-way change dates cannot be recovered from this file and are not stated here."
   },
+  "expectedTransform": {
+    "derivedFrom": "tools/lib/access-package.mjs buildAccessParts applied to the SHA-verified source input above (deterministic: same input bytes, same output bytes)",
+    "scope": "Pins the normalized base roads and the tile index. The index lists every service-road tile by SHA-256, so it pins every service road's identity, geometry and extract order. This is a source-review digest of a deterministic transform; it is not an approval. If the normalization algorithm is changed on purpose these digests must be re-derived and re-reviewed.",
+    "baseSha256": "544b1add4dd62d6efce664c0f3d859ec58b06dd057c3789a2712a73748c40322",
+    "indexSha256": "672e9d1c871121c97896e03fe1825f228a8024ebc386270eba0d8b67008536e0",
+    "tileCount": 440,
+    "tileAssignments": 10323,
+    "localFeatureCount": 9313,
+    "baseFeatureCount": 3424
+  },
   "nativeBaseline": {
     "statement": "This is the access extract the native app ships. The architect independently matched the same SHA-256 to the built-local APK asset on 2026-10-02 (3424 TIGER roads, 9313 OpenStreetMap service roads).",
     "nativeDocumentation": "docs/routing-data-plan.md (native repository) records the 2026-09-27 refresh that produced it."

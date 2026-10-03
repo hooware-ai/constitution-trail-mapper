@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { repoRoot } from "./core.mjs";
 import { LOCAL_LAYER_ID } from "./access-package.mjs";
+import { manifestDigest } from "./composition.mjs";
 
 export const ACCESS_MANIFEST_KIND = "access-road-source";
 export const committedAccessManifestFile = join(
@@ -54,6 +55,17 @@ export function parseAccessManifest(manifestBytes) {
     !Number.isInteger(counts[LOCAL_LAYER_ID])
   )
     refuse("The access source manifest records no per-layer feature counts.");
+  const transform = manifest.expectedTransform;
+  if (
+    !transform ||
+    !HEX.test(transform.baseSha256 ?? "") ||
+    !HEX.test(transform.indexSha256 ?? "") ||
+    !Number.isInteger(transform.tileCount) ||
+    !Number.isInteger(transform.tileAssignments)
+  )
+    refuse(
+      "The access source manifest pins no expected transform digests (normalized base roads and tile index).",
+    );
   if (typeof manifest.testOnly !== "boolean")
     refuse("The access source manifest does not say whether it is test-only.");
   return manifest;
@@ -84,7 +96,7 @@ export function admitAccessSource(inputText, manifestBytes) {
     manifest,
     source: {
       inputSha256,
-      manifestSha256: sha256(Buffer.from(manifestBytes)),
+      manifestSha256: manifestDigest(manifestBytes),
       testOnly: manifest.testOnly === true,
     },
   };
@@ -99,7 +111,7 @@ export function checkAccessSource(access, manifestBytes) {
   const source = access?.source;
   if (!source || typeof source !== "object")
     refuse("The access record names no reviewed source input.");
-  if (source.manifestSha256 !== sha256(Buffer.from(manifestBytes)))
+  if (source.manifestSha256 !== manifestDigest(manifestBytes))
     refuse(
       "The access roads were packaged from a different source manifest than the one given to check.",
     );
@@ -121,5 +133,24 @@ export function checkAccessSource(access, manifestBytes) {
     refuse(
       "The packaged road counts differ from the reviewed source input's counts.",
     );
+  checkAccessTransform(access, manifest);
   return manifest;
+}
+
+/**
+ * The reviewed TRANSFORM, not just the reviewed input: the normalized base roads and the tile index (which pins every
+ * tile's bytes, so every service road's identity, geometry and order) must be exactly the digests the manifest derived
+ * from the SHA-verified raw input. A package with authentic source labels but replaced content is refused here.
+ */
+export function checkAccessTransform(access, manifest) {
+  const expected = manifest.expectedTransform;
+  if (
+    access.base.sha256 !== expected.baseSha256 ||
+    access.index.sha256 !== expected.indexSha256 ||
+    access.index.tileCount !== expected.tileCount ||
+    access.index.tileAssignments !== expected.tileAssignments
+  )
+    refuse(
+      "The access roads are not the reviewed transform of the reviewed source input (the normalized base roads or tile index differ from the expected digests).",
+    );
 }

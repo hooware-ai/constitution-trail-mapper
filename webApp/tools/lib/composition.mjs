@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 
 export const COMPOSITION_FIELDS = [
   "networkSha256",
+  "countyManifestSha256",
   "layerCounts",
   "accessBaseSha256",
   "accessIndexSha256",
@@ -23,6 +24,17 @@ export const COMPOSITION_FIELDS = [
 const ACCESS_FIELDS = COMPOSITION_FIELDS.filter((f) => f.startsWith("access"));
 const HEX = /^[0-9a-f]{64}$/;
 const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
+/**
+ * The digest a committed manifest is bound by: its bytes with CRLF folded to LF, so a Windows checkout (autocrlf) and
+ * the LF bytes on GitHub give the same value. Anything else in the file still changes it.
+ */
+export const manifestDigest = (bytes) =>
+  sha256(
+    Buffer.from(
+      Buffer.from(bytes).toString("utf8").replace(/\r\n/g, "\n"),
+      "utf8",
+    ),
+  );
 const sortedCounts = (counts) =>
   Object.fromEntries(
     Object.entries(counts ?? {}).sort(([a], [b]) =>
@@ -39,10 +51,15 @@ export function reconstructComposition({
   body,
   network,
   readPart,
+  // The reviewed county manifest the network was admitted against: its evidence (source item, hashes, roles) is part of
+  // what an approval covers even when the network bytes come out identical.
+  manifestBytes,
   osmManifestBytes = null,
   proposedManifestBytes = null,
   accessManifestBytes = null,
 }) {
+  if (!manifestBytes)
+    throw new Error("the reviewed county manifest bytes are required");
   const counts = {};
   for (const layer of network.layers ?? [])
     counts[layer.id] = (layer.features ?? []).length;
@@ -56,6 +73,7 @@ export function reconstructComposition({
   const accessIndex = access ? part(access.index) : null;
   return {
     networkSha256: sha256(body),
+    countyManifestSha256: manifestDigest(manifestBytes),
     layerCounts: sortedCounts(counts),
     accessBaseSha256: accessBase,
     accessIndexSha256: accessIndex,
@@ -64,13 +82,13 @@ export function reconstructComposition({
       : null,
     accessSourceInputSha256: access?.source?.inputSha256 ?? null,
     accessSourceManifestSha256: access
-      ? sha256(Buffer.from(accessManifestBytes ?? []))
+      ? manifestDigest(accessManifestBytes ?? [])
       : null,
     supplementManifestSha256: (record.supplements ?? []).length
-      ? sha256(Buffer.from(osmManifestBytes ?? []))
+      ? manifestDigest(osmManifestBytes ?? [])
       : null,
     proposedManifestSha256: record.proposedLayer
-      ? sha256(Buffer.from(proposedManifestBytes ?? []))
+      ? manifestDigest(proposedManifestBytes ?? [])
       : null,
   };
 }
@@ -89,8 +107,9 @@ export function compositionProblems(composition) {
     if (!COMPOSITION_FIELDS.includes(key))
       problems.push(`the expected composition has an unknown field ${key}`);
   if (problems.length) return problems;
-  if (!HEX.test(composition.networkSha256 ?? ""))
-    problems.push("the expected network SHA-256 is not a SHA-256");
+  for (const field of ["networkSha256", "countyManifestSha256"])
+    if (!HEX.test(composition[field] ?? ""))
+      problems.push(`the expected ${field} is not a SHA-256`);
   const counts = composition.layerCounts;
   if (
     !counts ||

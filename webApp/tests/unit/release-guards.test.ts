@@ -70,6 +70,7 @@ async function approvedDataset(root: string) {
   const bytes = await readFile(join(root, "dist/assets/data.json"));
   const composition = {
     networkSha256: sha256(bytes),
+    countyManifestSha256: "c".repeat(64),
     layerCounts: { "8": 0 },
     accessBaseSha256: null,
     accessIndexSha256: null,

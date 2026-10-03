@@ -139,6 +139,7 @@ async function loadCountyDataset(dir, paths) {
       body,
       network,
       readPart,
+      manifestBytes,
       osmManifestBytes,
       proposedManifestBytes,
       accessManifestBytes,

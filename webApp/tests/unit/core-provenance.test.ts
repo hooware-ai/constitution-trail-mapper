@@ -147,6 +147,7 @@ test("the fixture dataset is never publishable and a file scan does not approve 
     // An approval covers one composition: the actual parts must equal the expected ones the record carries.
     composition: {
       networkSha256: "b".repeat(64),
+      countyManifestSha256: "c".repeat(64),
       layerCounts: { "8": 3 },
       accessBaseSha256: null,
       accessIndexSha256: null,
@@ -158,6 +159,7 @@ test("the fixture dataset is never publishable and a file scan does not approve 
     },
     approvedComposition: {
       networkSha256: "b".repeat(64),
+      countyManifestSha256: "c".repeat(64),
       layerCounts: { "8": 3 },
       accessBaseSha256: null,
       accessIndexSha256: null,
