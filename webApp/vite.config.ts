@@ -103,6 +103,13 @@ export default defineConfig({
           fileName: `data/${verified.record.content.file}`,
           source: verified.body,
         });
+        // Ordinary-road access parts (base roads, tile index and service-road tiles), each named by its hash.
+        for (const [name, bytes] of verified.accessFiles)
+          this.emitFile({
+            type: "asset",
+            fileName: `data/${name}`,
+            source: bytes,
+          });
       },
     },
     {

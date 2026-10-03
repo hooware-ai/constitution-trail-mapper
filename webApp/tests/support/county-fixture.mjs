@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { canonicalSha256 } from "../../tools/lib/canonical-json.mjs";
 
 const hex = (seed) => createHash("sha256").update(seed).digest("hex");
-const LIST = [
+export const DEFAULT_LIST = [
   // id, name, roles, paths (lon,lat)
   [
     "54:9001",
@@ -136,7 +136,7 @@ const rawAttributes = (id, name) => ({
 export function makeCounty({
   reviewedOn = "2026-01-01",
   excluded = [9999],
-  list = LIST,
+  list = DEFAULT_LIST,
 } = {}) {
   const entries = list.map(([id, name, roles, paths]) => {
     const [layer, objectId] = id.split(":").map(Number);
@@ -161,6 +161,13 @@ export function makeCounty({
     license: "CC BY 4.0",
     licenseUrl: LICENSE_URL,
     licenseEvidenceUrl: "https://example.test/synthetic/item.json",
+    sourceContract: {
+      changes:
+        "Reviewed subset selected; attributes decoded and normalized; source geometry retained.",
+      disclaimer:
+        "Source data is for display and reference. Current access and accuracy are not guaranteed.",
+      licenseEvidenceObservation: { sha256: hex("license-evidence") },
+    },
     licensedDomainsSha256: canonicalSha256(DOMAINS),
     reviewedFeatureCount: entries.length,
     reviewedLayerCounts: layerCounts,

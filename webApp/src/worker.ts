@@ -9,11 +9,14 @@ import {
   type DatasetIdentity,
   type DatasetRecord,
 } from "./dataset";
+import { AccessLoader, AccessSession } from "./accessTiles";
 
 // Fixed at build time (src/globals.d.ts). A county build has no fixture code path: the fixture import is removed.
 interface Loaded {
   trails: string;
   access?: string;
+  /** County builds with packaged access: loads service-road tiles around each operation's endpoints. */
+  accessLoader?: AccessLoader;
   mode: "fixture" | "local" | "county";
   label: string;
   identity: DatasetIdentity | null;
@@ -70,12 +73,36 @@ async function loadCounty(pinned?: unknown): Promise<Loaded> {
     ? " The trail data changed since this page opened; reload the page to use the current data."
     : "";
   let trails: string;
+  let access: string | undefined;
+  let accessLoader: AccessLoader | undefined;
   try {
     const content = await fetchOrExplain(
       `${base}data/${record.content.file}`,
       "The trail data",
     );
     trails = await verifyDatasetContent(await content.arrayBuffer(), record);
+    if (record.access) {
+      // The identity a saved route remembers must be exactly the network plus the tile index this record pins.
+      const combined = await sha256Hex(
+        new TextEncoder().encode(
+          `${record.content.sha256}:${record.access.index.sha256}`,
+        ).buffer as ArrayBuffer,
+      );
+      if (combined !== record.access.combinedSha256)
+        throw new DatasetError(
+          "data-corrupt",
+          "The trail data description is inconsistent about its road data.",
+        );
+      accessLoader = new AccessLoader(record.access, {
+        fetchBytes: async (file) =>
+          (
+            await fetchOrExplain(`${base}data/${file}`, "Road data")
+          ).arrayBuffer(),
+        sha256Hex,
+        dispatch: (request) => JSON.parse(dispatch(JSON.stringify(request))),
+      });
+      access = await accessLoader.baseText();
+    }
   } catch (error) {
     if (error instanceof DatasetError && reload)
       throw new DatasetError(error.code, error.message + reload);
@@ -83,6 +110,8 @@ async function loadCounty(pinned?: unknown): Promise<Loaded> {
   }
   return {
     trails,
+    access,
+    accessLoader,
     mode: "county",
     label: record.label,
     identity: identityOf(record),
@@ -143,10 +172,17 @@ async function loadLocalReview(): Promise<Loaded & { access?: string }> {
   };
 }
 
-self.onmessage = async (event: MessageEvent) => {
+/** The operations of the current boot: road loading and dispatch are one step, one operation at a time. */
+let session: AccessSession<unknown> | null = null;
+const run = (request: Record<string, unknown>): unknown =>
+  JSON.parse(dispatch(JSON.stringify(request)));
+
+async function handle(event: MessageEvent) {
   const { id, request } = event.data;
   try {
     if (request.op === "boot") {
+      // A failed replacement must not leave the previous boot's operations running on new data.
+      session = null;
       if (request.local && !import.meta.env.DEV)
         throw new Error(
           "Local network review is available only in the local development server.",
@@ -171,6 +207,7 @@ self.onmessage = async (event: MessageEvent) => {
         ),
       );
       if (result.ok === false) throw new Error(result.error);
+      session = new AccessSession(data.accessLoader ?? null, run);
       self.postMessage({
         id,
         result: {
@@ -183,7 +220,7 @@ self.onmessage = async (event: MessageEvent) => {
     } else
       self.postMessage({
         id,
-        result: JSON.parse(dispatch(JSON.stringify(request))),
+        result: await (session ?? new AccessSession(null, run)).run(request),
       });
   } catch (error) {
     self.postMessage({
@@ -196,4 +233,11 @@ self.onmessage = async (event: MessageEvent) => {
       },
     });
   }
+}
+
+// Messages are handled strictly in arrival order, boot included: a replacement boot never overtakes an operation that is
+// still loading its roads, and one operation's failure never blocks the next.
+let queue: Promise<void> = Promise.resolve();
+self.onmessage = (event: MessageEvent) => {
+  queue = queue.then(() => handle(event));
 };

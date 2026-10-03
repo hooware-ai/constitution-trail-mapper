@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Feature, Point, RouteResult, Closure } from "./types";
+import type { Feature, Point, RouteResult, Closure, MapCues } from "./types";
+import { ChevronLayer } from "./chevrons";
+import { lengthMeters, riddenPolylines } from "./ridden";
 import { gapDistance } from "./gapDistance";
 const routePoints = (route: RouteResult) => [
   ...route.segments.flatMap((segment) => segment.points),
@@ -28,6 +30,10 @@ export function MapView({
   closures = [],
   fixture,
   county = false,
+  osm = false,
+  fitSignal = 0,
+  cues = null,
+  riddenMeters,
 }: {
   features: Feature[];
   route: RouteResult | null;
@@ -40,11 +46,22 @@ export function MapView({
   fixture: boolean;
   /** Packaged county data: credit the county license, not the OSM/Census sources of the older local files. */
   county?: boolean;
+  /** The packaged data includes the reviewed OpenStreetMap supplement: credit it (ODbL) beside the county license. */
+  osm?: boolean;
+  /** Increase to refit the map to every drawn trail ("Show all trails"). */
+  fitSignal?: number;
+  /** Direction chevrons, second passes and turn-around signs for `route` (computed by the shared core, as for native). */
+  cues?: MapCues | null;
+  /** While navigating: how far along the route the rider has credibly ridden. That part is faded, as in native. */
+  riddenMeters?: number;
 }) {
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
     layers = useRef<L.LayerGroup | null>(null);
   const gapMarkers = useRef(new Map<string, L.Marker>());
+  const chevrons = useRef<ChevronLayer | null>(null);
+  const riddenLayer = useRef<L.LayerGroup | null>(null);
+  const drawRidden = useRef<() => void>(() => {});
   const pick = useRef(onPick),
     [tiles, setTiles] = useState(false),
     [tileError, setTileError] = useState(false);
@@ -60,6 +77,19 @@ export function MapView({
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
     map.current = m;
     layers.current = L.layerGroup().addTo(m);
+    chevrons.current = new ChevronLayer().addTo(m);
+    riddenLayer.current = L.layerGroup().addTo(m);
+    // A read-only mirror of the view (zoom and centre) for tests and assistive tooling; it changes nothing.
+    const publishView = () => {
+      const c = m.getCenter();
+      root.current?.setAttribute("data-zoom", String(m.getZoom()));
+      root.current?.setAttribute(
+        "data-center",
+        `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`,
+      );
+    };
+    m.on("moveend zoomend", publishView);
+    publishView();
 
     const ro = new ResizeObserver(() => m.invalidateSize());
     ro.observe(root.current);
@@ -87,13 +117,13 @@ export function MapView({
     const notice = fixture
       ? "Synthetic review geometry · CC0"
       : county
-        ? `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · ${credit("https://creativecommons.org/licenses/by/4.0/", "CC BY 4.0")} · changes: reviewed subset, normalized`
+        ? `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · ${credit("https://creativecommons.org/licenses/by/4.0/", "CC BY 4.0")} · changes: reviewed subset, normalized${osm ? ` · OpenStreetMap data: ${credit("https://www.openstreetmap.org/copyright", "© OpenStreetMap contributors / ODbL")}` : ""}`
         : `Trail data: ${credit("https://www.mcgis.org", "McGIS and members")} · U.S. Census · ${credit("https://www.openstreetmap.org/copyright", "© OSM contributors / ODbL")}`;
     m.attributionControl.addAttribution(notice);
     return () => {
       m.attributionControl.removeAttribution(notice);
     };
-  }, [fixture, county]);
+  }, [fixture, county, osm]);
   useEffect(() => {
     const m = map.current,
       g = layers.current;
@@ -106,15 +136,18 @@ export function MapView({
         f.paths.forEach((path) => {
           const proposed = f.status === "Proposed",
             shared = f.roles.includes("SharedRoadways"),
-            park = f.roles.includes("ParkConnectors");
+            park = f.roles.includes("ParkConnectors"),
+            verified = f.id.startsWith("verified-osm:way:");
           L.polyline(path.map(xy), {
             color: proposed
               ? "#7851a9"
-              : shared
-                ? "#68718b"
-                : park
-                  ? "#63a375"
-                  : "#08725f",
+              : verified
+                ? "#b01767"
+                : shared
+                  ? "#68718b"
+                  : park
+                    ? "#63a375"
+                    : "#08725f",
             weight: route ? 2 : 4,
             opacity: route ? 0.5 : 0.85,
             dashArray: proposed ? "6 7" : shared ? "3 5" : undefined,
@@ -136,9 +169,14 @@ export function MapView({
       }).addTo(g);
       closureMarkers.push({ closure, anchor: path.getCenter() });
     });
-    route?.segments.forEach((s) => {
-      // Kotlin bridge omits estimated access from drawable segments.
-      const roles = s.roles ?? s.routeRoles ?? [];
+    // With cues the route is drawn as the pieces native draws (direction ordered, a second pass beside the first); without
+    // them, as the plain drawable segments. Estimated access is never drawn as a line either way.
+    const drawn = cues
+      ? cues.pieces.filter((piece) => piece.isRouted)
+      : (route?.segments ?? []);
+    drawn.forEach((s) => {
+      const roles =
+        s.roles ?? (s as { routeRoles?: string[] }).routeRoles ?? [];
       const access = s.type === "Access",
         prop = roles.includes("ProposedTrails"),
         shared = roles.includes("SharedRoadways"),
@@ -162,6 +200,23 @@ export function MapView({
         weight: 6,
         dashArray: access ? "8 7" : prop ? "6 7" : shared ? "3 5" : undefined,
       }).addTo(g);
+    });
+    chevrons.current?.setPieces(cues?.pieces ?? []);
+    (cues?.turnarounds ?? []).forEach((turn) => {
+      const label = `Turn around, ${(turn.distance / 1609.344).toFixed(1)} mi into the route`;
+      const marker = L.marker(xy(turn.point), {
+        icon: L.divIcon({
+          className: "turnaround-marker",
+          html: '<span class="turnaround-sign"><span aria-hidden="true">↩</span> Turn around</span>',
+          iconSize: [112, 28],
+          iconAnchor: [56, 14],
+        }),
+        title: label,
+        keyboard: true,
+      })
+        .bindPopup(plain(label))
+        .addTo(g);
+      marker.getElement()?.setAttribute("aria-label", label);
     });
     closureMarkers.forEach(({ closure, anchor }) => {
       const details = document.createElement("div");
@@ -264,7 +319,8 @@ export function MapView({
       marker.on("popupopen", () => marker.closeTooltip());
       gapMarkers.current.set(gap.id, marker);
     });
-  }, [features, route, proposed, closures]);
+    drawRidden.current();
+  }, [features, route, proposed, closures, cues]);
   useEffect(() => {
     const m = map.current;
     if (!m) return;
@@ -282,6 +338,45 @@ export function MapView({
       m.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
   }, [route, features, fixture]);
+  // The ridden overlay is redrawn on top of the route whenever either changes (the route is rebuilt on its own schedule).
+  drawRidden.current = () => {
+    const group = riddenLayer.current;
+    if (!group) return;
+    group.clearLayers();
+    const lines =
+      cues && riddenMeters ? riddenPolylines(cues.pieces, riddenMeters) : [];
+    for (const line of lines)
+      L.polyline(line.map(xy), {
+        color: "#ffffff",
+        weight: 14,
+        opacity: 0.6,
+        interactive: false,
+      }).addTo(group);
+    root.current?.setAttribute(
+      "data-ridden-meters",
+      String(
+        Math.round(lines.reduce((sum, line) => sum + lengthMeters(line), 0)),
+      ),
+    );
+  };
+  useEffect(() => {
+    drawRidden.current();
+  }, [cues, riddenMeters, route]);
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !fitSignal) return;
+    const pts = features
+      .filter((f) => proposed || f.status !== "Proposed")
+      .flatMap((f) => f.paths.flat());
+    if (pts.length)
+      m.fitBounds(L.latLngBounds(pts.map(xy)), {
+        padding: [32, 32],
+        maxZoom: 16,
+        animate: false,
+      });
+    // Only an explicit request refits; later data or toggle changes must not move the rider's view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitSignal]);
   useEffect(() => {
     const gap = route?.accessGaps?.find((item) => item.id === gapFocus?.id);
     const m = map.current;

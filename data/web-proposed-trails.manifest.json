@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-09-28",
+  "description": "Six proposed Constitution Trail branch segments that the native app can show as an opt-in preview. They are not in the CC BY 4.0 licensed McGIS open-data item the web ships, and no explicit redistribution grant has been found. This manifest holds NO geometry: it lists which segments may be admitted and the SHA-256 of each reviewed geometry, so that granting rights later is a matter of filling in the rights block, not of re-reviewing the data.",
+  "rights": {
+    "status": "unresolved",
+    "blocker": "The McGIS app and map metadata carry blank licenseInfo and name McGIS and its members as copyright holders without an explicit redistribution grant. This is an unresolved licensing basis, not a determination that redistribution is forbidden. Ask the county GIS owner for a written grant (basis, who granted it, the licence and its link), record its URL and SHA-256 here, set status to granted, and run npm run package:dataset -- --proposed-trails.",
+    "evidenceUrls": [
+      "https://www.arcgis.com/sharing/rest/content/items/d98c151296fd4b03860af8f4df7787a4?f=json",
+      "https://www.arcgis.com/sharing/rest/content/items/7470738236b04a66893f13ecbcd9fe05?f=json"
+    ],
+    "recordedIn": "docs/web/data-rights.md (Six proposed segments: unresolved release gate)"
+  },
+  "features": [
+    {
+      "id": "54:1929",
+      "name": "Southtown",
+      "geometrySha256": "49aaf003432521497b6bd8f593e38ac8ab7c425ec09ef9c28834b5600b1d2ddc"
+    },
+    {
+      "id": "54:1952",
+      "name": "Southtown",
+      "geometrySha256": "887f15bcf81bdc0bfe7a21955b4f9d8c274f986fec5addc00e73c87e42166ba9"
+    },
+    {
+      "id": "54:2349",
+      "name": null,
+      "geometrySha256": "b265710da9c6734bd186f460a0e3da5ba23851c2997e7770af3e677d28dda053"
+    },
+    {
+      "id": "54:3824",
+      "name": "Southtown",
+      "geometrySha256": "2f210d339216708df2d88a0b8cc44213ffb9871e0c17cd2a5c3b6ae1c2a37951"
+    },
+    {
+      "id": "54:4275",
+      "name": "Southtown",
+      "geometrySha256": "b6cf4d011b289343bcf4f7f8e7886b0910d30acd38fa68ae9577bb7eb824db0f"
+    },
+    {
+      "id": "54:4772",
+      "name": "Lafayette Rd to Hamilton Rd",
+      "geometrySha256": "068da472404d7fc7438218460d1ea17eb81feaf2fb83f3c756565bdf19360d6f"
+    }
+  ]
+}

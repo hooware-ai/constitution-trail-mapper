@@ -3,17 +3,28 @@
 // Nothing here trusts a recorded claim. Eligibility for public release is always RECOMPUTED from the dataset record,
 // the shipped files and the current source state; a provenance.json that says otherwise is rejected as inconsistent.
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { repoRoot, sha256, webRoot, verifyCoreManifest } from "./core.mjs";
 import {
+  accessManifestFile,
   approvalRecordFile,
   checkPackage,
+  committedAccessManifestFile,
   committedApprovalFile,
   committedManifestFile,
   manifestFile,
+  committedOsmManifestFile,
+  committedProposedManifestFile,
+  osmManifestFile,
+  proposedManifestFile,
   readApprovalRecord,
 } from "./dataset-package.mjs";
+import {
+  approvedCompositionProblems,
+  reconstructComposition,
+} from "./composition.mjs";
 
 // TRAIL_DIST_DIR lets a test build a second artifact (for example a county build) without touching dist/.
 export const distDir = process.env.TRAIL_DIST_DIR
@@ -91,9 +102,75 @@ async function loadCountyDataset(dir, paths) {
   const manifestBytes = await readFile(manifestPath);
   const inconsistencies = [];
   let body = null;
+  let composition = null;
   try {
     body = await readFile(join(dir, "data", record.content.file));
-    checkPackage(record, body, manifestBytes);
+    const proposedManifestBytes = record.proposedLayer
+      ? await readFile(paths.proposedManifestFile ?? proposedManifestFile)
+      : null;
+    const osmManifestBytes = (record.supplements ?? []).length
+      ? await readFile(paths.osmManifestFile ?? osmManifestFile)
+      : null;
+    const accessManifestBytes = record.access
+      ? await readFile(paths.accessManifestFile ?? accessManifestFile)
+      : null;
+    const readPart = (name) => {
+      // Access parts are named by hash and live beside the network; never follow a path out of data/.
+      if (name.includes("/") || name.includes("\\") || name.includes(".."))
+        return undefined;
+      try {
+        return readFileSync(join(dir, "data", name));
+      } catch {
+        return undefined;
+      }
+    };
+    const network = checkPackage(
+      record,
+      body,
+      manifestBytes,
+      osmManifestBytes,
+      readPart,
+      proposedManifestBytes,
+      accessManifestBytes,
+    );
+    // Reconstructed again here from the shipped bytes, so the verdict never rests on the record's own composition claim.
+    composition = reconstructComposition({
+      record,
+      body,
+      network,
+      readPart,
+      manifestBytes,
+      osmManifestBytes,
+      proposedManifestBytes,
+      accessManifestBytes,
+    });
+    if (
+      record.access &&
+      (paths.accessManifestFile ?? accessManifestFile) !==
+        committedAccessManifestFile
+    )
+      inconsistencies.push(
+        "dataset was packaged from an access source manifest other than the committed one",
+      );
+    if (record.access?.source?.testOnly === true)
+      inconsistencies.push(
+        "dataset access roads come from a test-only source manifest",
+      );
+    if (
+      proposedManifestBytes &&
+      (paths.proposedManifestFile ?? proposedManifestFile) !==
+        committedProposedManifestFile
+    )
+      inconsistencies.push(
+        "dataset was packaged from a proposed-trails manifest other than the committed one",
+      );
+    if (
+      osmManifestBytes &&
+      (paths.osmManifestFile ?? osmManifestFile) !== committedOsmManifestFile
+    )
+      inconsistencies.push(
+        "dataset was packaged from an OpenStreetMap manifest other than the committed one",
+      );
   } catch (error) {
     inconsistencies.push(`dataset content check failed: ${error.message}`);
   }
@@ -116,6 +193,14 @@ async function loadCountyDataset(dir, paths) {
       inconsistencies.push(
         `shipped dataset ${name} differs from the committed approval record`,
       );
+  // The shipped approval's expected composition must be the committed one, null and absent included.
+  if (
+    JSON.stringify(record.approval?.approvedComposition ?? null) !==
+    JSON.stringify(approval.approvedComposition ?? null)
+  )
+    inconsistencies.push(
+      "shipped dataset approvedComposition differs from the committed approval record",
+    );
   for (const file of await artifactFiles(dir))
     if (
       /\.(js|json|html|css)$/.test(file.path) &&
@@ -138,6 +223,10 @@ async function loadCountyDataset(dir, paths) {
     sourceManifestSha256: record.source?.manifestSha256 ?? null,
     reviewedOn: record.source?.reviewedOn ?? null,
     extractedAtUtc: record.source?.extractedAtUtc ?? null,
+    // What this artifact actually is, and what the committed record says an approval would cover. Integrity and
+    // source review are checked above; neither is an approval, and neither of these is a publication approval.
+    composition,
+    approvedComposition: approval.approvedComposition ?? null,
     content: {
       distPath: `data/${record.content?.file}`,
       sha256: body ? sha256(body) : null,
@@ -195,6 +284,13 @@ export function publicReleaseBlockers(dataset, source, distFiles) {
     for (const field of APPROVED_DATASET_FIELDS)
       if (!get(dataset, field))
         blockers.push(`approved dataset lacks ${field}`);
+    // An approval covers exactly one composition. Absence of a bound composition fails closed.
+    blockers.push(
+      ...approvedCompositionProblems(
+        dataset.composition,
+        dataset.approvedComposition,
+      ),
+    );
     const distPath = get(dataset, "content.distPath");
     if (distPath && distFiles) {
       const shipped = distFiles.find((file) => file.path === distPath);
@@ -250,6 +346,8 @@ const datasetSummary = (dataset) => ({
   sourceManifestSha256: dataset.sourceManifestSha256 ?? null,
   reviewedOn: dataset.reviewedOn ?? null,
   extractedAtUtc: dataset.extractedAtUtc ?? null,
+  composition: dataset.composition ?? null,
+  approvedComposition: dataset.approvedComposition ?? null,
 });
 
 /** `paths` and `source` are injectable for tests; production callers use the defaults. */

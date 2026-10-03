@@ -60,8 +60,46 @@ export function DataSources({
         and this app does not know when it last did.
       </p>
       <p>
-        {content.featureCount} existing trail features. {source.disclaimer}
+        {content.featureCount} existing trail features
+        {record.supplements?.length
+          ? ` (${record.supplements.reduce((n, part) => n + part.featureCount, 0)} of them reviewed OpenStreetMap paths, below)`
+          : ""}
+        . {source.disclaimer}
       </p>
+      {record.supplements?.map((part) => (
+        <p key={part.id}>
+          <strong>Reviewed OpenStreetMap paths:</strong> {part.featureCount}{" "}
+          paths reviewed on {part.reviewedOn}, kept as their own layer.{" "}
+          {part.attribution} · License:{" "}
+          <SafeLink href={part.licenseUrl}>{part.license}</SafeLink>.
+        </p>
+      ))}
+      {record.proposedLayer && (
+        <p>
+          <strong>Proposed trails (preview only):</strong>{" "}
+          {record.proposedLayer.featureCount} planned segments, shown and routed
+          only when you opt in, and never offered for navigation.{" "}
+          {record.proposedLayer.attribution} · License:{" "}
+          <SafeLink href={record.proposedLayer.licenseUrl}>
+            {record.proposedLayer.license}
+          </SafeLink>
+          .
+        </p>
+      )}
+      {record.access && (
+        <p>
+          <strong>Road access:</strong> {record.access.base.featureCount} base
+          road features load with the trail data;{" "}
+          {record.access.index.localFeatureCount} service roads load only for
+          the area around a trip&apos;s start and destination. Sources: U.S.
+          Census Bureau TIGER/Line roads and{" "}
+          <SafeLink href="https://www.openstreetmap.org/copyright">
+            OpenStreetMap contributors (ODbL)
+          </SafeLink>
+          . Where no road connects a point to a trail, access is shown as a
+          labeled gap, never an invented connection.
+        </p>
+      )}
       <Sub>What is not included</Sub>
       <ul>
         {omitted.proposedFeatureIds.length > 0 && (
@@ -71,7 +109,7 @@ export function DataSources({
           </li>
         )}
         <li>{omitted.supplements}</li>
-        <li>{omitted.accessRoads}</li>
+        {!record.access && <li>{omitted.accessRoads}</li>}
       </ul>
       {approval.approved ? (
         <p>

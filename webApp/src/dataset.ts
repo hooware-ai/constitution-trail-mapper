@@ -33,6 +33,66 @@ export interface DatasetSource {
   changes: string;
   disclaimer: string;
 }
+/** A separately reviewed source packaged as its own layer of the network (today: the reviewed OpenStreetMap paths). */
+export interface SupplementPart {
+  id: string;
+  layerId: string;
+  featureCount: number;
+  wayIds: number[];
+  reviewedOn: string;
+  license: string;
+  licenseUrl: string;
+  attribution: string;
+  manifestSha256: string;
+  /** What the review keeps OUT (known gaps stay gaps; unverified ways are never imported). */
+  excludedUntilVerified: string[];
+}
+/**
+ * Proposed (not yet built) trail segments, packaged only under a granted rights block with evidence. They are their own
+ * layer, off unless the rider opts in, and a route using them is a preview that cannot start navigation.
+ */
+export interface ProposedLayerPart {
+  id: string;
+  layerId: string;
+  featureCount: number;
+  segmentIds: string[];
+  reviewedOn: string;
+  basis: string;
+  evidenceUrl: string;
+  evidenceSha256: string;
+  grantedBy: string;
+  grantedOn: string;
+  license: string;
+  licenseUrl: string;
+  attribution: string;
+  note: string;
+  manifestSha256: string;
+}
+/** A hash-named file the page may fetch from beside the dataset record: its name, exact size and SHA-256. */
+export interface AccessPartRef {
+  file: string;
+  sha256: string;
+  bytes: number;
+}
+/**
+ * Ordinary-road access, split so a trip downloads only what it needs: the base roads load with the data, the
+ * endpoint-local service roads load as small tiles around a trip's endpoints (see accessTiles.ts). The record pins
+ * every part by hash through the tile index.
+ */
+export interface AccessDescriptor {
+  base: AccessPartRef & { featureCount: number };
+  index: AccessPartRef & {
+    tileCount: number;
+    localFeatureCount: number;
+    tileAssignments: number;
+    tileBytes: number;
+  };
+  cellDegrees: number;
+  windowCells: number;
+  radiusMeters: number;
+  /** sha256(network sha256 + ":" + index sha256): the identity a saved route remembers when access is packaged. */
+  combinedSha256: string;
+}
 export interface DatasetRecord {
   schema: typeof DATASET_RECORD_SCHEMA;
   kind: DatasetKind;
@@ -48,6 +108,12 @@ export interface DatasetRecord {
     layerCounts: Record<string, number>;
   };
   source: DatasetSource;
+  /** Optional reviewed supplements, each its own layer with its own source, licence and attribution. */
+  supplements?: SupplementPart[];
+  /** Optional rights-gated proposed-trail segments (a separate opt-in layer). */
+  proposedLayer?: ProposedLayerPart;
+  /** Optional ordinary-road access parts, pinned by hash. */
+  access?: AccessDescriptor;
   /** What was deliberately left out and why, shown to riders as coverage limits. */
   omitted: {
     proposedFeatureIds: number[];
@@ -90,12 +156,73 @@ const text = (value: unknown): value is string =>
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value > 0;
 
+const PART_FILE = /^[A-Za-z0-9._-]+$/;
+const nonNegative = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
+function validPart(part: unknown): boolean {
+  return (
+    isObject(part) &&
+    typeof part.file === "string" &&
+    PART_FILE.test(part.file) &&
+    !part.file.includes("..") &&
+    typeof part.sha256 === "string" &&
+    SHA256.test(part.sha256) &&
+    part.file.includes(part.sha256.slice(0, 12)) &&
+    count(part.bytes)
+  );
+}
+function validProposed(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  return (
+    text(value.id) &&
+    text(value.layerId) &&
+    count(value.featureCount) &&
+    Array.isArray(value.segmentIds) &&
+    value.segmentIds.length === value.featureCount &&
+    value.segmentIds.every((id) => text(id)) &&
+    text(value.reviewedOn) &&
+    text(value.basis) &&
+    typeof value.evidenceUrl === "string" &&
+    /^https:\/\//i.test(value.evidenceUrl) &&
+    typeof value.evidenceSha256 === "string" &&
+    SHA256.test(value.evidenceSha256) &&
+    text(value.grantedBy) &&
+    text(value.grantedOn) &&
+    text(value.license) &&
+    typeof value.licenseUrl === "string" &&
+    /^https:\/\//i.test(value.licenseUrl) &&
+    text(value.attribution) &&
+    text(value.note) &&
+    typeof value.manifestSha256 === "string" &&
+    SHA256.test(value.manifestSha256)
+  );
+}
+function validAccess(value: unknown): boolean {
+  if (!isObject(value) || !isObject(value.base) || !isObject(value.index))
+    return false;
+  return (
+    validPart(value.base) &&
+    count(value.base.featureCount) &&
+    validPart(value.index) &&
+    nonNegative(value.index.tileCount) &&
+    nonNegative(value.index.localFeatureCount) &&
+    nonNegative(value.index.tileAssignments) &&
+    nonNegative(value.index.tileBytes) &&
+    value.cellDegrees === 0.01 &&
+    value.windowCells === 1 &&
+    value.radiusMeters === 600 &&
+    typeof value.combinedSha256 === "string" &&
+    SHA256.test(value.combinedSha256)
+  );
+}
+
 export function identityOf(record: DatasetRecord): DatasetIdentity {
   return {
     kind: record.kind,
     id: record.id,
     version: record.version,
-    contentSha256: record.content.sha256,
+    // With access packaged, a saved route is only as good as the roads it was planned on: identity covers both.
+    contentSha256: record.access?.combinedSha256 ?? record.content.sha256,
   };
 }
 
@@ -196,6 +323,46 @@ export function parseDatasetRecord(
       "data-corrupt",
       "The trail data approval record is invalid.",
     );
+  if (value.proposedLayer !== undefined && !validProposed(value.proposedLayer))
+    throw new DatasetError(
+      "data-corrupt",
+      "The description of the proposed trails is invalid.",
+    );
+  if (value.access !== undefined && !validAccess(value.access))
+    throw new DatasetError(
+      "data-corrupt",
+      "The description of the road access data is invalid.",
+    );
+  if (value.supplements !== undefined) {
+    const parts = value.supplements;
+    const valid =
+      Array.isArray(parts) &&
+      // At most one description: the one supported OpenStreetMap layer has one, and the Data and credits screens add
+      // up every description they are given.
+      parts.length <= 1 &&
+      parts.every(
+        (part) =>
+          isObject(part) &&
+          text(part.id) &&
+          text(part.layerId) &&
+          count(part.featureCount) &&
+          Array.isArray(part.wayIds) &&
+          part.wayIds.every((id) => count(id)) &&
+          text(part.reviewedOn) &&
+          text(part.license) &&
+          text(part.licenseUrl) &&
+          text(part.attribution) &&
+          typeof part.manifestSha256 === "string" &&
+          SHA256.test(part.manifestSha256) &&
+          Array.isArray(part.excludedUntilVerified) &&
+          part.excludedUntilVerified.every((entry) => text(entry)),
+      );
+    if (!valid)
+      throw new DatasetError(
+        "data-corrupt",
+        "The description of the reviewed supplement is invalid.",
+      );
+  }
   if (
     approval.approved === true &&
     !(text(approval.approvedBy) && text(approval.approvedOn))

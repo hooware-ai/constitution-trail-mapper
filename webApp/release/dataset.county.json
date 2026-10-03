@@ -6,6 +6,7 @@
   "approved": false,
   "approvedBy": null,
   "approvedOn": null,
+  "approvedComposition": null,
   "license": "CC-BY-4.0",
   "attribution": "Trail data: McLean County GIS Consortium (McGIS) and members, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Reviewed existing trails only; filtered and normalized by Constitution Trail Mapper. Routes are generated and are not an official county map.",
   "licenseEvidence": [

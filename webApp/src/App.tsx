@@ -7,14 +7,19 @@ import {
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { DataSources } from "./DataSources";
+import { loopComparison, loopHeading } from "./loopSummary";
+import { applyReverse, reverseOutcome } from "./reverseGate";
+import { renderImage } from "./shareImage";
 import { HelpDialog } from "./Help";
 import { AccessConnections } from "./AccessConnections";
 import {
   type DialogNotice,
   EndpointField,
+  DirectionControl,
   Legend,
   Modal,
   PlaceChooser,
+  ProposedChoice,
   RouteRow,
   SafeLink,
 } from "./components";
@@ -24,12 +29,15 @@ import {
   routeNeedsRecalculation,
   type Draft,
   type Endpoint,
+  type MapCues,
   type Network,
   type Point,
   type RouteResult,
 } from "./types";
 import {
   ActiveRideStore,
+  CarriedRideStore,
+  CompletedSessionStore,
   LocalRouteStore,
   stableRouteKey,
   type PlaceRecord,
@@ -77,6 +85,7 @@ const emptyNavigation: NavigationState = {
   fix: null,
   guidance: null,
   routeProgressMeters: 0,
+  riddenMeters: 0,
   creditedDistanceMeters: 0,
   wakeLock: "unsupported",
 };
@@ -108,6 +117,18 @@ const errorText = (error: unknown) =>
   error instanceof Error
     ? error.message
     : "Something went wrong. Please try again.";
+/**
+ * True when asking again can give a different answer: a download, a connection, a timeout or a replaced worker. A search
+ * that found no route is not retryable, since the same question has the same answer (native: `RouteNotice.retryable`).
+ */
+const retryable = (error: unknown) =>
+  ["data-unavailable", "data-missing", "data-corrupt"].includes(
+    (error as { code?: string } | null)?.code ?? "",
+  ) ||
+  (error instanceof Error &&
+    /took too long|cancelled|stopped unexpectedly|connection|could not be downloaded/i.test(
+      error.message,
+    ));
 const routeOkay = (value: RouteResult & { error?: string }): RouteResult => {
   if (!value.route || !Array.isArray(value.segments))
     throw new Error(
@@ -138,6 +159,8 @@ export function App() {
     dialogEpoch = useRef(0),
     shownPopup = useRef<Popup>(null),
     shareAttempt = useRef(0),
+    imageAttempt = useRef(0),
+    shownRouteRef = useRef<unknown>(undefined),
     announceFrame = useRef(0);
   popupOpen.current = popup !== null;
   // Every open or close is a new dialog session; late results from an earlier one are ignored.
@@ -158,7 +181,11 @@ export function App() {
       if (epoch === dialogEpoch.current) setDialogNotice(notice);
     });
   }
-  const [error, setError] = useState(""),
+  const [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
+    [showClosures, setShowClosures] = useState(true),
+    [fitSignal, setFitSignal] = useState(0),
+    [retryPlan, setRetryPlan] = useState(false),
+    [error, setError] = useState(""),
     [storageError, setStorageError] = useState(""),
     [unreadableSaved, setUnreadableSaved] = useState<
       false | "aside" | "pending"
@@ -193,6 +220,14 @@ export function App() {
     controllerRef = useRef<ForegroundNavigationController | null>(null),
     storeRef = useRef<LocalRouteStore | null>(null),
     activeRef = useRef<ActiveRideStore | null>(null),
+    completedRef = useRef<CompletedSessionStore | null>(null),
+    carriedStoreRef = useRef<CarriedRideStore | null>(null),
+    // What the rider rode of earlier routes of THIS ride before a rejoin (null: nothing yet), kept with the route key.
+    carriedRef = useRef<{
+      distanceMeters: number;
+      traversalEdges: unknown[];
+    } | null>(null),
+    finishLoopRef = useRef<(record: RouteRecord) => void>(() => {}),
     operation = useRef(0),
     snapshotState = useRef<unknown>(undefined);
   const success = (message: string, undo?: () => void) =>
@@ -289,6 +324,8 @@ export function App() {
       active = new ActiveRideStore(storage);
     storeRef.current = store;
     activeRef.current = active;
+    completedRef.current = new CompletedSessionStore(storage);
+    carriedStoreRef.current = new CarriedRideStore(storage);
     applyStore(store.read());
     const session = new BrowserSessionStore(storage);
     sessionRef.current = session;
@@ -314,6 +351,7 @@ export function App() {
           onAccepted: (guidance) => {
             snapshotState.current = guidance.state;
           },
+          onArrived: (record) => finishLoopRef.current(record),
           evaluate: async (route, fix, context) => {
             const response = await client.call<any>({
               op: "snapshot",
@@ -322,6 +360,8 @@ export function App() {
               accuracy: fix.accuracy,
               timestamp: fix.timestamp,
               progress: context.previousProgress,
+              // The first evaluation of a restored ride starts from the saved RIDDEN progress, not the matched position.
+              ridden: context.previousRidden,
               resume: context.resume,
               state: snapshotState.current,
               now: Date.now(),
@@ -352,6 +392,7 @@ export function App() {
         if (restored.state) {
           const token = ++operation.current;
           const ride = restored.state;
+          setReverseOf(null);
           setSelected(ride.record);
           setDraft(ride.record.draft as Draft);
           restoreScreen("preview");
@@ -366,12 +407,24 @@ export function App() {
             );
             if (disposed || token !== operation.current) return;
             setPreview(inspected);
+            void restoreDirection(
+              client,
+              ride.record,
+              () => !disposed && token === operation.current,
+            );
             if (inspected.canNavigate) {
               snapshotState.current = undefined;
+              const carried = carriedStoreRef.current?.read();
+              carriedRef.current =
+                carried && carried.recordKey === ride.record.key
+                  ? carried.carried
+                  : null;
               controller.start(
                 ride.record,
                 ride.routeProgressMeters,
                 ride.creditedDistanceMeters,
+                // The saved RIDDEN progress, kept apart from the matched position (older saves fall back conservatively).
+                ride.riddenMeters,
               );
               restoreScreen("navigation");
             } else
@@ -389,6 +442,7 @@ export function App() {
         } else if (previousSession.state) {
           const restoredSession = previousSession.state;
           setDraft(restoredSession.draft);
+          setReverseOf(null);
           setSelected(restoredSession.selected);
           setOrigin(restoredSession.origin);
           setSavedTab(restoredSession.savedTab);
@@ -407,8 +461,14 @@ export function App() {
                   now: Date.now(),
                 }),
               );
-              if (!disposed && token === operation.current)
+              if (!disposed && token === operation.current) {
                 setPreview(inspected);
+                void restoreDirection(
+                  client,
+                  restoredSession.selected,
+                  () => !disposed && token === operation.current,
+                );
+              }
             } catch (e) {
               if (!disposed && token === operation.current)
                 setError(errorText(e));
@@ -596,6 +656,7 @@ export function App() {
     setDraft({ ...emptyDraft(), mode });
     setPreview(null);
     setSelected(null);
+    setReverseOf(null);
     setOrigin("planner");
     go("planner");
   }
@@ -694,10 +755,55 @@ export function App() {
         : {}),
     };
   }
+  /** The rider's completed loops, newest first: recently ridden edges cost more, so the next loop is a fresh one. */
+  const loopHistory = () => completedRef.current?.read().state ?? [];
+  /**
+   * An exercise loop was genuinely completed (called synchronously by the navigation controller). The completed ride is
+   * ended HERE, before anything is awaited: it belongs to this moment, so a later ride, a reversal or a worker restart
+   * can never be stopped by it. Only the recording of the history happens afterwards, and it touches no live state: it
+   * uses the worker captured now and the carried ride captured now, and ends in a notice.
+   */
+  function loopFinished(record: RouteRecord) {
+    const client = clientRef.current;
+    const carried = carriedRef.current;
+    controllerRef.current?.stop();
+    snapshotState.current = undefined;
+    carriedRef.current = null;
+    carriedStoreRef.current?.clear();
+    go("preview");
+    void recordCompletion(client, record, carried);
+  }
+  async function recordCompletion(
+    client: RoutingClient | null,
+    record: RouteRecord,
+    carried: { distanceMeters: number; traversalEdges: unknown[] } | null,
+  ) {
+    let message = "Exercise route complete.";
+    try {
+      if (!client) throw new Error("routing unavailable");
+      const made = await client.call<{ session: unknown }>({
+        op: "completedSession",
+        route: record.route,
+        completedAt: Date.now(),
+        ...(carried ? { carried } : {}),
+      });
+      if (made.session) {
+        const saved = completedRef.current?.record(made.session);
+        if (saved && !saved.ok)
+          message =
+            "Exercise route complete, but its history could not be saved.";
+      }
+    } catch {
+      message = "Exercise route complete, but its history could not be saved.";
+    }
+    setToast({ message });
+  }
+  finishLoopRef.current = loopFinished;
   async function plan() {
     if (!clientRef.current || !draft.start) return;
     const token = ++operation.current;
     setError("");
+    setRetryPlan(false);
     setBusy(true);
     setScreen("searching");
     try {
@@ -708,12 +814,16 @@ export function App() {
           destination: draft.mode === "point" ? draft.destination : undefined,
           miles: draft.mode === "loop" ? draft.miles : undefined,
           proposed: draft.proposed,
+          ...(draft.mode === "loop"
+            ? { completedSessions: loopHistory() }
+            : {}),
           now: Date.now(),
         }),
       );
       if (token !== operation.current) return;
       const record = makeRecord(result, draft);
       setPreview(result);
+      setReverseOf(null);
       setSelected(record);
       setOrigin("planner");
       setScreen("preview");
@@ -721,6 +831,7 @@ export function App() {
     } catch (e) {
       if (token === operation.current) {
         setError(errorText(e));
+        setRetryPlan(retryable(e));
         setScreen("planner");
       }
     } finally {
@@ -731,6 +842,7 @@ export function App() {
     if (!clientRef.current) return;
     setGapFocus(null);
     const token = ++operation.current;
+    setReverseOf(null);
     setSelected(record);
     setPreview(null);
     setDraft(record.draft as Draft);
@@ -778,6 +890,8 @@ export function App() {
         return;
       }
       snapshotState.current = undefined;
+      carriedRef.current = null;
+      carriedStoreRef.current?.clear();
       controllerRef.current?.start(selected);
       setScreen("navigation");
     } catch (e) {
@@ -789,6 +903,8 @@ export function App() {
   function stopNavigation() {
     controllerRef.current?.stop();
     snapshotState.current = undefined;
+    carriedRef.current = null;
+    carriedStoreRef.current?.clear();
     go("preview");
   }
   async function recalculate() {
@@ -803,12 +919,16 @@ export function App() {
         await clientRef.current.call<RouteResult>({
           op: "recalculate",
           route: selected.route,
+          ...((selected.route as { kind?: string }).kind === "ExerciseLoop"
+            ? { completedSessions: loopHistory() }
+            : {}),
           now: Date.now(),
         }),
       );
       if (token !== operation.current) return;
       const replacement = makeRecord(result, draft, selected.title);
       setPreview(result);
+      setReverseOf(null);
       setSelected(replacement);
       applyStore(
         storeRef.current!.replace(before.key, replacement),
@@ -831,25 +951,48 @@ export function App() {
     const controller = controllerRef.current;
     // One captured snapshot supplies both the worker payload and the later applicability check.
     const request = controller?.rerouteRequest();
-    if (!controller || !request || !clientRef.current) return;
+    const client = clientRef.current;
+    if (!controller || !request || !client) return;
     const token = ++operation.current;
     setBusy(true);
     setError("");
     try {
       const result = routeOkay(
-        await clientRef.current.call<RouteResult>({
+        await client.call<RouteResult>({
           op: "reroute",
           route: request.record.route,
           point: {
             latitude: request.fix.latitude,
             longitude: request.fix.longitude,
           },
-          progress: request.progress,
+          // As in native, a rejoin is measured from how far the rider has credibly RIDDEN, not from where an off-route
+          // position happens to project onto the loop.
+          progress: request.riddenMeters,
           mode,
           now: Date.now(),
         }),
       );
       if (token !== operation.current) return;
+      // Everything that needs the worker is finished BEFORE the ownership check below, so that once the ride is known to
+      // be the same ride, adopting the replacement is one synchronous step that cannot be overtaken.
+      let carried: {
+        distanceMeters: number;
+        traversalEdges: unknown[];
+      } | null = null;
+      if (mode === "rejoin") {
+        // What was ridden of the loop before leaving it counts toward the finished workout, as in native.
+        const made = await client.call<{
+          carried: { distanceMeters: number; traversalEdges: unknown[] };
+        }>({
+          op: "carryRide",
+          route: request.record.route,
+          progress: request.riddenMeters,
+          ...(carriedRef.current ? { carried: carriedRef.current } : {}),
+          now: Date.now(),
+        });
+        carried = made.carried;
+        if (token !== operation.current) return;
+      }
       // A newer fix may have queued behind this reroute: wait for it so the current position is known.
       const settled = await controller.whenEvaluationsSettled();
       if (token !== operation.current) return;
@@ -865,21 +1008,156 @@ export function App() {
           result.warnings.join(" ") ||
             "This reroute cannot be navigated safely.",
         );
+      // From here to the end of the try block nothing is awaited.
       const record = makeRecord(
         result,
         request.record.draft as Draft,
         mode === "return" ? "Returning to start" : request.record.title,
       );
       setPreview(result);
+      setReverseOf(null);
       setSelected(record);
       snapshotState.current = undefined;
+      if (carried) {
+        carriedRef.current = carried;
+        carriedStoreRef.current?.write({ recordKey: record.key, carried });
+      }
       controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));
+      // What changed, in native's words.
+      const meters = (value: number) => `${miles(value)} mi`;
+      success(
+        mode === "destination"
+          ? `Route updated from here: ${meters(result.distance)} to your destination.`
+          : mode === "rejoin"
+            ? `Rejoining the loop ahead: ${meters(result.distance)} to the finish (${meters(
+                Math.max(
+                  0,
+                  ((request.record.route as { totalDistanceMeters?: number })
+                    .totalDistanceMeters ?? 0) - request.riddenMeters,
+                ),
+              )} remained on the planned loop).`
+            : `Heading back to the start: ${meters(result.distance)}.`,
+      );
+    } catch (e) {
+      // As in native, a search that finds nothing says so from where the rider is.
+      const text = errorText(e);
+      if (token === operation.current)
+        setError(
+          /^No safe route/.test(text)
+            ? /closure/i.test(text)
+              ? "No safe route from here. Review the official detour guidance."
+              : "No safe route from here. Head back toward the route line."
+            : text,
+        );
+    } finally {
+      if (token === operation.current) setBusy(false);
+    }
+  }
+  /**
+   * Ride this loop the other way, as native does: a fresh description of the reversed route replaces what is shown and
+   * what is navigated, an active ride starts over (progress belongs to one direction, so an early turnaround cannot
+   * complete the reversed loop), and the planned direction stays the one that is saved.
+   */
+  async function reverseDirection() {
+    if (!selected || !clientRef.current || preview?.kind !== "ExerciseLoop")
+      return;
+    const token = ++operation.current;
+    setBusy(true);
+    setError("");
+    try {
+      const result = routeOkay(
+        await clientRef.current.call<RouteResult>({
+          op: "reverse",
+          route: selected.route,
+          now: Date.now(),
+        }),
+      );
+      if (token !== operation.current) return;
+      // A reversal inside a ride restarts it, so it needs a fresh yes. A no is not "keep riding the old route": the same
+      // closure or data change blocks the loop being ridden, so guidance and credit are dropped (reverseGate.ts).
+      const rideActive = !!nav.record;
+      const decision = reverseOutcome(result, rideActive);
+      if (decision.kind === "stop-ride") {
+        applyReverse(decision, rideActive, controllerRef.current, null);
+        snapshotState.current = undefined;
+        // Show the route as it stands now, so the reasons are in front of the rider, and leave the ride screen.
+        const current = routeOkay(
+          await clientRef.current.call<RouteResult>({
+            op: "inspect",
+            route: selected.route,
+            now: Date.now(),
+          }),
+        );
+        if (token !== operation.current) return;
+        setPreview(current);
+        go("preview");
+        setError(decision.message);
+        return;
+      }
+      const planned = reverseOf ?? selected;
+      const reversing = reverseOf === null;
+      const record = {
+        ...makeRecord(result, draft, selected.title),
+        ...(reversing ? { plannedKey: planned.key } : {}),
+      };
+      setPreview(result);
+      setSelected(record);
+      // Reversing back is the planned direction again.
+      setReverseOf(reversing ? planned : null);
+      snapshotState.current = undefined;
+      carriedRef.current = null;
+      carriedStoreRef.current?.clear();
+      applyReverse(decision, rideActive, controllerRef.current, record);
     } catch (e) {
       if (token === operation.current) setError(errorText(e));
     } finally {
       if (token === operation.current) setBusy(false);
     }
+  }
+  /**
+   * After a reload the direction comes back from the stored record, but only if it checks out: reversing the restored
+   * route afresh must reproduce the planned route's key. Otherwise the route is shown as exactly what it is, a route in
+   * its own right, rather than claiming a direction that cannot be shown.
+   */
+  async function restoreDirection(
+    client: RoutingClient,
+    record: RouteRecord,
+    isCurrent: () => boolean,
+  ) {
+    if (!record.plannedKey) return;
+    try {
+      const result = routeOkay(
+        await client.call<RouteResult>({
+          op: "reverse",
+          route: record.route,
+          now: Date.now(),
+        }),
+      );
+      if (!isCurrent()) return;
+      // Built from the restored record, not from live state: it keeps the data identity the route was planned on.
+      const { plannedKey: _reversed, ...own } = record;
+      const planned: RouteRecord = {
+        ...own,
+        key: stableRouteKey({
+          kind: result.kind,
+          segments: (result.route as { segments: unknown }).segments,
+        }),
+        route: result.route,
+      };
+      if (planned.key === record.plannedKey) {
+        setReverseOf(planned);
+        return;
+      }
+    } catch {
+      /* fall through: the direction is not provable */
+    }
+    if (!isCurrent()) return;
+    setSelected((current) =>
+      current && current.key === record.key
+        ? (({ plannedKey: _dropped, ...rest }) => rest)(current)
+        : current,
+    );
   }
   function saveRecord(record: RouteRecord) {
     applyStore(storeRef.current!.save(record), "Saved to Saved routes");
@@ -970,6 +1248,136 @@ export function App() {
         );
     }
   }
+  /**
+   * A picture of the route, drawn on this device with no map tiles (see shareImage.ts). It follows the same endpoint rule as
+   * the file export: unless the rider approves it, the route within about 300 m of the start and finish is left out and
+   * the ends are not marked. Shared with the system share sheet when it can take a file, otherwise downloaded.
+   */
+  const canShareImage = () => {
+    try {
+      return (
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({
+          files: [new File([""], "route.png", { type: "image/png" })],
+        })
+      );
+    } catch {
+      return false;
+    }
+  };
+  async function shareImage() {
+    if (!selected || !preview) return;
+    // This attempt belongs to the dialog session, the route and the request that started it; anything that finishes after
+    // any of them has moved on is refused before it can download, share or speak.
+    const epoch = dialogEpoch.current,
+      attempt = ++imageAttempt.current,
+      route = preview.route,
+      title = selected.title,
+      exact = exactExport,
+      bound = cuesState && cuesState.route === route ? cuesState.data : null,
+      current = () =>
+        epoch === dialogEpoch.current &&
+        attempt === imageAttempt.current &&
+        shownRouteRef.current === route;
+    cancelAnimationFrame(announceFrame.current);
+    setDialogNotice(null);
+    if (routeNeedsRecalculation(preview)) {
+      announce(
+        {
+          kind: "error",
+          message: `${staleRouteMessage(preview)} It cannot be shown as verified trail: recalculate it first.`,
+        },
+        epoch,
+      );
+      return;
+    }
+    try {
+      if (!bound)
+        throw new Error(
+          "The route's direction cues are not ready yet. Try again in a moment.",
+        );
+      const blob = await renderImage({
+        title,
+        summary: preview.summary ?? "",
+        warnings: preview.warnings,
+        attribution: exportAttribution(),
+        pieces: bound.pieces,
+        turnarounds: bound.turnarounds,
+        context: (network?.features ?? [])
+          .filter(
+            (feature) => feature.status !== "Proposed" || !!preview.proposed,
+          )
+          .flatMap((feature) => feature.paths),
+        exact,
+      });
+      if (!current()) return;
+      const file = new File([blob], "trail-mapper-route.png", {
+        type: "image/png",
+      });
+      if (canShareImage()) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: "Trail Mapper route",
+            text: "A ride planned with Trail Mapper.",
+          });
+          if (current())
+            announce(
+              { kind: "success", message: "Route image shared." },
+              epoch,
+            );
+        } catch (e) {
+          // Closing the share sheet is a choice, not a failure.
+          if ((e as { name?: string }).name !== "AbortError") throw e;
+        }
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "trail-mapper-route.png";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      announce(
+        {
+          kind: "success",
+          message: exact
+            ? "Route image downloaded with your endpoint approval."
+            : "Route image downloaded with endpoint areas removed.",
+        },
+        epoch,
+      );
+    } catch (e) {
+      if (current()) announce({ kind: "error", message: errorText(e) }, epoch);
+    }
+  }
+  /** The credit for what the route was actually drawn from: the county data, and every separately included part of it. */
+  function exportAttribution(): string {
+    if (network?.mode === "fixture")
+      return "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure. Map attribution: OpenStreetMap contributors.";
+    const record = network?.datasetRecord;
+    if (!record)
+      return "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.";
+    const parts = [
+      `${record.source.attribution} Changes: ${record.source.changes}`,
+    ];
+    for (const part of record.supplements ?? [])
+      parts.push(
+        `Reviewed OpenStreetMap paths (${part.featureCount}, kept as their own layer): ${part.attribution}. License: ${part.license} (${part.licenseUrl}).`,
+      );
+    if (record.access)
+      parts.push(
+        record.access.index.localFeatureCount > 0
+          ? "Road access: U.S. Census Bureau TIGER/Line roads and © OpenStreetMap contributors service roads (ODbL, https://www.openstreetmap.org/copyright), used only to route access to trails."
+          : "Road access: U.S. Census Bureau TIGER/Line roads, used only to route access to trails.",
+      );
+    if (record.proposedLayer)
+      parts.push(
+        `Proposed trails (preview only, not built): ${record.proposedLayer.attribution}. License: ${record.proposedLayer.license} (${record.proposedLayer.licenseUrl}).`,
+      );
+    parts.push("Generated route; not an official county map.");
+    return parts.join(" ");
+  }
   function downloadGeoJson() {
     if (!selected || !preview) return;
     // Its lines would be exported as verified existing trail, but the loaded data no longer confirms them.
@@ -1044,12 +1452,7 @@ export function App() {
         action: "download",
         includeExactEndpoints: exactExport,
         fullRouteApproved: exactExport,
-        attribution:
-          network?.mode === "fixture"
-            ? "Synthetic review geometry created for Trail Mapper, CC0. Not real infrastructure. Map attribution: OpenStreetMap contributors."
-            : network?.datasetRecord
-              ? `${network.datasetRecord.source.attribution} Changes: ${network.datasetRecord.source.changes} Generated route; not an official county map.`
-              : "Trail data: McLean County GIS Consortium (McGIS) and members. Access roads: U.S. Census Bureau. Supplemental/access data © OpenStreetMap contributors (https://www.openstreetmap.org/copyright), ODbL. Generated route; not an official county map.",
+        attribution: exportAttribution(),
       });
       const url = URL.createObjectURL(
         new Blob([JSON.stringify(geojson, null, 2)], {
@@ -1082,7 +1485,8 @@ export function App() {
     return () => cancelAnimationFrame(frame);
   }, [screen, network]);
   const isSaved =
-      !!selected && library.saved.some((item) => item.key === selected.key),
+      !!selected &&
+      library.saved.some((item) => item.key === (reverseOf ?? selected).key),
     isPlanner = draft.mode === "loop",
     validMiles =
       Number.isFinite(draft.miles) && draft.miles >= 0.5 && draft.miles <= 100;
@@ -1095,6 +1499,42 @@ export function App() {
     showRoute = ["preview", "navigation", "searching"].includes(screen)
       ? preview
       : null;
+  // The map cues (chevrons, second pass, turn-around signs) come from the shared core for the route being shown. They are an
+  // enhancement: if they cannot be had, the route is drawn as a plain line.
+  // A result belongs to the route it was computed for. It is used only while that route is the one being shown, so a
+  // held answer for an earlier route (a switch, a reversal, a failure, a restart) can never be drawn or exported
+  // under a different route's title and checks.
+  const [cuesState, setCuesState] = useState<{
+    route: unknown;
+    data: MapCues;
+  } | null>(null);
+  const shownRoute = showRoute?.route;
+  shownRouteRef.current = shownRoute;
+  const cues =
+    cuesState && shownRoute !== undefined && cuesState.route === shownRoute
+      ? cuesState.data
+      : null;
+  useEffect(() => {
+    const client = clientRef.current;
+    setCuesState(null);
+    if (!client || !shownRoute) return;
+    let current = true;
+    client
+      .call<MapCues>({ op: "mapCues", route: shownRoute })
+      .then((made) => {
+        if (current)
+          setCuesState({
+            route: shownRoute,
+            data: { pieces: made.pieces, turnarounds: made.turnarounds },
+          });
+      })
+      .catch(() => {
+        if (current) setCuesState(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [shownRoute]);
   const back = () => {
     if (screen === "navigation") {
       stopNavigation();
@@ -1186,9 +1626,20 @@ export function App() {
           picking={screen === "map-picker"}
           onPick={chooseMap}
           position={nav.fix ?? undefined}
-          closures={network?.closures ?? []}
+          closures={
+            screen === "explore" && !showClosures
+              ? []
+              : (network?.closures ?? [])
+          }
+          fitSignal={fitSignal}
+          cues={cues}
+          riddenMeters={screen === "navigation" ? nav.riddenMeters : undefined}
           fixture={fixtureData}
           county={network?.mode === "county"}
+          osm={
+            Boolean(network?.datasetRecord?.supplements?.length) ||
+            (network?.datasetRecord?.access?.index.localFeatureCount ?? 0) > 0
+          }
         />
         <section
           className="panel"
@@ -1242,7 +1693,19 @@ export function App() {
           {error && !(routingDown && error === ROUTING_UNAVAILABLE_MESSAGE) && (
             <div className="error" role="alert">
               <p>{error}</p>
-              <button onClick={() => setError("")}>Dismiss</button>
+              {retryPlan && screen === "planner" && canPlan && !busy && (
+                <button className="primary" onClick={() => void plan()}>
+                  Try again
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setError("");
+                  setRetryPlan(false);
+                }}
+              >
+                Dismiss
+              </button>
             </div>
           )}
           {locationRequest && (
@@ -1395,7 +1858,7 @@ export function App() {
                 <fieldset>
                   <legend>Target distance</legend>
                   <div className="distance-presets">
-                    {[3, 5, 10, 15].map((value) => (
+                    {[3, 5, 8, 10].map((value) => (
                       <button
                         key={value}
                         aria-pressed={draft.miles === value}
@@ -1434,21 +1897,13 @@ export function App() {
                   </p>
                 </fieldset>
               )}
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={draft.proposed}
-                  onChange={(e) =>
-                    setDraft({ ...draft, proposed: e.target.checked })
-                  }
-                />
-                <span>
-                  Include proposed trails
-                  <small>
-                    Opt in to planned paths that may not be built or usable.
-                  </small>
-                </span>
-              </label>
+              <ProposedChoice
+                network={network}
+                checked={draft.proposed}
+                onChange={(proposed) => setDraft({ ...draft, proposed })}
+                label="Include proposed trails"
+                description="Opt in to planned paths that may not be built or usable."
+              />
               <button
                 className="primary wide"
                 disabled={!canPlan}
@@ -1518,7 +1973,33 @@ export function App() {
                       ? ` · ${miles(preview.retracedDistance)} mi retraced`
                       : null}
                   </p>
+                  {preview.kind === "ExerciseLoop" && (
+                    <>
+                      <p>
+                        <strong>{loopHeading(preview.targetMatched)}</strong>
+                      </p>
+                      {typeof preview.requestedDistance === "number" && (
+                        <p className="route-details">
+                          {loopComparison(
+                            preview.requestedDistance,
+                            preview.distance,
+                          )}
+                        </p>
+                      )}
+                    </>
+                  )}
                   {preview.summary && <p>{preview.summary}</p>}
+                  {cues &&
+                    (cues.turnarounds.length > 0 ||
+                      cues.pieces.some(
+                        (piece) => piece.repeatsEarlierTravel,
+                      )) && (
+                      <p className="caption">
+                        Chevrons show direction. Double chevrons: second pass,
+                        drawn beside the first. Turn-around signs mark where the
+                        route turns back.
+                      </p>
+                    )}
                   <AccessConnections
                     gaps={preview.accessGaps ?? []}
                     onShow={(id) => setGapFocus({ id })}
@@ -1587,6 +2068,13 @@ export function App() {
                     the page. There is no background tracking or offline
                     navigation.
                   </p>
+                  {preview.kind === "ExerciseLoop" && (
+                    <DirectionControl
+                      reversed={reverseOf !== null}
+                      busy={busy || checking}
+                      onReverse={() => void reverseDirection()}
+                    />
+                  )}
                   <button
                     className="primary wide"
                     aria-describedby="foreground-note"
@@ -1610,7 +2098,7 @@ export function App() {
                         if (isSaved) {
                           setSavedTab("saved");
                           go("saved");
-                        } else if (selected) saveRecord(selected);
+                        } else if (selected) saveRecord(reverseOf ?? selected);
                       }}
                     >
                       {isSaved ? "Saved · View" : "Save"}
@@ -1700,6 +2188,13 @@ export function App() {
                   ? ` · location accuracy ${Math.round(nav.fix.accuracy)} m`
                   : ""}
               </p>
+              {preview?.kind === "ExerciseLoop" && (
+                <DirectionControl
+                  reversed={reverseOf !== null}
+                  busy={busy}
+                  onReverse={() => void reverseDirection()}
+                />
+              )}
               {nav.phase === "off-route" && (
                 <div className="reroute-actions">
                   <h2>Choose what comes next</h2>
@@ -1934,20 +2429,40 @@ export function App() {
                 See the trails, connectors and shared roadways used by the route
                 planner.
               </p>
+              <ProposedChoice
+                network={network}
+                checked={draft.proposed}
+                onChange={(proposed) => setDraft({ ...draft, proposed })}
+                label="Show proposed trails"
+                description="Planned paths may not be built or usable."
+              />
               <label className="checkbox">
                 <input
                   type="checkbox"
-                  checked={draft.proposed}
-                  onChange={(e) =>
-                    setDraft({ ...draft, proposed: e.target.checked })
-                  }
+                  checked={showClosures}
+                  onChange={(e) => setShowClosures(e.target.checked)}
                 />
                 <span>
-                  Show proposed trails
-                  <small>Planned paths may not be built or usable.</small>
+                  Reported closure areas
+                  <small>
+                    Dashed amber lines are approximate work corridors, not exact
+                    closure limits. Tap a marker for the official notice.
+                  </small>
                 </span>
               </label>
-              <Legend />
+              <Legend
+                verified={network.features.some((f) =>
+                  f.id.startsWith("verified-osm:way:"),
+                )}
+              />
+              <div className="actions">
+                <button onClick={() => setFitSignal((n) => n + 1)}>
+                  Show all trails
+                </button>
+                <SafeLink href="https://mcleangis.maps.arcgis.com/apps/instant/sidebar/index.html?appid=d98c151296fd4b03860af8f4df7787a4">
+                  County map
+                </SafeLink>
+              </div>
               <p>
                 {network.features.length} mapped trail features in this dataset.
               </p>
@@ -2093,8 +2608,8 @@ export function App() {
             <span>
               Include exact start and destination
               <small>
-                I understand this file will reveal the full route and its
-                endpoints.
+                I understand this file or image will reveal the full route and
+                its endpoints, and the image the saved route title.
               </small>
             </span>
           </label>
@@ -2110,6 +2625,22 @@ export function App() {
             {exactExport
               ? "Download full route GeoJSON"
               : "Download private GeoJSON"}
+          </button>
+          <hr />
+          <h3>Route image</h3>
+          <p>
+            A picture of the route with its direction, notices and data credit,
+            drawn on this device. It has no map tiles, and it follows the choice
+            above: unless you include exact endpoints, about 300 m around the
+            start and finish are left out and the title is a generic one. With
+            exact endpoints it shows this route’s saved title.
+          </p>
+          <button
+            className="wide"
+            disabled={!cues}
+            onClick={() => void shareImage()}
+          >
+            {canShareImage() ? "Share route image" : "Save route image"}
           </button>
         </Modal>
       )}

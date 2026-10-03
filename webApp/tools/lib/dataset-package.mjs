@@ -21,6 +21,41 @@ import {
   toPlain,
 } from "./canonical-json.mjs";
 
+import {
+  PROPOSED_LAYER_ID,
+  ProposedError,
+  admitProposed,
+  checkProposedLayer,
+  committedProposedManifestFile,
+  proposedInputFile,
+} from "./proposed-layer.mjs";
+import {
+  AccessPackageError,
+  buildAccessParts,
+  checkAccessParts,
+} from "./access-package.mjs";
+import {
+  AccessSourceError,
+  admitAccessSource,
+  checkAccessSource,
+  checkAccessTransform,
+  committedAccessManifestFile,
+} from "./access-source.mjs";
+import {
+  approvedCompositionProblems,
+  compositionDifferences,
+  reconstructComposition,
+} from "./composition.mjs";
+import {
+  SUPPLEMENT_KIND,
+  SUPPLEMENT_LAYER_ID,
+  SupplementError,
+  admitSupplement,
+  checkSupplementLayer,
+  committedOsmManifestFile,
+  osmInputFile,
+} from "./osm-supplement.mjs";
+
 export const NETWORK_SCHEMA = "trail-mapper.network/1";
 export const RECORD_SCHEMA = "trail-mapper.dataset/1";
 export const packageDir = process.env.TRAIL_COUNTY_DIR
@@ -50,6 +85,25 @@ export const committedApprovalFile = join(
 export const approvalRecordFile = process.env.TRAIL_COUNTY_APPROVAL
   ? resolve(process.env.TRAIL_COUNTY_APPROVAL)
   : committedApprovalFile;
+
+// TRAIL_OSM_MANIFEST is a test hook like TRAIL_COUNTY_MANIFEST: the audit refuses a package made from any other manifest.
+export const osmManifestFile = process.env.TRAIL_OSM_MANIFEST
+  ? resolve(process.env.TRAIL_OSM_MANIFEST)
+  : committedOsmManifestFile;
+export const proposedManifestFile =
+  process.env.TRAIL_PROPOSED_MANIFEST ?? committedProposedManifestFile;
+// TRAIL_ACCESS_MANIFEST is a test hook like the others: a synthetic extract needs a synthetic (test-only) source
+// manifest, and the release audit refuses a package made from any manifest other than the committed one.
+export const accessManifestFile = process.env.TRAIL_ACCESS_MANIFEST
+  ? resolve(process.env.TRAIL_ACCESS_MANIFEST)
+  : committedAccessManifestFile;
+export {
+  committedAccessManifestFile,
+  committedOsmManifestFile,
+  osmInputFile,
+  committedProposedManifestFile,
+  proposedInputFile,
+};
 
 export class AdmissionError extends Error {
   constructor(message) {
@@ -85,6 +139,72 @@ export function admittedFeatures(manifest) {
     refuse("The manifest count does not match its entries.");
   return entries;
 }
+
+/**
+ * The committed source contract: what the extract's own descriptive fields must say, and the one extraction-time
+ * observation the review recorded. The licence-evidence URL, item, source, licence and review dates are PINNED reviewed
+ * facts (top-level manifest fields). The licence-evidence hash is NOT pinned by the review: it is the hash the extractor
+ * observed on the run the manifest records (`licenseEvidenceObservation`), kept so a changed value forces a new review
+ * instead of passing silently. Extraction-run time is a separate observation and is not part of this contract.
+ */
+export function sourceContractOf(manifest) {
+  const contract = manifest.sourceContract;
+  if (
+    !contract ||
+    typeof contract.changes !== "string" ||
+    !contract.changes ||
+    typeof contract.disclaimer !== "string" ||
+    !contract.disclaimer
+  )
+    refuse(
+      "The reviewed manifest carries no source contract (the change and disclaimer wording the extract must state).",
+    );
+  const observed = contract.licenseEvidenceObservation ?? null;
+  if (observed !== null && !/^[0-9a-f]{64}$/.test(observed.sha256 ?? ""))
+    refuse("The manifest's recorded licence-evidence observation has no hash.");
+  if (
+    typeof manifest.licenseEvidenceUrl !== "string" ||
+    !manifest.licenseEvidenceUrl
+  )
+    refuse("The reviewed manifest pins no licence-evidence URL.");
+  return {
+    changes: contract.changes,
+    disclaimer: contract.disclaimer,
+    evidenceSha256: observed?.sha256 ?? null,
+  };
+}
+
+/** The `source` block a record must carry, from the committed manifest alone (extraction time and attribution aside). */
+function expectedSource(manifest) {
+  const contract = sourceContractOf(manifest);
+  return {
+    reviewedOn: manifest.reviewedOn,
+    evidenceVerifiedAtUtc: manifest.evidenceVerifiedAtUtc ?? null,
+    licensedItemId: manifest.licensedItemId,
+    licensedSourceUrl: manifest.licensedSourceUrl,
+    license: manifest.license,
+    licenseUrl: manifest.licenseUrl,
+    licenseEvidenceUrl: manifest.licenseEvidenceUrl,
+    licenseEvidenceSha256: contract.evidenceSha256,
+    changes: contract.changes,
+    disclaimer: contract.disclaimer,
+  };
+}
+const SOURCE_KEYS = [
+  "reviewedOn",
+  "extractedAtUtc",
+  "evidenceVerifiedAtUtc",
+  "manifestSha256",
+  "licensedItemId",
+  "licensedSourceUrl",
+  "license",
+  "licenseUrl",
+  "licenseEvidenceUrl",
+  "licenseEvidenceSha256",
+  "attribution",
+  "changes",
+  "disclaimer",
+];
 
 /** IDs the manifest says must stay out of the public network (as "layer:objectId"). */
 export function excludedIds(manifest) {
@@ -185,6 +305,23 @@ export function admit(inputText, manifest) {
     refuse("The extract does not identify the reviewed licensed source.");
   if (input.reviewedOn !== manifest.reviewedOn)
     refuse("The extract was made against a different review date.");
+  // The extract's own descriptive fields are observations; they must say what the committed review says they say.
+  const contract = sourceContractOf(manifest);
+  if (sources.licenseEvidenceUrl !== manifest.licenseEvidenceUrl)
+    refuse(
+      "The extract names a different licence-evidence URL than the reviewed manifest.",
+    );
+  if ((sources.licenseEvidenceSha256 ?? null) !== contract.evidenceSha256)
+    refuse(
+      "The extract's licence-evidence hash differs from the one the review recorded; the licence evidence changed or was altered, so it needs a new review.",
+    );
+  if (
+    sources.changes !== contract.changes ||
+    sources.disclaimer !== contract.disclaimer
+  )
+    refuse(
+      "The extract's change disclosure or disclaimer is not the reviewed wording.",
+    );
   if (
     !sources.attribution ||
     !sources.licenseEvidenceUrl ||
@@ -303,7 +440,12 @@ export function admit(inputText, manifest) {
  * The runtime network as text: what the router reads plus the raw evidence the hashes cover. Geometry and attributes are
  * spliced in exactly as the extractor wrote them, so anyone can recompute the reviewed digests from the shipped file.
  */
-export function toNetworkText(features, domainsText) {
+export function toNetworkText(
+  features,
+  domainsText,
+  supplementLayer = null,
+  proposedLayer = null,
+) {
   const ordered = [...features].sort((a, b) => {
     const [la, oa] = a.id.split(":").map(Number);
     const [lb, ob] = b.id.split(":").map(Number);
@@ -317,7 +459,10 @@ export function toNetworkText(features, domainsText) {
     `"attributesSha256":${JSON.stringify(feature.provenance.attributesSha256)},"attributes":${feature.attributesText}}}`;
   return (
     `{"schema":${JSON.stringify(NETWORK_SCHEMA)},"domains":${domainsText},"layers":[{"id":8,"name":"Reviewed licensed McGIS trails",` +
-    `"featureCount":${ordered.length},"features":[${ordered.map(one).join(",")}]}]}`
+    `"featureCount":${ordered.length},"features":[${ordered.map(one).join(",")}]}` +
+    (supplementLayer ? `,${JSON.stringify(supplementLayer)}` : "") +
+    (proposedLayer ? `,${JSON.stringify(proposedLayer)}` : "") +
+    `]}`
   );
 }
 
@@ -337,30 +482,92 @@ export async function buildPackage({
   manifest,
   manifestBytes,
   approval,
+  supplement = null,
+  // Optional ordinary-road access: split into base roads (loaded with the data) and endpoint-local service-road tiles
+  // (loaded on demand), every part hash-named and pinned by the record. Off unless given.
+  access = null,
+  // Optional, rights-gated proposed trails: their own opt-in layer, only with a granted rights block (proposed-layer.mjs).
+  proposed = null,
 }) {
   const { features, domainsText } = admit(inputText, manifest);
   const input = JSON.parse(inputText);
-  const body = Buffer.from(toNetworkText(features, domainsText), "utf8");
+  // Optional, separately reviewed OpenStreetMap supplement: its own layer, its own source and licence record.
+  const admittedSupplement = supplement
+    ? admitSupplement(supplement.inputText, supplement.manifest)
+    : null;
+  let admittedProposed = null;
+  try {
+    admittedProposed = proposed
+      ? admitProposed(proposed.inputText, proposed.manifest)
+      : null;
+  } catch (error) {
+    if (error instanceof ProposedError) throw new AdmissionError(error.message);
+    throw error;
+  }
+  const body = Buffer.from(
+    toNetworkText(
+      features,
+      domainsText,
+      admittedSupplement?.layer ?? null,
+      admittedProposed?.layer ?? null,
+    ),
+    "utf8",
+  );
   const contentSha = sha256(body);
   const file = `trails.${contentSha.slice(0, 12)}.json`;
+  let accessParts = null;
+  let accessSource = null;
+  try {
+    // Source review first: only the pinned extract is split into parts at all.
+    if (access) {
+      if (!access.manifestBytes)
+        refuse(
+          "Access roads need the reviewed access source manifest; none was given.",
+        );
+      accessSource = admitAccessSource(access.inputText, access.manifestBytes);
+    }
+    accessParts = access ? buildAccessParts(access.inputText) : null;
+    // ...and the parts made from it must be the reviewed transform of that input, not merely well-formed.
+    if (accessParts)
+      checkAccessTransform(accessParts.descriptor, accessSource.manifest);
+  } catch (error) {
+    if (
+      error instanceof AccessPackageError ||
+      error instanceof AccessSourceError
+    )
+      throw new AdmissionError(error.message);
+    throw error;
+  }
+  // The identity a saved route remembers moves with the access data it was planned on, not just the trails.
+  const combinedSha = accessParts
+    ? accessIdentity(contentSha, accessParts.descriptor.index.sha256)
+    : null;
   const layerCounts = {};
   for (const feature of features) {
     const layerId = feature.id.split(":")[0];
     layerCounts[layerId] = (layerCounts[layerId] ?? 0) + 1;
   }
+  if (admittedSupplement)
+    layerCounts[SUPPLEMENT_LAYER_ID] = admittedSupplement.layer.features.length;
+  if (admittedProposed)
+    layerCounts[PROPOSED_LAYER_ID] = admittedProposed.layer.features.length;
+  const totalFeatures =
+    features.length +
+    (admittedSupplement?.layer.features.length ?? 0) +
+    (admittedProposed?.layer.features.length ?? 0);
   const sources = input.sources;
   const record = {
     schema: RECORD_SCHEMA,
     kind: "county",
     id: approval.id,
-    version: `${manifest.reviewedOn}.${contentSha.slice(0, 12)}`,
+    version: `${manifest.reviewedOn}.${(combinedSha ?? contentSha).slice(0, 12)}`,
     label: approval.label,
     content: {
       file,
       schema: NETWORK_SCHEMA,
       sha256: contentSha,
       bytes: body.length,
-      featureCount: features.length,
+      featureCount: totalFeatures,
       layerCounts,
     },
     source: {
@@ -373,38 +580,107 @@ export async function buildPackage({
       licensedSourceUrl: manifest.licensedSourceUrl,
       license: manifest.license,
       licenseUrl: manifest.licenseUrl,
-      licenseEvidenceUrl: sources.licenseEvidenceUrl,
-      licenseEvidenceSha256: sources.licenseEvidenceSha256 ?? null,
+      // Pinned reviewed facts, taken from the committed manifest (admission already proved the extract says the same).
+      licenseEvidenceUrl: manifest.licenseEvidenceUrl,
+      licenseEvidenceSha256: sourceContractOf(manifest).evidenceSha256,
       attribution: approval.attribution,
-      changes: sources.changes,
-      disclaimer: sources.disclaimer,
+      changes: sourceContractOf(manifest).changes,
+      disclaimer: sourceContractOf(manifest).disclaimer,
     },
     omitted: {
+      // Segments admitted through the rights-gated layer are no longer omitted.
       proposedFeatureIds: [...excludedIds(manifest)]
+        .filter(
+          (id) => !(admittedProposed?.facts.segmentIds ?? []).includes(id),
+        )
         .map((id) => Number(id.split(":")[1]))
         .sort((a, b) => a - b),
-      supplements: approval.omitted.supplements,
-      accessRoads: approval.omitted.accessRoads,
+      // What is left out, in words a rider can read. With a supplement packaged, the approval record's "none" no longer
+      // applies; the reviewed exclusions are stated instead (gaps stay gaps).
+      supplements: admittedSupplement
+        ? `Included as a separate layer: ${admittedSupplement.facts.featureCount} reviewed OpenStreetMap paths (ODbL). Not included: ${admittedSupplement.facts.excludedUntilVerified.join(" ")}`
+        : approval.omitted.supplements,
+      accessRoads: accessParts
+        ? `Included: ordinary-road access (${accessParts.descriptor.base.featureCount} base road features, and ${accessParts.descriptor.index.localFeatureCount} endpoint-local service roads loaded only around a trip's start and destination). Sources: U.S. Census Bureau TIGER/Line roads and OpenStreetMap contributors (ODbL). Access to a trail is routed along these roads where they exist and is otherwise shown as a labeled gap, never an invented connection.`
+        : approval.omitted.accessRoads,
     },
+    ...(admittedSupplement
+      ? {
+          supplements: [
+            {
+              ...admittedSupplement.facts,
+              manifestSha256: sha256(supplement.manifestBytes),
+            },
+          ],
+        }
+      : {}),
+    ...(accessParts
+      ? {
+          access: {
+            ...accessParts.descriptor,
+            combinedSha256: combinedSha,
+            // Which reviewed input these roads were made from (source review; not rights, not publication approval).
+            source: accessSource.source,
+          },
+        }
+      : {}),
+    ...(admittedProposed
+      ? {
+          proposedLayer: {
+            ...admittedProposed.facts,
+            manifestSha256: sha256(Buffer.from(proposed.manifestBytes)),
+          },
+        }
+      : {}),
     approval: {
       approved: approval.approved === true,
       approvedBy: approval.approvedBy ?? null,
       approvedOn: approval.approvedOn ?? null,
+      // The owner's committed expected composition, carried verbatim (null until an owner records one). Never filled in here.
+      approvedComposition: approval.approvedComposition ?? null,
       blockers: [...(approval.blockers ?? [])],
     },
   };
-  return { record, body, file };
+  // The composition this build actually has, reconstructed from the parts just made, recorded beside the approval.
+  const partBytes = new Map(
+    (accessParts?.files ?? []).map((part) => [part.file, part.body]),
+  );
+  record.composition = reconstructComposition({
+    record,
+    body,
+    network: JSON.parse(body.toString("utf8")),
+    readPart: (name) => partBytes.get(name),
+    manifestBytes,
+    osmManifestBytes: supplement?.manifestBytes ?? null,
+    proposedManifestBytes: proposed?.manifestBytes ?? null,
+    accessManifestBytes: access?.manifestBytes ?? null,
+  });
+  // An approved build must be exactly the approved composition; a build that differs is refused, not shipped.
+  if (approval.approved === true) {
+    const problems = approvedCompositionProblems(
+      record.composition,
+      approval.approvedComposition,
+    );
+    if (problems.length) refuse(problems.join("; "));
+  }
+  return { record, body, file, accessFiles: accessParts?.files ?? [] };
 }
+
+/** The combined identity of a network and the tile index that pins its access roads. */
+export const accessIdentity = (networkSha256, indexSha256) =>
+  sha256(Buffer.from(`${networkSha256}:${indexSha256}`, "utf8"));
 
 /** Writes the package atomically: a failed run never leaves a half-written or mixed-version directory. */
 export async function writePackage(
-  { record, body, file },
+  { record, body, file, accessFiles = [] },
   outDir = packageDir,
 ) {
   const staging = `${outDir}.staging-${process.pid}`;
   await rm(staging, { recursive: true, force: true });
   await mkdir(staging, { recursive: true });
   await writeFile(join(staging, file), body);
+  for (const part of accessFiles)
+    await writeFile(join(staging, part.file), part.body);
   await writeFile(
     join(staging, "dataset.json"),
     JSON.stringify(record, null, 2) + "\n",
@@ -420,6 +696,15 @@ export async function packageFromFiles({
   manifestPath = manifestFile,
   approvalPath = approvalRecordFile,
   outDir = packageDir,
+  // Optional reviewed OpenStreetMap supplement: pass `osmInput` (its normalized file) to include it.
+  osmInput = null,
+  osmManifestPath = osmManifestFile,
+  // Optional normalized access-road extract (TIGER roads plus endpoint-local service roads).
+  accessInput = null,
+  accessManifestPath = accessManifestFile,
+  // Optional proposed-trails extract; requires a manifest whose rights block is granted, else packaging is refused.
+  proposedInput = null,
+  proposedManifestPath = proposedManifestFile,
 } = {}) {
   let inputBytes;
   try {
@@ -430,11 +715,65 @@ export async function packageFromFiles({
     );
   }
   const manifestBytes = await readFile(manifestPath);
+  let supplement = null;
+  if (osmInput) {
+    let text;
+    try {
+      text = await readFile(osmInput, "utf8");
+    } catch {
+      throw new AdmissionError(
+        `The OpenStreetMap supplement is not present (${osmInput}). Generate it with the native extractor (python tools/fetch-verified-trail-additions.py); this tool never contacts OpenStreetMap.`,
+      );
+    }
+    const osmManifestBytes = await readFile(osmManifestPath);
+    supplement = {
+      inputText: text,
+      manifest: JSON.parse(osmManifestBytes.toString("utf8").replace(/^﻿/, "")),
+      manifestBytes: osmManifestBytes,
+    };
+  }
+  let proposed = null;
+  if (proposedInput) {
+    let proposedText;
+    try {
+      proposedText = await readFile(proposedInput, "utf8");
+    } catch {
+      throw new AdmissionError(
+        `The proposed-trails extract is not present (${proposedInput}); this tool never contacts a server.`,
+      );
+    }
+    const proposedManifestBytes = await readFile(proposedManifestPath);
+    proposed = {
+      inputText: proposedText,
+      manifest: JSON.parse(
+        proposedManifestBytes.toString("utf8").replace(/^﻿/, ""),
+      ),
+      manifestBytes: proposedManifestBytes,
+    };
+  }
+  let access = null;
+  if (accessInput) {
+    let text;
+    try {
+      text = await readFile(accessInput, "utf8");
+    } catch {
+      throw new AdmissionError(
+        `The access road extract is not present (${accessInput}). Generate it with the native extractor; this tool never contacts a server.`,
+      );
+    }
+    access = {
+      inputText: text,
+      manifestBytes: await readFile(accessManifestPath),
+    };
+  }
   const built = await buildPackage({
     inputText: inputBytes.replace(/^﻿/, ""),
     manifest: JSON.parse(manifestBytes.toString("utf8")),
     manifestBytes,
     approval: await readApprovalRecord(approvalPath),
+    supplement,
+    access,
+    proposed,
   });
   await writePackage(built, outDir);
   return built;
@@ -444,7 +783,16 @@ export async function packageFromFiles({
  * Checks a dataset record and its network bytes against the reviewed manifest: hash, exact ID set, excluded IDs
  * absent, per-feature evidence, counts. Shared by the build step and the release audit of the built artifact.
  */
-export function checkPackage(record, body, manifestBytes) {
+export function checkPackage(
+  record,
+  body,
+  manifestBytes,
+  osmManifestBytes = null,
+  // Returns the bytes of a package file by name (undefined when absent); required when the record has access parts.
+  readPart = undefined,
+  proposedManifestBytes = null,
+  accessManifestBytes = null,
+) {
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (record.schema !== RECORD_SCHEMA || record.kind !== "county")
     refuse("The dataset record is not a county record of this version.");
@@ -457,20 +805,78 @@ export function checkPackage(record, body, manifestBytes) {
     refuse(
       "The package was made from a different reviewed manifest than the one committed.",
     );
+  // Every descriptive claim the record copies from the source must be the committed, reviewed one (or an observation
+  // that is named as such: extraction-run time, and the approval record's attribution, checked in the audit).
+  const reviewedSource = expectedSource(manifest);
+  if (
+    JSON.stringify(Object.keys(record.source ?? {}).sort()) !==
+    JSON.stringify([...SOURCE_KEYS].sort())
+  )
+    refuse("The record's source description has unexpected or missing fields.");
+  for (const [key, expected] of Object.entries(reviewedSource))
+    if ((record.source[key] ?? null) !== expected)
+      refuse(
+        `The record's source ${key} is not the reviewed value in the committed manifest.`,
+      );
+  if (typeof record.source.extractedAtUtc !== "string")
+    refuse("The record has no extraction time for its source.");
   const tree = parseWithNumbers(body.toString("utf8"));
   const network = toPlain(tree);
   if (network.schema !== NETWORK_SCHEMA)
     refuse("The packaged network has an unknown schema.");
   const entries = admittedFeatures(manifest);
   const excluded = excludedIds(manifest);
-  const features = network.layers.flatMap((layer) => layer.features);
+  // The county layer(s) are the reviewed set; an OpenStreetMap supplement is its own layer, checked on its own terms.
+  const supplementLayers = network.layers.filter(
+    (layer) => layer.id === SUPPLEMENT_LAYER_ID,
+  );
+  // Exactly ONE descriptor for the ONE supported OpenStreetMap layer, or none when none is packaged: a second
+  // descriptor, even one that looks valid, would double counts and add licence claims nothing authenticated.
+  if (
+    record.supplements !== undefined &&
+    (!Array.isArray(record.supplements) || record.supplements.length > 1)
+  )
+    refuse(
+      "The record must describe at most one OpenStreetMap supplement, as a list.",
+    );
+  const hasPart = (record.supplements ?? []).length > 0;
+  if (
+    hasPart !== (supplementLayers.length === 1) ||
+    supplementLayers.length > 1
+  )
+    refuse(
+      "The OpenStreetMap supplement layer and the record's description of it disagree.",
+    );
+  if ((record.supplements ?? []).some((part) => part.id !== SUPPLEMENT_KIND))
+    refuse("The record describes a supplement this version does not know.");
+  const proposedLayers = network.layers.filter(
+    (layer) => layer.id === PROPOSED_LAYER_ID,
+  );
+  const hasProposed = Boolean(record.proposedLayer);
+  if (
+    hasProposed !== (proposedLayers.length === 1) ||
+    proposedLayers.length > 1
+  )
+    refuse(
+      "The proposed-trails layer and the record's description of it disagree.",
+    );
+  const countyLayers = network.layers.filter(
+    (layer) =>
+      layer.id !== SUPPLEMENT_LAYER_ID && layer.id !== PROPOSED_LAYER_ID,
+  );
+  const features = countyLayers.flatMap((layer) => layer.features);
   const ids = new Set(features.map((f) => f.id));
   if (features.length !== ids.size || !sameSet(ids, new Set(entries.keys())))
     refuse("The packaged trails are not exactly the reviewed set.");
   for (const id of ids)
     if (excluded.has(id)) refuse(`${id} is excluded but present.`);
   const domains = authenticateDomains(tree.domains, manifest);
-  const treeFeatures = tree.layers.flatMap((layer) => layer.features);
+  const treeFeatures = tree.layers
+    .filter(
+      (layer) =>
+        layer.id !== SUPPLEMENT_LAYER_ID && layer.id !== PROPOSED_LAYER_ID,
+    )
+    .flatMap((layer) => layer.features);
   for (const [index, feature] of features.entries()) {
     const entry = entries.get(feature.id);
     if (
@@ -501,8 +907,140 @@ export function checkPackage(record, body, manifestBytes) {
         `${feature.id} carries decoded labels that differ from the reviewed domain mapping.`,
       );
   }
-  if (record.content.featureCount !== features.length)
+  let supplementCount = 0;
+  if (hasPart) {
+    if (!osmManifestBytes)
+      refuse(
+        "The record has an OpenStreetMap supplement but no reviewed manifest to check it against.",
+      );
+    try {
+      checkSupplementLayer(
+        supplementLayers[0],
+        record,
+        JSON.parse(osmManifestBytes.toString("utf8").replace(/^﻿/, "")),
+        osmManifestBytes,
+      );
+    } catch (error) {
+      if (error instanceof SupplementError) refuse(error.message);
+      throw error;
+    }
+    supplementCount = supplementLayers[0].features.length;
+  }
+  let proposedCount = 0;
+  if (hasProposed) {
+    if (!proposedManifestBytes)
+      refuse(
+        "The record has a proposed-trails layer but no reviewed manifest to check it against.",
+      );
+    try {
+      proposedCount = checkProposedLayer(
+        proposedLayers[0],
+        record,
+        JSON.parse(proposedManifestBytes.toString("utf8").replace(/^﻿/, "")),
+        proposedManifestBytes,
+      );
+    } catch (error) {
+      if (error instanceof ProposedError) refuse(error.message);
+      throw error;
+    }
+  }
+  if (
+    record.content.featureCount !==
+    features.length + supplementCount + proposedCount
+  )
     refuse("The recorded feature count is wrong.");
+  // The per-layer counts and the list of omitted proposed segments are copied descriptions too: recompute them.
+  const actualCounts = {};
+  for (const feature of features) {
+    const layerId = feature.id.split(":")[0];
+    actualCounts[layerId] = (actualCounts[layerId] ?? 0) + 1;
+  }
+  if (supplementCount) actualCounts[SUPPLEMENT_LAYER_ID] = supplementCount;
+  if (proposedCount) actualCounts[PROPOSED_LAYER_ID] = proposedCount;
+  const sortedKeys = (object) =>
+    JSON.stringify(
+      Object.entries(object ?? {}).sort(([a], [b]) => (a < b ? -1 : 1)),
+    );
+  if (sortedKeys(record.content.layerCounts) !== sortedKeys(actualCounts))
+    refuse("The recorded per-layer counts are wrong.");
+  const shippedProposed = new Set(
+    proposedLayers.flatMap((layer) => layer.features.map((f) => f.id)),
+  );
+  const omittedIds = [...excluded]
+    .filter((id) => !shippedProposed.has(id))
+    .map((id) => Number(id.split(":")[1]))
+    .sort((a, b) => a - b);
+  if (
+    JSON.stringify(record.omitted?.proposedFeatureIds) !==
+    JSON.stringify(omittedIds)
+  )
+    refuse("The record's list of omitted proposed segments is wrong.");
+  if (record.access) {
+    if (!readPart)
+      refuse(
+        "The record describes access road parts but none were given to check.",
+      );
+    try {
+      checkAccessParts(record.access, readPart);
+    } catch (error) {
+      if (error instanceof AccessPackageError) refuse(error.message);
+      throw error;
+    }
+    if (!accessManifestBytes)
+      refuse(
+        "The record has access roads but no reviewed access source manifest to check them against.",
+      );
+    try {
+      checkAccessSource(record.access, accessManifestBytes);
+    } catch (error) {
+      if (error instanceof AccessSourceError) refuse(error.message);
+      throw error;
+    }
+    const combined = accessIdentity(
+      record.content.sha256,
+      record.access.index.sha256,
+    );
+    if (record.access.combinedSha256 !== combined)
+      refuse(
+        "The access identity does not match the network and its tile index.",
+      );
+    if (!record.version.endsWith(`.${combined.slice(0, 12)}`))
+      refuse(
+        "The dataset version does not name the combined network and access identity.",
+      );
+  } else if (!record.version.endsWith(`.${record.content.sha256.slice(0, 12)}`))
+    refuse("The dataset version does not name the network content.");
+  // Owner composition: what the record says it is must be what the parts and bytes actually are, and an approved record
+  // must be bound to exactly that composition by an expected composition it carries.
+  let actual;
+  try {
+    actual = reconstructComposition({
+      record,
+      body,
+      network,
+      readPart,
+      manifestBytes,
+      osmManifestBytes,
+      proposedManifestBytes,
+      accessManifestBytes,
+    });
+  } catch (error) {
+    refuse(
+      `The package composition could not be reconstructed: ${error.message}`,
+    );
+  }
+  const drift = compositionDifferences(actual, record.composition);
+  if (drift.length)
+    refuse(
+      `The record's composition differs from the package's actual parts (${drift.join(", ")}).`,
+    );
+  if (record.approval?.approved === true) {
+    const problems = approvedCompositionProblems(
+      actual,
+      record.approval.approvedComposition,
+    );
+    if (problems.length) refuse(problems.join("; "));
+  }
   return network;
 }
 
@@ -510,16 +1048,42 @@ export function checkPackage(record, body, manifestBytes) {
 export async function verifyPackageDir(
   dir = packageDir,
   manifestPath = manifestFile,
+  accessManifestPath = accessManifestFile,
 ) {
   const record = JSON.parse(await readFile(join(dir, "dataset.json"), "utf8"));
   const manifestBytes = await readFile(manifestPath);
   const body = await readFile(join(dir, record.content.file));
-  const network = checkPackage(record, body, manifestBytes);
+  const osmManifestBytes = (record.supplements ?? []).length
+    ? await readFile(osmManifestFile)
+    : null;
+  const proposedManifestBytes = record.proposedLayer
+    ? await readFile(proposedManifestFile)
+    : null;
+  const accessManifestBytes = record.access
+    ? await readFile(accessManifestPath)
+    : null;
   const listing = await readdir(dir);
-  const stray = listing.filter(
-    (name) => name !== "dataset.json" && name !== record.content.file,
+  const present = new Map();
+  for (const name of listing)
+    if (name !== "dataset.json" && name !== record.content.file)
+      present.set(name, await readFile(join(dir, name)));
+  const used = new Map();
+  const readPart = (name) => {
+    const bytes = present.get(name);
+    if (bytes) used.set(name, bytes);
+    return bytes;
+  };
+  const network = checkPackage(
+    record,
+    body,
+    manifestBytes,
+    osmManifestBytes,
+    readPart,
+    proposedManifestBytes,
+    accessManifestBytes,
   );
+  const stray = [...present.keys()].filter((name) => !used.has(name));
   if (stray.length)
     refuse(`Unexpected files in the package: ${stray.join(", ")}.`);
-  return { record, body, network };
+  return { record, body, network, accessFiles: [...used] };
 }

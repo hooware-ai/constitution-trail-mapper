@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { Draft, Endpoint, Point } from "./types";
+import type { Draft, Endpoint, Network, Point } from "./types";
 import { places, searchPlaces } from "./search";
 import type { PlaceRecord, RouteRecord } from "./platform/storage";
 export interface DialogNotice {
@@ -233,7 +233,7 @@ export function RouteRow({
     </li>
   );
 }
-export function Legend() {
+export function Legend({ verified = false }: { verified?: boolean }) {
   return (
     <div className="legend" aria-label="Map key">
       <span>
@@ -252,6 +252,12 @@ export function Legend() {
         <i className="shared" />
         Shared roadway
       </span>
+      {verified && (
+        <span>
+          <i className="verified" />
+          Verified addition
+        </span>
+      )}
       <span>
         <i className="proposed" />
         Proposed · not built
@@ -275,5 +281,66 @@ export function SafeLink({
     <a href={href} target="_blank" rel="noopener noreferrer">
       {children} ↗
     </a>
+  );
+}
+
+/**
+ * The opt-in for proposed (planned, unbuilt) trails. It says plainly when the loaded data carries none: a switch that
+ * does nothing would be a false promise, and the reason is shown instead of silently hiding the coverage that is missing.
+ */
+export function ProposedChoice({
+  network,
+  checked,
+  onChange,
+  label,
+  description,
+}: {
+  network: Network | null;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  description: string;
+}) {
+  const available = !!network?.features.some((f) => f.status === "Proposed");
+  const omitted =
+    network?.datasetRecord?.omitted.proposedFeatureIds.length ?? 0;
+  const why = available
+    ? description
+    : omitted > 0
+      ? `This data has no proposed trails: ${omitted} proposed ${omitted === 1 ? "segment is" : "segments are"} left out because the right to share ${omitted === 1 ? "it" : "them"} is not settled.`
+      : "This data set has no proposed trails.";
+  return (
+    <label className="checkbox">
+      <input
+        type="checkbox"
+        checked={available && checked}
+        disabled={!available}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>
+        {label}
+        <small>{why}</small>
+      </span>
+    </label>
+  );
+}
+
+/** Native's direction control for an exercise loop: which way it is being ridden, and a switch. */
+export function DirectionControl({
+  reversed,
+  busy,
+  onReverse,
+}: {
+  reversed: boolean;
+  busy: boolean;
+  onReverse: () => void;
+}) {
+  return (
+    <div className="direction-control">
+      <span>{reversed ? "Riding in reverse" : "Planned direction"}</span>
+      <button disabled={busy} onClick={onReverse}>
+        Reverse direction
+      </button>
+    </div>
   );
 }
