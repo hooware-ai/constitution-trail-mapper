@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   IMAGE_WIDTH,
+  PRIVATE_IMAGE_TITLE,
   PRIVACY_RADIUS_METERS,
   fitProjection,
   hideEndpoints,
@@ -272,4 +273,60 @@ test("notices and credit are never truncated: a long credit and many notices all
     plan.height > short.height,
     "the picture grows to hold what it must say",
   );
+});
+
+/** Every string the plan would paint, in one list, so a leak anywhere in the picture is caught. */
+const paintedText = (plan: ReturnType<typeof planImage>) => [
+  ...plan.title,
+  ...plan.summary,
+  ...plan.warnings.flat(),
+  ...plan.attribution,
+  ...plan.markers.map((m) => m.label),
+  ...plan.turnarounds.map((t) => t.label),
+];
+
+test("without exact approval no saved title is painted: not endpoint labels, not a loop's start label, not a rider's rename", () => {
+  const titles = [
+    "123 Private Home Lane to 987 Family School Drive",
+    "3.5 mi loop from 123 Private Home Lane",
+    "Aunt Carol's house, 4412 Maple",
+  ];
+  for (const title of titles) {
+    const plan = planImage(base({ title, exact: false }), measure);
+    const painted = paintedText(plan).join(" | ");
+    assert.deepEqual(plan.title, [PRIVATE_IMAGE_TITLE]);
+    for (const secret of [
+      "Private Home",
+      "Family School",
+      "Aunt Carol",
+      "Maple",
+    ])
+      assert.ok(!painted.includes(secret), `${secret} leaked: ${painted}`);
+    // The route's public facts are still there.
+    assert.match(painted, /Exercise loop found: 3\.5 mi/);
+    assert.match(painted, /Uptown trail detour advisory: closed\./);
+    assert.match(painted, /McGIS/);
+  }
+});
+
+test("a long private title is not painted either, and the exact opt-in control does paint the saved title", () => {
+  const long = "Home at 123 Private Home Lane ".repeat(8);
+  const hidden = planImage(base({ title: long, exact: false }), measure);
+  assert.deepEqual(hidden.title, [PRIVATE_IMAGE_TITLE]);
+  const exact = planImage(
+    base({ title: "123 Private Home Lane to 987 Family School Drive" }),
+    measure,
+  );
+  assert.ok(exact.title.join(" ").includes("123 Private Home Lane"));
+  // Approving the endpoints changes only the title and the ends: the notices and credit are identical.
+  const again = planImage(
+    base({
+      title: "123 Private Home Lane to 987 Family School Drive",
+      exact: false,
+    }),
+    measure,
+  );
+  assert.deepEqual(again.warnings, exact.warnings);
+  assert.deepEqual(again.attribution, exact.attribution);
+  assert.deepEqual(again.summary, exact.summary);
 });

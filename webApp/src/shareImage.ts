@@ -17,8 +17,14 @@ export const SECOND_PASS_OFFSET_PX = 22;
 export const IMAGE_CHEVRON_SPACING_PX = 110;
 /** Matches the GeoJSON export: nothing within this distance of the start or finish unless the rider approved it. */
 export const PRIVACY_RADIUS_METERS = 300;
+/**
+ * What the picture says instead of the route's saved title unless exact endpoints are approved: a saved title is built
+ * from the endpoint labels ("<start> to <destination>") or typed by the rider, so it can name a home or a school.
+ */
+export const PRIVATE_IMAGE_TITLE = "Planned route";
 
 export interface ImageInput {
+  /** The route's saved title. Painted only when `exact` is true; otherwise PRIVATE_IMAGE_TITLE is painted instead. */
   title: string;
   summary: string;
   /** Notices that apply to the route (closure and work advisories, data checks), as the app shows them. */
@@ -250,7 +256,14 @@ export function planImage(
   const innerWidth = IMAGE_WIDTH - MARGIN * 2;
   const text = (value: string, size: number, bold: boolean, width: number) =>
     wrapText(value, width, (t) => measure(t, size, bold));
-  const title = text(input.title, 64, true, innerWidth).slice(0, 2);
+  // Decided here, at the boundary, so no caller can paint a saved title (endpoint labels or rider-typed text) while the
+  // endpoints are meant to be private.
+  const title = text(
+    input.exact ? input.title : PRIVATE_IMAGE_TITLE,
+    64,
+    true,
+    innerWidth,
+  ).slice(0, 2);
   const summary = text(input.summary, 32, false, innerWidth).slice(0, 3);
   // The header is as tall as its words: name, title lines, summary lines, and a little air before the map.
   const header = 130 + (title.length - 1) * 70 + 24 + summary.length * 42 + 30;

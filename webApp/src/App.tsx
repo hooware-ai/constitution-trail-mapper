@@ -2608,8 +2608,8 @@ export function App() {
             <span>
               Include exact start and destination
               <small>
-                I understand this file will reveal the full route and its
-                endpoints.
+                I understand this file or image will reveal the full route and
+                its endpoints, and the image the saved route title.
               </small>
             </span>
           </label>
@@ -2632,7 +2632,8 @@ export function App() {
             A picture of the route with its direction, notices and data credit,
             drawn on this device. It has no map tiles, and it follows the choice
             above: unless you include exact endpoints, about 300 m around the
-            start and finish are left out.
+            start and finish are left out and the title is a generic one. With
+            exact endpoints it shows this route’s saved title.
           </p>
           <button
             className="wide"

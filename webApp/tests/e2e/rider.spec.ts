@@ -3999,3 +3999,104 @@ test("a held share that succeeds or fails after the dialog was reopened leaves t
     await expect(dialog.getByText("late failure")).toHaveCount(0);
   }
 });
+
+/** Records every string the page paints on a canvas, so a test judges what the picture actually says. */
+async function recordPainting(page: Page) {
+  await page.addInitScript(() => {
+    (window as any).__painted = [];
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (
+      this: CanvasRenderingContext2D,
+      text: string,
+      ...rest: [number, number, number?]
+    ) {
+      (window as any).__painted.push(String(text));
+      return original.call(this, text, ...rest);
+    };
+    Object.defineProperty(navigator, "canShare", { value: undefined });
+  });
+}
+async function paintedByImage(page: Page): Promise<string> {
+  await page.evaluate(() => ((window as any).__painted = []));
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Save route image" }).click(),
+  ]);
+  await download.path();
+  return (await page.evaluate(() => (window as any).__painted)).join(" ");
+}
+
+test("the default route image paints a generic title for a loop, never the start label", async ({
+  page,
+}) => {
+  await recordPainting(page);
+  await openShare(page);
+  const hidden = await paintedByImage(page);
+  expect(hidden).toContain("Planned route");
+  expect(hidden).not.toContain("Review trailhead");
+  expect(hidden).not.toMatch(/mi loop from/);
+  expect(hidden).toContain("Trail Mapper");
+  expect(hidden).toMatch(/Exercise loop found|Closest exercise route found/);
+  // Exact control: the same route with the endpoints approved paints the saved title.
+  await page
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const exact = await paintedByImage(page);
+  expect(exact).toContain("mi loop from Review trailhead · East");
+  expect(exact).not.toContain("Planned route");
+});
+
+test("the default route image paints a generic title for a point-to-point route", async ({
+  page,
+}) => {
+  await recordPainting(page);
+  await plan(page);
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Share route" })).toBeVisible();
+  const hidden = await paintedByImage(page);
+  expect(hidden).toContain("Planned route");
+  expect(hidden).not.toContain("Review trailhead");
+  expect(hidden).not.toMatch(/ to /);
+  await page
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const exact = await paintedByImage(page);
+  expect(exact).toContain(
+    "Review trailhead · East to Review trailhead · South",
+  );
+});
+
+test("a renamed route's title is not painted unless exact endpoints are approved", async ({
+  page,
+}) => {
+  await recordPainting(page);
+  await plan(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Saved · View" }).click();
+  await page
+    .getByRole("button", { name: /^Rename Review trailhead · East/ })
+    .click();
+  const rename = page.getByRole("dialog", { name: "Rename" });
+  await rename
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("Aunt Carol 4412 Private Lane");
+  await rename.getByRole("button", { name: "Save name" }).click();
+  await expect(rename).toHaveCount(0);
+  await page
+    .getByRole("button", { name: /Aunt Carol 4412 Private Lane/ })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Share route" })).toBeVisible();
+  const hidden = await paintedByImage(page);
+  expect(hidden).toContain("Planned route");
+  expect(hidden).not.toMatch(/Aunt Carol|4412|Private Lane/);
+  await page
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const exact = await paintedByImage(page);
+  expect(exact).toContain("Aunt Carol 4412 Private Lane");
+});
