@@ -2883,7 +2883,7 @@ for (const [name, patch] of [
     expect((await activeRideOf(page)).creditedDistanceMeters).toBeGreaterThan(
       100,
     );
-    await page.evaluate(() => (window as any).__ops.reverse.release());
+    await releaseHeld(page, "reverse");
 
     // Released: the ride is over, not left running on the old route and not restarted on the new one.
     await expect(
@@ -3149,7 +3149,7 @@ test("a held completion record never stops the ride that was started after the l
   await expect(page.locator(".guidance.navigating")).toBeVisible();
 
   // Releasing the old answer records the old loop and says so, and leaves the new ride exactly as it was.
-  await page.evaluate(() => (window as any).__ops.completedSession.release());
+  await releaseHeld(page, "completedSession");
   await expect(page.getByText("Exercise route complete.")).toBeVisible();
   await expect.poll(async () => (await completedOf(page)).length).toBe(1);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
@@ -3552,6 +3552,15 @@ test("control: the same jump IS credited once continued travel from where it lan
   expect(carried.carried.distanceMeters).toBeGreaterThan(1500);
 });
 
+/** Releases the answer a test is holding for `op`, once the worker has actually delivered it to the wrapper. */
+async function releaseHeld(page: Page, op: string) {
+  await expect
+    .poll(() =>
+      page.evaluate((name) => !!(window as any).__ops?.[name]?.pending, op),
+    )
+    .toBe(true);
+  await page.evaluate((name) => (window as any).__ops[name].release(), op);
+}
 async function openShare(page: Page, miles = "1") {
   await page.goto("/");
   await page.getByRole("button", { name: /Make an exercise loop/ }).click();
@@ -3800,7 +3809,7 @@ test("a reversal holds the image back until the reversed route has its own cues"
   await expect(signs(page)).toHaveCount(0);
   expect(await chevronPixels(page)).toBe(0);
   expect(await imageButtonEnabled(page)).toBe(false);
-  await page.evaluate(() => (window as any).__ops.mapCues.release());
+  await releaseHeld(page, "mapCues");
   await expect(signs(page)).toHaveCount(1);
   expect(await imageButtonEnabled(page)).toBe(true);
 });
