@@ -111,10 +111,13 @@ object TrailRouteAdvisorySijko {
      * for a closure's source leg ([TrailRouteClosureDerivationSijko.legsFor]); a front end that has the graph passes it so
      * a route snapped onto displaced node anchors is judged against the interval transferred onto them exactly (an empty
      * list says the graph was checked and has none). Null, the default, says the correspondence is UNAVAILABLE, and the
-     * gate is then conservative for the one case it cannot place: a leg of the closure's own feature that is off the
-     * unchanged source line but within the graph's reach of it (a displaced node anchor) counts as riding the section when
-     * it overlaps the interval widened by that reach. Legs on the source line keep the exact rule, so ordinary approaches
-     * are unaffected; nothing is invented, and the over-refusal is limited to routes on displaced chords near a closure.
+     * gate then FAILS CLOSED rather than guess where the graph moved anything: a leg of the closure's own feature (or an
+     * unattributed trail leg) that comes within the graph's snap reach of the closed section, or of the crossing, counts as
+     * riding it. The graph moves any vertex by at most that reach, so a leg that rides the carried interval always comes
+     * within it of the raw one (the carried interval is a convex combination of anchors each within the reach of its source
+     * vertex); nothing about alignment or whether the leg is on the unchanged line is assumed, because an anchor can move
+     * along the line as well as across it. The price is deliberate: with no graph, travel on the closure's own feature
+     * within that reach of a closed section or crossing is refused, including an approach that ends at a bound.
      */
     fun forRoute(
         route: TrailRoute,
@@ -250,8 +253,12 @@ object TrailRouteAdvisorySijko {
         }
     }
 
-    /** One polyline of trail travel, with whether its source is known to be the closure's feature. */
-    private class Candidate(val points: List<MapPoint>, val known: Boolean)
+    /**
+     * One polyline of trail travel, with whether its source is known to be the closure's feature and whether it is
+     * attributed to that feature or to no feature at all (a snap connector made along a run), which is what the
+     * unavailable-map fallback judges.
+     */
+    private class Candidate(val points: List<MapPoint>, val known: Boolean, val attributed: Boolean = known)
 
     /**
      * Polylines of trail travel that could be on [closure]'s feature. They stay whole: a decision about travel is made on
@@ -269,11 +276,11 @@ object TrailRouteAdvisorySijko {
         val out = mutableListOf<Candidate>()
         candidates.forEach { next ->
             val previous = out.lastOrNull()
-            if (previous != null && previous.known == next.known && next.points.isNotEmpty() &&
+            if (previous != null && previous.known == next.known && previous.attributed == next.attributed && next.points.isNotEmpty() &&
                 previous.points.isNotEmpty() &&
                 TrailDistanceSijko.metersBetween(previous.points.last(), next.points.first()) <= JoinMeters
             ) {
-                out[out.lastIndex] = Candidate(previous.points + next.points, previous.known)
+                out[out.lastIndex] = Candidate(previous.points + next.points, previous.known, previous.attributed)
             } else {
                 out += next
             }
@@ -286,7 +293,7 @@ object TrailRouteAdvisorySijko {
             // A route without per-edge provenance: its merged trail segments, judged by geometry alone.
             return route.segments
                 .filter { it.type == TrailRouteSegmentType.Trail && TrailNetworkRole.SharedRoadways !in it.routeRoles }
-                .map { Candidate(it.points, false) }
+                .map { Candidate(it.points, known = false, attributed = false) }
         }
         return route.edges
             // The closure's own feature, or an edge with no recorded source (a snap connector made along it).
@@ -297,21 +304,12 @@ object TrailRouteAdvisorySijko {
                 // is not the closed trail whatever edge carries it.
                 edge.routeSegments
                     .filter { it.type == TrailRouteSegmentType.Trail }
-                    .map { Candidate(it.points, known) }
+                    .map { Candidate(it.points, known, attributed = true) }
             }
     }
 
-    /**
-     * A line to judge travel against, with the closure's interval (or crossing position) expressed on it. A conservative
-     * reference ([offSourceLineOnly]) judges only legs that are off the line but within [tolerance] of it.
-     */
-    private class Reference(
-        val frame: TrailRouteSourceFrame,
-        val low: Double,
-        val high: Double,
-        val tolerance: Double = OnSectionLineToleranceMeters,
-        val offSourceLineOnly: Boolean = false,
-    )
+    /** A line to judge travel against, with the closure's interval (or crossing position) expressed on it. */
+    private class Reference(val frame: TrailRouteSourceFrame, val low: Double, val high: Double)
 
     /**
      * The lines a candidate may travel on: the unchanged source line, and, for a leg of the closure's own feature, each
@@ -320,21 +318,53 @@ object TrailRouteAdvisorySijko {
      */
     private fun references(candidate: Candidate, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>?): List<Reference> {
         val own = frameOf(closure)?.let { frame -> intervalOf(frame, closure).let { Reference(frame, it.first, it.second) } }
-        if (!candidate.known) {
+        if (!candidate.known || derived == null) {
             return listOfNotNull(own)
-        }
-        if (derived == null) {
-            // The correspondence is unavailable: the only thing that can be said of a leg off the source line is that the
-            // graph moved it by at most its reach, so the interval it could be carried to is the interval widened by that.
-            val conservative = own?.let {
-                Reference(it.frame, it.low - GraphReachMeters, it.high + GraphReachMeters, GraphReachMeters, offSourceLineOnly = true)
-            }
-            return listOfNotNull(own, conservative)
         }
         val transferred = derived.filter { it.closureId == closure.id }.mapNotNull { leg ->
             TrailRouteSourceFrame(leg.from, leg.to).takeIf { it.length > 0.0 }?.let { Reference(it, leg.low, leg.high) }
         }
         return listOfNotNull(own) + transferred
+    }
+
+    /**
+     * The unavailable-map fallback: does any leg of this attributed polyline come within the graph's reach of the closed
+     * section's line (or of the crossing point)? Used only when no correspondence was supplied, and then it is the whole
+     * judgement for attributed legs beyond the exact check on the source line.
+     */
+    private fun withinGraphReach(candidate: Candidate, closure: TrailRouteClosure): Boolean {
+        if (!candidate.attributed) {
+            return false
+        }
+        val section = closure.closedPath
+        return candidate.points.zipWithNext().any { (start, end) ->
+            if (closure.isCrossing) {
+                TrailDistanceSijko.projectToSegment(closure.closedFrom, start, end).distanceMeters <= GraphReachMeters
+            } else {
+                section.zipWithNext().any { (from, to) -> segmentDistanceMeters(start, end, from, to) <= GraphReachMeters }
+            }
+        }
+    }
+
+    /** The smallest distance between two straight legs: zero when they cross, else the nearest end to the other leg. */
+    private fun segmentDistanceMeters(a1: MapPoint, a2: MapPoint, b1: MapPoint, b2: MapPoint): Double {
+        val cosLatitude = kotlin.math.cos(a1.latitude * kotlin.math.PI / 180.0)
+        fun x(p: MapPoint) = (p.longitude - a1.longitude) * cosLatitude * TrailRouteSourceFrame.METERS_PER_DEGREE
+        fun y(p: MapPoint) = (p.latitude - a1.latitude) * TrailRouteSourceFrame.METERS_PER_DEGREE
+        fun cross(ox: Double, oy: Double, ax: Double, ay: Double, bx: Double, by: Double) = (ax - ox) * (by - oy) - (ay - oy) * (bx - ox)
+        val d1 = cross(x(a1), y(a1), x(a2), y(a2), x(b1), y(b1))
+        val d2 = cross(x(a1), y(a1), x(a2), y(a2), x(b2), y(b2))
+        val d3 = cross(x(b1), y(b1), x(b2), y(b2), x(a1), y(a1))
+        val d4 = cross(x(b1), y(b1), x(b2), y(b2), x(a2), y(a2))
+        if (d1 * d2 < 0.0 && d3 * d4 < 0.0) {
+            return 0.0
+        }
+        return minOf(
+            TrailDistanceSijko.projectToSegment(a1, b1, b2).distanceMeters,
+            TrailDistanceSijko.projectToSegment(a2, b1, b2).distanceMeters,
+            TrailDistanceSijko.projectToSegment(b1, a1, a2).distanceMeters,
+            TrailDistanceSijko.projectToSegment(b2, a1, a2).distanceMeters,
+        )
     }
 
     /**
@@ -347,10 +377,8 @@ object TrailRouteAdvisorySijko {
                 TrailDistanceSijko.projectToSegment(closure.closedFrom, start, end).distanceMeters <=
                     CrossingToleranceMeters
             } || references(candidate, closure, derived).any { reference ->
-                candidate.points.zipWithNext().any { (start, end) ->
-                    spansPosition(reference.frame, start, end, reference.low, reference.high, reference.tolerance, reference.offSourceLineOnly)
-                }
-            }
+                candidate.points.zipWithNext().any { (start, end) -> spansPosition(reference.frame, start, end, reference.low, reference.high) }
+            } || (derived == null && withinGraphReach(candidate, closure))
         }
     }
 
@@ -365,10 +393,8 @@ object TrailRouteAdvisorySijko {
     private fun ridesClosedSection(route: TrailRoute, closure: TrailRouteClosure, derived: List<TrailRouteDerivedClosureLeg>?): Boolean {
         return candidates(route, closure).any { candidate ->
             references(candidate, closure, derived).any { reference ->
-                travelsAlongPath(
-                    reference.frame, candidate.points, reference.low, reference.high, reference.tolerance, reference.offSourceLineOnly,
-                )
-            }
+                travelsAlongPath(reference.frame, candidate.points, reference.low, reference.high, OnSectionLineToleranceMeters)
+            } || (derived == null && withinGraphReach(candidate, closure))
         }
     }
 
@@ -407,16 +433,12 @@ object TrailRouteAdvisorySijko {
         low: Double,
         high: Double,
         tolerance: Double,
-        offSourceLineOnly: Boolean = false,
     ): Boolean {
         var overlap = 0.0
         points.zipWithNext().forEach { (start, end) ->
             // A repeated vertex has no direction and no length: it neither continues nor breaks a run.
             val alignment = frame.alignment(start, end) ?: return@forEach
-            val onSourceLine = frame.across(start) <= OnSectionLineToleranceMeters && frame.across(end) <= OnSectionLineToleranceMeters
-            if (frame.across(start) > tolerance || frame.across(end) > tolerance || alignment < LongitudinalCosine ||
-                (offSourceLineOnly && onSourceLine)
-            ) {
+            if (frame.across(start) > tolerance || frame.across(end) > tolerance || alignment < LongitudinalCosine) {
                 if (overlap > SectionOverlapEpsilonMeters) {
                     return true
                 }
@@ -440,13 +462,10 @@ object TrailRouteAdvisorySijko {
         end: MapPoint,
         low: Double,
         high: Double,
-        tolerance: Double = OnSectionLineToleranceMeters,
-        offSourceLineOnly: Boolean = false,
     ): Boolean {
         val alignment = frame.alignment(start, end) ?: return false
-        val onSourceLine = frame.across(start) <= OnSectionLineToleranceMeters && frame.across(end) <= OnSectionLineToleranceMeters
-        if (frame.across(start) > tolerance || frame.across(end) > tolerance || alignment < LongitudinalCosine ||
-            (offSourceLineOnly && onSourceLine)
+        if (frame.across(start) > OnSectionLineToleranceMeters || frame.across(end) > OnSectionLineToleranceMeters ||
+            alignment < LongitudinalCosine
         ) {
             return false
         }

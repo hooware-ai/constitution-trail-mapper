@@ -87,7 +87,7 @@ class TrailRouteTimedClosureSijkoTest {
         val southern = assertNotNull(findRoute(listOf(rawLeg), south, closure.closedFrom, activeNow))
         val northern = assertNotNull(findRoute(listOf(rawLeg), closure.closedTo, north, activeNow))
         listOf(southern, northern).forEach { route ->
-            assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(route, activeNow).isEmpty())
+            assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(route, activeNow, emptyList()).isEmpty())
         }
         // The route planned earlier is gated at the activation instant, not before.
         assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(early, activeNow - 1).isEmpty())
@@ -894,41 +894,42 @@ class TrailRouteTimedClosureSijkoTest {
     }
 
     @Test
-    fun theDefaultCallersStillLetLegitimateApproachesAndOtherGeometryThrough() {
+    fun theDefaultAndNullCallsFailClosedNearTheClosureAndStillLetFarGeometryAndOtherFeaturesThrough() {
         val now = closure.activeFromEpochMillis
         val south = TrailDistanceSijko.metersBetween(vertex97, closure.closedFrom)
         val north = south + TrailDistanceSijko.metersBetween(closure.closedFrom, closure.closedTo)
+        fun defaultGate(route: TrailRoute) = TrailRouteClosureGateSijko.blockingAdvisories(route, now).map { it.id }
+        fun nullGate(route: TrailRoute) = TrailRouteClosureGateSijko.blockingAdvisories(route, now, null).map { it.id }
         fun open(route: TrailRoute, label: String) {
             assertTrue(route.segments.none { !it.isRouted }, label)
-            assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(route, now).isEmpty(), label)
+            assertTrue(defaultGate(route).isEmpty(), label)
+            assertTrue(nullGate(route).isEmpty(), label)
             assertTrue(TrailRouteAdvisorySijko.forRoute(route, now).none { it.id == closure.id }, label)
         }
-        // On the unchanged source line, approaches that stop at a bound or short of it are open under the default call.
-        listOf(south - 30.0 to south, south to south - 30.0, north to north + 30.0, north + 30.0 to north, south - 30.0 to south - 0.3)
-            .forEach { (from, to) ->
-                val raw = listOf(rawLeg)
-                open(assertNotNull(findRoute(raw, mapped(raw, along(from)), mapped(raw, along(to)), now - 1)), "$from to $to")
-            }
-        // The actual Cypress crossing, in either feature order, and an unrelated trail.
+        // With no correspondence the gate cannot tell a raw-bound approach from a graph edge moved along the line, so a leg of
+        // the closure's own feature that comes within the graph's reach (15 m) of the section is refused, including an
+        // approach that ends exactly at a bound. This is deliberate and stated, not an eligibility promise.
+        val raw = listOf(rawLeg)
+        fun onRaw(from: Double, to: Double) =
+            assertNotNull(findRoute(raw, mapped(raw, along(from)), mapped(raw, along(to)), now - 1), "$from to $to")
+        listOf(south - 30.0 to south, south to south - 30.0, north to north + 30.0, south - 30.0 to south - 14.0).forEach { (from, to) ->
+            val route = onRaw(from, to)
+            assertEquals(listOf(closure.id), defaultGate(route), "$from to $to ends within the reach of a bound")
+            assertEquals(listOf(closure.id), nullGate(route))
+            // The same route is open for a caller that supplied the (empty) correspondence: the exact rule is unchanged.
+            assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(route, now, emptyList()).isEmpty())
+        }
+        // Farther than the reach from the section, on the same feature, the default call lets it through.
+        listOf(south - 60.0 to south - 20.0, north + 20.0 to north + 60.0, 40.0 to 200.0, north + 100.0 to north + 200.0)
+            .forEach { (from, to) -> open(onRaw(from, to), "$from to $to") }
+        // Another feature is never judged by the fallback: the actual Cypress crossing in either feature order, a neighbor.
         val cypress = shared("16:188", *cypressVertices)
         listOf(listOf(rawLeg, cypress), listOf(cypress, rawLeg)).forEach { features ->
             open(assertNotNull(findRoute(features, cypressVertices.first(), cypressVertices.last(), now - 1)), "Cypress")
         }
         val neighbor = trail("54:68", MapPoint(40.4990, -88.9900), MapPoint(40.5000, -88.9900))
         open(assertNotNull(findRoute(listOf(rawLeg, neighbor), neighbor.paths[0][0], neighbor.paths[0][1], now - 1)), "neighbor")
-        // On a displaced chord, travel far from the section is not caught by the conservative reach.
-        val spur = trail("54:9100", eastOf(vertex98, 14.0), eastOf(vertex98, 60.0))
-        val features = listOf(spur, rawLeg)
-        val legMeters = TrailDistanceSijko.metersBetween(vertex97, vertex98)
-        listOf(40.0 to 120.0, 150.0 to 300.0).forEach { (from, to) ->
-            val a = mapped(features, along(from))
-            val b = mapped(features, along(to))
-            open(assertNotNull(findRoute(features, a, b, now - 1)), "chord $from to $to")
-        }
-        val past = north + 60.0
-        open(assertNotNull(findRoute(features, mapped(features, along(past)), mapped(features, along(legMeters - 10.0)), now - 1)), "chord beyond")
-        // Camelback: a short approach and a route that starts beyond the graph's reach of the crossing are open under the
-        // default call (within that reach it is conservative where the leg is off the unchanged source line, by design).
+        // Camelback: a route that stays farther than the reach from the crossing is open under the default call.
         val crossing = TrailRouteClosureSijko.camelbackCrossing
         val leg = trail("54:1305", southEnd, vertex6, vertex7, vertex8, northEnd)
         val fromBeyond = MapPoint(
@@ -940,6 +941,70 @@ class TrailRouteTimedClosureSijkoTest {
         listOf(short, beyond).forEach {
             assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(it, crossing.activeFromEpochMillis).isEmpty())
         }
+    }
+
+    @Test
+    fun theRotatedCamelbackChordAndTheCollinearWillowAnchorAreRefusedByTheDefaultAndNullCallsAndByTheGraph() {
+        // (1) Opposite 14 m anchors rotate the short Camelback source leg, so the chord is neither aligned with it nor within
+        // 3 m of the raw crossing. (2) A node 14 m beyond vertex 98 ALONG the line carries the Willow interval along an exactly
+        // collinear chord, so on-the-line geometry does not prove the edge unmoved.
+        val crossing = TrailRouteClosureSijko.camelbackCrossing
+        val camelStart = crossing.activeFromEpochMillis
+        val camelEnd = assertNotNull(crossing.estimatedEndEpochMillis)
+        fun westOf(point: MapPoint, meters: Double) = eastOf(point, -meters)
+        fun lerp(from: MapPoint, to: MapPoint, t: Double) = MapPoint(
+            from.latitude + (to.latitude - from.latitude) * t,
+            from.longitude + (to.longitude - from.longitude) * t,
+        )
+        val a = westOf(vertex6, 14.0)
+        val b = eastOf(vertex7, 14.0)
+        val camelFeatures = listOf(
+            trail("54:9100", a, westOf(vertex6, 60.0)),
+            trail("54:9200", b, eastOf(vertex7, 60.0)),
+            trail("54:1305", southEnd, vertex6, vertex7, vertex8, northEnd),
+        )
+        val willowNode = lerp(vertex97, vertex98, 1.0 + 14.0 / TrailDistanceSijko.metersBetween(vertex97, vertex98))
+        val willowFeatures = listOf(trail("54:9100", willowNode, eastOf(willowNode, 60.0)), rawLeg)
+        val legMeters = TrailDistanceSijko.metersBetween(vertex97, vertex98)
+        val highFraction = (closure.closedTo.latitude - vertex97.latitude) / (vertex98.latitude - vertex97.latitude)
+        val cases = listOf(
+            Triple(
+                camelFeatures, crossing,
+                listOf(lerp(a, b, 0.90) to lerp(a, b, 0.99), lerp(a, b, 0.99) to lerp(a, b, 0.90)),
+            ),
+            Triple(
+                willowFeatures, closure,
+                listOf(
+                    lerp(vertex97, vertex98, highFraction + 2.0 / legMeters) to lerp(vertex97, vertex98, highFraction + 5.0 / legMeters),
+                    lerp(vertex97, vertex98, highFraction + 5.0 / legMeters) to lerp(vertex97, vertex98, highFraction + 2.0 / legMeters),
+                ),
+            ),
+        )
+        cases.forEach { (features, closed, pairs) ->
+            val end = assertNotNull(closed.estimatedEndEpochMillis)
+            derivedLegs = derivedOf(features)
+            pairs.forEach { (from, to) ->
+                val route = assertNotNull(findRoute(features, mapped(features, from), mapped(features, to), closed.activeFromEpochMillis - 1))
+                // Nonvacuous preconditions: source feature only, no estimated hop, eligible before the closure.
+                assertTrue(route.segments.none { !it.isRouted })
+                assertTrue(route.edges.isNotEmpty() && route.edges.all { it.sourceFeatureId == "54:1305" })
+                assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(route, closed.activeFromEpochMillis - 1, null).isEmpty())
+                val restored = kotlinx.serialization.json.Json.decodeFromString(
+                    TrailRoute.serializer(), kotlinx.serialization.json.Json.encodeToString(TrailRoute.serializer(), route),
+                )
+                listOf(route, subdivided(route, 0.05), restored).forEach { variant ->
+                    listOf(closed.activeFromEpochMillis, end + 1).forEach { now ->
+                        // The graph's exact correspondence blocks it...
+                        assertEquals(listOf(closed.id), TrailRouteClosureGateSijko.blockingAdvisories(variant, now, derivedLegs).map { it.id }, "graph, ${closed.id}")
+                        // ...and so do the omitted-argument and explicit-null calls the Android screen and share paths make.
+                        assertEquals(listOf(closed.id), TrailRouteClosureGateSijko.blockingAdvisories(variant, now).map { it.id }, "default, ${closed.id}")
+                        assertEquals(listOf(closed.id), TrailRouteClosureGateSijko.blockingAdvisories(variant, now, null).map { it.id }, "null, ${closed.id}")
+                        assertTrue(TrailRouteAdvisorySijko.forRoute(variant, now).any { it.id == closed.id })
+                    }
+                }
+            }
+        }
+        assertTrue(camelEnd > camelStart)
     }
 
     // Where the loaded graph's derived geometry stands for a closure's source leg (what a front end with the graph passes).

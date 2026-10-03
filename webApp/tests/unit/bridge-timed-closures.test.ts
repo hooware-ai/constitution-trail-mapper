@@ -1942,3 +1942,100 @@ test(
     );
   },
 );
+
+test(
+  "The rotated Camelback chord (opposite 14 m anchors) and the collinear Willow anchor (a node 14 m beyond vertex 98 along the line) are refused by inspect and Start",
+  { skip },
+  async () => {
+    const lerp = (
+      a: { latitude: number; longitude: number },
+      b: { latitude: number; longitude: number },
+      t: number,
+    ) => ({
+      latitude: a.latitude + (b.latitude - a.latitude) * t,
+      longitude: a.longitude + (b.longitude - a.longitude) * t,
+    });
+    // Rotated Camelback: A 14 m west of vertex 6, B 14 m east of vertex 7, both spurs listed before the source.
+    const a = eastOf(V6, -14);
+    const b = eastOf(V7, 14);
+    const camel = await engine(
+      network(
+        feature("54:9100", [a, eastOf(V6, -60)]),
+        feature("54:9200", [b, eastOf(V7, 60)]),
+        camelbackTrail(),
+      ),
+      CAMEL_START - 1,
+    );
+    for (const [from, to] of [
+      [lerp(a, b, 0.9), lerp(a, b, 0.99)],
+      [lerp(a, b, 0.99), lerp(a, b, 0.9)],
+    ]) {
+      const start = snap(camel.call, from, CAMEL_START - 1);
+      const planned = plan(
+        camel.call,
+        start,
+        snap(camel.call, to, CAMEL_START - 1),
+        CAMEL_START - 1,
+      );
+      assert.ok(planned.route);
+      assert.equal(planned.accessGaps.length, 0);
+      assert.equal(planned.canNavigate, true);
+      assert.ok(
+        planned.route.edges.every((e: any) => e.sourceFeatureId === "54:1305"),
+      );
+      for (const now of [CAMEL_START, CAMEL_END + 1]) {
+        const inspected = camel.call({
+          op: "inspect",
+          route: planned.route,
+          now,
+        });
+        assert.equal(inspected.canNavigate, false, `Camelback at ${now}`);
+        assert.equal(inspected.closures[0].id, CAMEL_ID);
+        assert.equal(startAt(camel.call, planned.route, start, now).ok, false);
+      }
+    }
+    // Collinear Willow anchor: D lies on the line, 14 m beyond vertex 98.
+    const d = lerp(V97, V98, 1 + 14 / LEG_METERS);
+    const willowEngine = await engine(
+      network(
+        feature("54:9100", [d, eastOf(d, 60)]),
+        feature("54:1305", [V97, V98]),
+      ),
+    );
+    const high = (TO.latitude - V97.latitude) / (V98.latitude - V97.latitude);
+    for (const [from, to] of [
+      [
+        lerp(V97, V98, high + 2 / LEG_METERS),
+        lerp(V97, V98, high + 5 / LEG_METERS),
+      ],
+      [
+        lerp(V97, V98, high + 5 / LEG_METERS),
+        lerp(V97, V98, high + 2 / LEG_METERS),
+      ],
+    ]) {
+      const start = snap(willowEngine.call, from, WILLOW_START - 1);
+      const planned = plan(
+        willowEngine.call,
+        start,
+        snap(willowEngine.call, to, WILLOW_START - 1),
+        WILLOW_START - 1,
+      );
+      assert.ok(planned.route);
+      assert.equal(planned.accessGaps.length, 0);
+      assert.equal(planned.canNavigate, true);
+      for (const now of [WILLOW_START, WILLOW_END + 1]) {
+        const inspected = willowEngine.call({
+          op: "inspect",
+          route: planned.route,
+          now,
+        });
+        assert.equal(inspected.canNavigate, false, `Willow at ${now}`);
+        assert.equal(inspected.closures[0].id, WILLOW_ID);
+        assert.equal(
+          startAt(willowEngine.call, planned.route, start, now).ok,
+          false,
+        );
+      }
+    }
+  },
+);

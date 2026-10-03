@@ -102,7 +102,7 @@ class TimedClosureRealDataTest {
             val northern = assertNotNull(find(network, closure.closedTo, raw[98], willowStart), "$name northern")
             listOf(southern, northern).forEach { route ->
                 assertTrue(gated(route, willowStart).isEmpty(), name)
-                assertTrue(TrailRouteAdvisorySijko.forRoute(route, willowStart).none { it.id == closure.id }, name)
+                assertTrue(TrailRouteAdvisorySijko.forRoute(route, willowStart, derivedLegs).none { it.id == closure.id }, name)
             }
             // The northern approach reaches the junction at vertex 98 where 54:2578 / 54:4349 / Hidden Creek meet.
             listOf("54:4349" to 0, "54:2578" to 2, "16:1348" to 0).forEach { (id, pathIndex) ->

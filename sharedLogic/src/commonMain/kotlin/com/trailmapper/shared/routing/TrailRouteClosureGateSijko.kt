@@ -64,7 +64,18 @@ object TrailRouteClosureGateSijko {
             TrailRouteRerouteAccess.NotAvailable -> null
             TrailRouteRerouteAccess.LoadFailed -> return TrailRouteRecalculationOutcome.RoadDataFailed
         }
-        val start = startOf(route) ?: return noRouteFor(route, nowEpochMillis, derived)
+        // The graph is in hand here, so the correspondence is never unavailable: the saved route is judged against the
+        // legs of the uncut graph it was planned on, and a replacement against those of the graph it was planned on now.
+        val enabled = TrailFeatureFilterSijko.enabledFeatures(features, TrailRouteRerouteSijko.layersFor(route))
+        val routeLegs = derived
+            ?: TrailRouteClosureDerivationSijko.legsFor(TrailGraphBuilderSijko.buildGraph(enabled, cancellationCheckpoint = cancellationCheckpoint))
+        val replacementLegs = TrailRouteClosureDerivationSijko.legsFor(
+            TrailGraphBuilderSijko.buildGraph(
+                TrailRouteClosureSijko.openFeatures(enabled, nowEpochMillis).features,
+                cancellationCheckpoint = cancellationCheckpoint,
+            ),
+        )
+        val start = startOf(route) ?: return noRouteFor(route, nowEpochMillis, routeLegs)
         val replacement = if (route.kind == TrailRouteKind.ExerciseLoop) {
             val targetMeters = route.requestedDistanceMeters ?: route.totalDistanceMeters
             val accessGraph = accessFeatures?.let { roads ->
@@ -95,10 +106,10 @@ object TrailRouteClosureGateSijko {
         return replacement
             // Not a way around a closure: a route that travels it, or whose own geometry (an estimated hop included)
             // starts or ends inside a closed section.
-            ?.takeIf { blockingAdvisories(it, nowEpochMillis, derived).isEmpty() }
+            ?.takeIf { blockingAdvisories(it, nowEpochMillis, replacementLegs).isEmpty() }
             ?.takeIf { !TrailRouteAdvisorySijko.entersClosedSection(it, nowEpochMillis) }
             ?.let(TrailRouteRecalculationOutcome::Replacement)
-            ?: noRouteFor(route, nowEpochMillis, derived)
+            ?: noRouteFor(route, nowEpochMillis, routeLegs)
     }
 
     private fun noRouteFor(
