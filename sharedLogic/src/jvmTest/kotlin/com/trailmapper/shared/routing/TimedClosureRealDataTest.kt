@@ -167,6 +167,70 @@ class TimedClosureRealDataTest {
     }
 
     @Test
+    fun routesPlannedFromMapPickerPointsOnTheActualPathAreGatedWhereverTheGraphNodesAnchorTheirLine() {
+        // The app plans from the points its map picker returns: projected onto the loaded network's own node-anchored
+        // line, which in some feature orders is a chord a few meters off the raw leg. Each route here is positively
+        // Start-eligible before the closure (no estimated hop, an ordinary gate) and must be refused from the instant.
+        val legMeters = TrailDistanceSijko.metersBetween(raw[97], raw[98])
+        var derived = 0
+        var eligible = 0
+        variants().forEach { (name, network) ->
+            val graph = TrailGraphBuilderSijko.buildGraph(network)
+            fun mapped(point: MapPoint) = assertNotNull(NearestTrailSnapSijko.nearestSnap(graph, point)).projectedPoint
+            val first = mapped(pointAlong(0.6 * legMeters))
+            listOf(1.0, 5.0, 10.0, 14.0, 16.0, 30.0, 150.0).forEach { meters ->
+                val other = mapped(pointAlong(0.6 * legMeters + meters))
+                listOf(first to other, other to first).forEach { (from, to) ->
+                    val route = assertNotNull(find(network, from, to, willowStart - 1), "$name $meters m route exists")
+                    assertTrue(!estimatedGap(route), "$name $meters m: a zero-gap route")
+                    assertTrue(route.edges.isNotEmpty() && route.edges.all { it.sourceFeatureId == "54:1305" }, "$name $meters m is on the source feature")
+                    assertTrue(gated(route, willowStart - 1).isEmpty(), "$name $meters m: eligible before the closure")
+                    eligible++
+                    if (route.segments.flatMap { it.points }.any { TrailDistanceSijko.projectToSegment(it, raw[97], raw[98]).distanceMeters > 0.5 }) {
+                        derived++
+                    }
+                    assertEquals(listOf(closure.id), gated(route, willowStart), "$name map-picker route, $meters m, at the instant")
+                    assertEquals(listOf(closure.id), gated(route, willowEstimate + 1), "$name map-picker route, $meters m, after the estimate")
+                    val outcome = TrailRouteClosureGateSijko.recalculate(network, route, TrailRouteRerouteAccess.NotAvailable, nowEpochMillis = willowStart)
+                    assertTrue(outcome is TrailRouteRecalculationOutcome.NoSafeRoute, "$name $meters m recalculation gave $outcome")
+                    assertTrue(closure in (outcome as TrailRouteRecalculationOutcome.NoSafeRoute).blockingClosures, name)
+                }
+            }
+        }
+        assertEquals(variants().size * 14, eligible)
+        // Not vacuous: some of these really do ride a chord that leaves the raw leg, where a raw-line check would miss them.
+        assertTrue(derived >= 10, "only $derived map-picker routes followed a node-anchored chord")
+    }
+
+    @Test
+    fun mapPickerRoutesAcrossTheCamelbackCrossingAreGatedInEveryOrder() {
+        val start = camelback.activeFromEpochMillis
+        val end = assertNotNull(camelback.estimatedEndEpochMillis)
+        variants().forEach { (name, network) ->
+            val graph = TrailGraphBuilderSijko.buildGraph(network)
+            fun mapped(point: MapPoint) = assertNotNull(NearestTrailSnapSijko.nearestSnap(graph, point)).projectedPoint
+            fun beside(meters: Double) =
+                MapPoint(camelback.closedFrom.latitude + meters / 111_194.93, camelback.closedFrom.longitude)
+            // From just short of the crossing to just beyond it, and from either side of vertex 7. A route the planner answers
+            // with an estimated hop is refused separately (the bridge never starts one) and is counted apart.
+            var eligible = 0
+            listOf(
+                beside(-15.0) to beside(40.0), beside(40.0) to beside(-15.0), beside(-4.0) to beside(4.0),
+                beside(-15.0) to beside(15.0), beside(15.0) to beside(-15.0), beside(-4.0) to beside(15.0),
+            ).forEach { (a, b) ->
+                val route = assertNotNull(find(network, mapped(a), mapped(b), start - 1), "$name map-picker Camelback route exists")
+                if (estimatedGap(route)) return@forEach
+                eligible++
+                assertTrue(gated(route, start - 1).isEmpty(), "$name eligible before")
+                listOf(start, end + 1).forEach { now ->
+                    assertEquals(listOf(camelback.id), gated(route, now), "$name map-picker Camelback route at $now")
+                }
+            }
+            assertTrue(eligible >= 2, "$name: only $eligible zero-gap map-picker routes crossed Camelback")
+        }
+    }
+
+    @Test
     fun aRoutePlannedBeforeTheClosureIsGatedAtItsInstantAndAfterTheEstimate() {
         val planned = assertNotNull(find(features, raw[97], raw[98], willowStart - 1))
         assertTrue(
@@ -258,6 +322,22 @@ class TimedClosureRealDataTest {
             // A route that stays on the road is not the trail and is not blocked; one the planner chose to put on the trail is.
             if (!onTrail) assertTrue(gated(along, start).isEmpty(), "$name the road is not gated by Camelback")
         }
+    }
+
+    @Test
+    fun theScheduledCamelbackNoticeDoesNotPromiseStartWhileUptownAndWillowAlreadyRefuseTheActualRoute() {
+        val between = willowStart + 3_600_000L // October 5, 12:00Z: Uptown and Willow in force, Camelback scheduled
+        assertTrue(between < camelback.activeFromEpochMillis)
+        // Planned before any of the notices (the Uptown detour began on September 21).
+        val beforeAll = TrailRouteClosureSijko.uptownUnderpass.activeFromEpochMillis - 1
+        val route = assertNotNull(find(features, raw[6], raw[98], beforeAll))
+        assertTrue(gated(route, beforeAll).isEmpty())
+        val refusedBy = gated(route, between)
+        assertTrue(closure.id in refusedBy && TrailRouteClosureSijko.uptownUnderpass.id in refusedBy, "refused by $refusedBy")
+        val notice = assertNotNull(camel(route, between)).message
+        assertTrue(notice.startsWith("Scheduled, not closed yet"))
+        assertTrue(!notice.contains("can still be started"), notice)
+        assertTrue(notice.contains("this closure does not stop Trail Mapper from starting a route (other closures and checks may)"))
     }
 
     @Test

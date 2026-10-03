@@ -570,7 +570,11 @@ test(
       assert.ok(scheduled);
       // Before the instant nothing is refused yet: it says what WILL happen, not that it is happening.
       assert.doesNotMatch(scheduled, /does not start this route/);
-      assert.match(scheduled, /can still be started until then/);
+      assert.doesNotMatch(scheduled, /can still be started/);
+      assert.match(
+        scheduled,
+        /this closure does not stop Trail Mapper from starting a route \(other closures and checks may\)/,
+      );
       assert.match(scheduled, /will not start a route that crosses there/);
       assert.equal(
         refusedAt(call, early.route, from, CAMEL_START - 1).start.ok,
@@ -1125,5 +1129,430 @@ test(
       refused["reversed raw path"] >= 10,
       `reversed raw: ${refused["reversed raw path"]}`,
     );
+  },
+);
+
+// ---- Map-picker routes on a node-anchored chord, a mapped road detour, and simultaneous notices -------------------------
+
+/** Meters a point lies from the unchanged raw leg 97 -> 98's line (planar, local). */
+const offRawLeg = (p: { latitude: number; longitude: number }) => {
+  const k = 111_194.93;
+  const cos = Math.cos((V97.latitude * Math.PI) / 180);
+  const x = (q: { latitude: number; longitude: number }) =>
+    (q.longitude - V97.longitude) * cos * k;
+  const y = (q: { latitude: number; longitude: number }) =>
+    (q.latitude - V97.latitude) * k;
+  const length = Math.hypot(x(V98), y(V98));
+  return Math.abs((x(p) * y(V98) - y(p) * x(V98)) / length);
+};
+const routePoints = (route: any) =>
+  route.segments.flatMap((s: any) => s.points) as {
+    latitude: number;
+    longitude: number;
+  }[];
+const eastOf = (
+  p: { latitude: number; longitude: number },
+  meters: number,
+) => ({
+  latitude: p.latitude,
+  longitude:
+    p.longitude +
+    meters / (111_194.93 * Math.cos((p.latitude * Math.PI) / 180)),
+});
+/** The Start check the app makes while riding: a fresh snapshot at the instant, resuming the saved route. */
+const startAt = (call: any, route: any, point: object, now: number) =>
+  call({
+    op: "snapshot",
+    route,
+    point,
+    accuracy: 5,
+    timestamp: now,
+    progress: 0,
+    resume: true,
+    now,
+  });
+
+test(
+  "Willow: map-picker routes that follow a node-anchored chord of the source leg (a spur listed first owns vertex 98's node) are refused by inspect and Start, in both directions and both feature orders",
+  { skip },
+  async () => {
+    const spur = feature("54:9100", [eastOf(V98, 4), eastOf(V98, 60)]);
+    const leg = feature("54:1305", [V97, V98]);
+    let derived = 0;
+    for (const features of [
+      [spur, leg],
+      [leg, spur],
+    ]) {
+      const { call } = await engine(network(...features));
+      const first = snap(call, along(0.6 * LEG_METERS), WILLOW_START - 1);
+      for (const meters of [1, 5, 10, 14, 30]) {
+        const other = snap(
+          call,
+          along(0.6 * LEG_METERS + meters),
+          WILLOW_START - 1,
+        );
+        for (const [from, to] of [
+          [first, other],
+          [other, first],
+        ]) {
+          const planned = plan(call, from, to, WILLOW_START - 1);
+          // A positive control first: current, zero estimated gap, on the source feature, Start-eligible before.
+          assert.ok(planned.route, `${meters} m route exists`);
+          assert.equal(planned.accessGaps.length, 0);
+          assert.ok(
+            planned.route.edges.every(
+              (e: any) => e.sourceFeatureId === "54:1305",
+            ),
+          );
+          assert.equal(planned.canNavigate, true);
+          assert.equal(
+            startAt(call, planned.route, from, WILLOW_START - 1).ok,
+            true,
+          );
+          if (routePoints(planned.route).some((p) => offRawLeg(p) > 0.5))
+            derived++;
+          for (const now of [WILLOW_START, WILLOW_END + 1]) {
+            const inspected = call({
+              op: "inspect",
+              route: planned.route,
+              now,
+            });
+            assert.equal(inspected.canNavigate, false, `${meters} m at ${now}`);
+            assert.equal(inspected.closures[0].id, WILLOW_ID);
+            assert.equal(startAt(call, planned.route, from, now).ok, false);
+          }
+          const again = call({
+            op: "recalculate",
+            route: planned.route,
+            now: WILLOW_START,
+          });
+          assert.equal(again.canNavigate, false);
+          assert.equal(again.route, null);
+        }
+      }
+    }
+    assert.ok(derived >= 10, `only ${derived} routes followed a derived chord`);
+  },
+);
+
+test(
+  "Willow: a different feature running beside the section, the spur and the residual approaches stay open next to the derived chord",
+  { skip },
+  async () => {
+    const spur = feature("54:9100", [eastOf(V98, 4), eastOf(V98, 60)]);
+    const parallel = feature("54:9200", [
+      eastOf(along(300), 4),
+      eastOf(along(700), 4),
+    ]);
+    const { call } = await engine(
+      network(spur, feature("54:1305", [V97, V98]), parallel),
+    );
+    const open = (from: object, to: object, id: string) => {
+      const planned = plan(
+        call,
+        snap(call, from, WILLOW_START - 1),
+        snap(call, to, WILLOW_START - 1),
+        WILLOW_START - 1,
+      );
+      assert.ok(planned.route);
+      assert.equal(planned.accessGaps.length, 0);
+      assert.ok(
+        planned.route.edges.every((e: any) => e.sourceFeatureId === id),
+      );
+      const inspected = call({
+        op: "inspect",
+        route: planned.route,
+        now: WILLOW_START,
+      });
+      assert.equal(inspected.canNavigate, true, "not gated");
+      assert.deepEqual(inspected.closures, []);
+    };
+    open(along(30), along(300), "54:1305");
+    open(along(650), along(LEG_METERS - 3), "54:1305");
+    open(eastOf(V98, 10), eastOf(V98, 50), "54:9100");
+    open(eastOf(along(420), 4), eastOf(along(560), 4), "54:9200");
+  },
+);
+
+test(
+  "Camelback: a route whose chord passes the crossing off the raw line (a spur listed first owns vertex 7's node) is refused by inspect and Start",
+  { skip },
+  async () => {
+    const spur = feature("54:9100", [eastOf(V7, 4), eastOf(V7, 60)]);
+    let off = 0;
+    for (const features of [
+      [spur, camelbackTrail()],
+      [camelbackTrail(), spur],
+    ]) {
+      const { call } = await engine(network(...features), CAMEL_START - 1);
+      const beside = (meters: number) => ({
+        latitude: CROSSING.latitude + meters / 111_194.93,
+        longitude: CROSSING.longitude,
+      });
+      const south = snap(call, beside(-15), CAMEL_START - 1);
+      const north = snap(
+        call,
+        { latitude: V8.latitude + 0.0005, longitude: V8.longitude },
+        CAMEL_START - 1,
+      );
+      for (const [from, to] of [
+        [south, north],
+        [north, south],
+      ]) {
+        const planned = plan(call, from, to, CAMEL_START - 1);
+        assert.ok(planned.route);
+        assert.equal(planned.accessGaps.length, 0);
+        assert.equal(planned.canNavigate, true);
+        const pts = routePoints(planned.route);
+        let nearest = Infinity;
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const k = 111_194.93;
+          const cos = Math.cos((CROSSING.latitude * Math.PI) / 180);
+          const ax = (pts[i].longitude - CROSSING.longitude) * cos * k;
+          const ay = (pts[i].latitude - CROSSING.latitude) * k;
+          const bx = (pts[i + 1].longitude - CROSSING.longitude) * cos * k;
+          const by = (pts[i + 1].latitude - CROSSING.latitude) * k;
+          const dx = bx - ax;
+          const dy = by - ay;
+          const t = Math.max(
+            0,
+            Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy || 1)),
+          );
+          nearest = Math.min(nearest, Math.hypot(ax + t * dx, ay + t * dy));
+        }
+        if (nearest > 3) off++;
+        for (const now of [CAMEL_START, CAMEL_END + 1]) {
+          assert.equal(
+            call({ op: "inspect", route: planned.route, now }).canNavigate,
+            false,
+            `inspect at ${now}`,
+          );
+          assert.equal(startAt(call, planned.route, from, now).ok, false);
+        }
+      }
+    }
+    assert.ok(
+      off >= 2,
+      `only ${off} routes passed the crossing off the raw line`,
+    );
+  },
+);
+
+test(
+  "Willow recalculation: a mapped open-road detour is eligible with or without a retained collinear vertex, while the estimated-hop escape from inside the section stays refused",
+  { skip },
+  async () => {
+    const mid = {
+      latitude: (FROM.latitude + TO.latitude) / 2,
+      longitude: (FROM.longitude + TO.longitude) / 2,
+    };
+    const west = (p: { latitude: number; longitude: number }) => eastOf(p, -51);
+    const east = (p: { latitude: number; longitude: number }) => eastOf(p, 51);
+    const sparse = [FROM, west(FROM), west(mid), east(mid), east(TO), TO, V98];
+    const dense = [
+      FROM,
+      west(FROM),
+      west(mid),
+      mid,
+      east(mid),
+      east(TO),
+      TO,
+      V98,
+    ];
+    for (const [label, path] of [
+      ["sparse", sparse],
+      ["dense", dense],
+    ] as const) {
+      const access = {
+        layers: [
+          {
+            id: "tiger",
+            features: [
+              {
+                id: "8:detour",
+                name: "Detour St",
+                mtfcc: "S1400",
+                paths: [path.map(lonLat)],
+              },
+            ],
+          },
+        ],
+      };
+      const module: any = await import(
+        `${pathToFileURL(corePath).href}?timed=${++instances}`
+      );
+      const call = (request: unknown) =>
+        JSON.parse(module.dispatch(JSON.stringify(request)));
+      assert.equal(
+        call({
+          op: "initialize",
+          trails: JSON.stringify(willow()),
+          access: JSON.stringify(access),
+          now: WILLOW_START - 86_400_000,
+        }).ok,
+        true,
+      );
+      const saved = plan(call, V97, V98, WILLOW_START - 1);
+      assert.ok(saved.route, `${label} route exists`);
+      assert.equal(saved.canNavigate, true);
+      // Positive control first: at the instant a fresh plan is current, ungated, with ZERO unrouted segments.
+      const fresh = plan(call, V97, V98, WILLOW_START);
+      assert.ok(fresh.route, `${label} fresh plan`);
+      assert.equal(fresh.canNavigate, true, `${label} fresh plan can start`);
+      assert.deepEqual(fresh.closures, []);
+      assert.equal(
+        fresh.route.segments.filter((s: any) => s.isRouted === false).length,
+        0,
+      );
+      assert.ok(
+        fresh.route.segments.some(
+          (s: any) => s.type === "Access" && s.isRouted !== false,
+        ),
+        `${label} uses the mapped road`,
+      );
+      const outcome = call({
+        op: "recalculate",
+        route: saved.route,
+        now: WILLOW_START,
+      });
+      assert.ok(
+        outcome.route,
+        `${label} recalculation offers the eligible detour (${outcome.error})`,
+      );
+      assert.equal(outcome.canNavigate, true);
+      assert.deepEqual(outcome.closures, []);
+      // The original escape stays refused: a route inside the section has only an estimated hop out.
+      const inside = plan(
+        call,
+        snap(call, along(0.6 * LEG_METERS), WILLOW_START - 1),
+        snap(call, along(0.6 * LEG_METERS + 10), WILLOW_START - 1),
+        WILLOW_START - 1,
+      );
+      assert.ok(inside.route);
+      const refused = call({
+        op: "recalculate",
+        route: inside.route,
+        now: WILLOW_START,
+      });
+      assert.equal(refused.route, null);
+      assert.match(
+        refused.error,
+        /No safe route avoids the active trail closure/,
+      );
+    }
+  },
+);
+
+test(
+  "A route refused by Uptown and Willow does not carry a scheduled Camelback sentence that promises Start",
+  { skip: skip || noAsset },
+  async () => {
+    const text = readFileSync(assetFile, "utf8");
+    const raw = JSON.parse(text);
+    const real = raw.layers
+      .flatMap((l: any) => l.features)
+      .find((f: any) => f.id === "54:1305").paths[0];
+    const pt = (p: number[]) => ({ latitude: p[1], longitude: p[0] });
+    const UPTOWN_START = Date.parse("2026-09-21T05:00:00Z");
+    const { call } = await engine(text, UPTOWN_START - 1);
+    const a = snap(call, pt(real[6]), UPTOWN_START - 1);
+    const b = snap(call, pt(real[98]), UPTOWN_START - 1);
+    const planned = plan(call, a, b, UPTOWN_START - 1);
+    assert.ok(
+      planned.route,
+      "the actual 6 -> 98 route exists before the notices",
+    );
+    assert.equal(planned.canNavigate, true);
+    const between = WILLOW_START + 3_600_000; // October 5, 12:00Z: Camelback is still scheduled
+    const inspected = call({
+      op: "inspect",
+      route: planned.route,
+      now: between,
+    });
+    assert.equal(inspected.canNavigate, false);
+    const ids = inspected.closures.map((c: any) => c.id);
+    assert.ok(
+      ids.includes(WILLOW_ID) &&
+        ids.includes("uptown-underpass-detour-2026-09-21"),
+      ids.join(),
+    );
+    const note = inspected.warnings.find((w: string) =>
+      /Scheduled, not closed yet.*Virginia Avenue/.test(w),
+    );
+    assert.ok(note, "the scheduled Camelback notice is shown");
+    assert.doesNotMatch(note, /can still be started/);
+    assert.match(
+      note,
+      /this closure does not stop Trail Mapper from starting a route \(other closures and checks may\)/,
+    );
+  },
+);
+
+test(
+  "On the actual 54:1305 path every map-picker route inside the Willow interval is refused by inspect and Start, in every feature order and path direction (1, 5, 10 and 14 m)",
+  { skip: skip || noAsset },
+  async () => {
+    const text = readFileSync(assetFile, "utf8");
+    let eligible = 0;
+    let derived = 0;
+    for (const [name, variant] of assetVariants(text)) {
+      const { call } = await engine(variant, WILLOW_START - 1);
+      const first = snap(call, along(0.6 * LEG_METERS), WILLOW_START - 1);
+      for (const meters of [1, 5, 10, 14]) {
+        const other = snap(
+          call,
+          along(0.6 * LEG_METERS + meters),
+          WILLOW_START - 1,
+        );
+        for (const [from, to] of [
+          [first, other],
+          [other, first],
+        ]) {
+          const planned = plan(call, from, to, WILLOW_START - 1);
+          assert.ok(planned.route, `${name} ${meters} m route exists`);
+          // Positively Start-eligible before the closure: current network, zero estimated gaps, ordinary route.
+          assert.equal(
+            planned.accessGaps.length,
+            0,
+            `${name} ${meters} m has no gap`,
+          );
+          assert.equal(
+            planned.canNavigate,
+            true,
+            `${name} ${meters} m eligible`,
+          );
+          assert.ok(
+            planned.route.edges.every(
+              (e: any) => e.sourceFeatureId === "54:1305",
+            ),
+          );
+          eligible++;
+          if (routePoints(planned.route).some((p) => offRawLeg(p) > 0.5))
+            derived++;
+          for (const now of [WILLOW_START, WILLOW_END + 1]) {
+            const inspected = call({
+              op: "inspect",
+              route: planned.route,
+              now,
+            });
+            assert.equal(inspected.network.status, "current");
+            assert.equal(
+              inspected.canNavigate,
+              false,
+              `${name} ${meters} m inspect at ${now}`,
+            );
+            assert.equal(inspected.closures[0].id, WILLOW_ID);
+            assert.equal(
+              startAt(call, planned.route, from, now).ok,
+              false,
+              `${name} ${meters} m Start at ${now}`,
+            );
+          }
+        }
+      }
+    }
+    assert.equal(eligible, 32);
+    // Not vacuous: some of these really follow a derived chord, a few meters off the raw leg.
+    assert.ok(derived >= 8, `only ${derived} routes followed a derived chord`);
   },
 );
