@@ -18,12 +18,8 @@ export function AccessConnections({
         check
       </h3>
       <p className="connection-total">
-        {total < 0.3048 ? "Less than 1 ft" : `About ${gapDistance(total)}`}{" "}
-        total · included in route length
-      </p>
-      <p>
-        Map data is missing a confirmed link at these points. Select a
-        connection to see where.
+        {total < 0.3048 ? "Less than 1 ft" : `About ${gapDistance(total)}`} ·
+        not confirmed by map data · select one to see it
       </p>
       <ol>
         {gaps.map((gap, index) => (

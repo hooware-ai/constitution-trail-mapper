@@ -206,7 +206,7 @@ test("opening Help during a ride leaves the ride active", async ({ page }) => {
     page.getByRole("heading", { name: "Ride in progress" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Keep this page open and visible: guidance pauses"),
+    page.getByText("Keep this page open and visible. Guidance pauses"),
   ).toBeVisible();
   await helpButton(page).click();
   await expect(helpDialog(page)).toBeVisible();

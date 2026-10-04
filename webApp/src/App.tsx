@@ -2126,7 +2126,6 @@ export function App() {
           )}{" "}
           {screen === "preview" && (
             <>
-              <p className="eyebrow">Ready when you are</p>
               <h1>Route preview</h1>
               {selected && <h2>{selected.title}</h2>}
               {checking && (
@@ -2173,7 +2172,9 @@ export function App() {
                       )}
                     </>
                   )}
-                  {preview.summary && <p>{preview.summary}</p>}
+                  {preview.summary && (
+                    <p className="visually-hidden">{preview.summary}</p>
+                  )}
                   {cues &&
                     (cues.turnarounds.length > 0 ||
                       cues.pieces.some(
@@ -2288,7 +2289,7 @@ export function App() {
                     </p>
                   )}
                   <Legend />
-                  <p className="warning" id="foreground-note">
+                  <p className="foreground-note" id="foreground-note">
                     <strong>
                       Keep this page open and visible while you ride.
                     </strong>{" "}
@@ -2303,14 +2304,16 @@ export function App() {
                       onReverse={() => void reverseDirection()}
                     />
                   )}
-                  <button
-                    className="primary wide"
-                    aria-describedby="foreground-note"
-                    disabled={checking || !preview.canNavigate || !online}
-                    onClick={() => void startNavigation()}
-                  >
-                    {checking ? "Checking closures…" : "Start navigation"}
-                  </button>
+                  <div className="start-dock">
+                    <button
+                      className="primary wide"
+                      aria-describedby="foreground-note"
+                      disabled={checking || !preview.canNavigate || !online}
+                      onClick={() => void startNavigation()}
+                    >
+                      {checking ? "Checking closures…" : "Start navigation"}
+                    </button>
+                  </div>
                   {preview.canNavigate && preview.assumedConnections && (
                     <p className="warning" role="note">
                       Private test mode: this route can start only because its
@@ -2332,6 +2335,7 @@ export function App() {
                             : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
                     </p>
                   )}
+
                   {directionPending && (
                     <p
                       className="caption"
@@ -2380,8 +2384,6 @@ export function App() {
                     <button onClick={() => setPopup("directions")}>
                       Directions
                     </button>
-                  </div>
-                  <div className="actions">
                     <button
                       disabled={checking}
                       onClick={() => void recalculate()}
@@ -2393,10 +2395,6 @@ export function App() {
                       a place
                     </button>
                   </div>
-                  <p className="caption">
-                    Foreground navigation only. Keep this page visible; changing
-                    tabs or locking the screen pauses guidance.
-                  </p>
                 </>
               )}
               {!preview && !checking && !error && (
@@ -2406,15 +2404,15 @@ export function App() {
           )}
           {screen === "navigation" && (
             <>
-              <p className="eyebrow">Foreground navigation</p>
               <h1>
                 {selected?.title === "Returning to start"
                   ? "Returning to start"
                   : "Ride in progress"}
               </h1>
               <p className="caption">
-                Keep this page open and visible: guidance pauses if you switch
-                tabs or lock the screen.
+                Keep this page open and visible. Guidance pauses when the page
+                is hidden or the screen locks, and distance traveled while
+                unobserved is not credited.
               </p>
               <div className={"guidance " + nav.phase} aria-live="polite">
                 <h2>
@@ -2492,26 +2490,19 @@ export function App() {
                   navigation again. You can still view the route and directions.
                 </p>
               )}
-              <div className="wake-status" role="status">
-                Screen wake lock:{" "}
-                {nav.wakeLock === "held"
-                  ? "keeping this page awake"
-                  : nav.wakeLock === "unsupported"
+              {nav.wakeLock !== "held" && nav.wakeLock !== "requesting" && (
+                <div className="wake-status" role="status">
+                  Screen wake lock:{" "}
+                  {nav.wakeLock === "unsupported"
                     ? "not supported in this browser"
                     : nav.wakeLock === "denied"
                       ? "not allowed — the screen may lock"
-                      : nav.wakeLock === "requesting"
-                        ? "requesting…"
-                        : nav.wakeLock === "released"
-                          ? "released by the browser"
-                          : "inactive"}
-                .
-              </div>
-              <p className="caption">
-                Guidance pauses when the page is hidden or the screen locks.
-                Return here for a fresh location. Distance traveled while
-                unobserved is not credited.
-              </p>
+                      : nav.wakeLock === "released"
+                        ? "released by the browser"
+                        : "inactive"}
+                  .
+                </div>
+              )}
               <button className="wide" onClick={() => setPopup("directions")}>
                 View directions
               </button>
