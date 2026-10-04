@@ -82,6 +82,7 @@ export async function sweepScreens(page: Page): Promise<string[]> {
   await page.keyboard.press("Escape");
   // Saved with a route and a place in it.
   await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("More actions", { exact: true }).click();
   await page
     .getByRole("button", { name: "Save destination as a place" })
     .click();

@@ -280,6 +280,7 @@ test("a problem report holds only the app version, can be reviewed and edited, a
   await plan(page);
   // Give the app things a careless report might leak: a saved route, a saved place, a recent ride.
   await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("More actions", { exact: true }).click();
   await page
     .getByRole("button", { name: "Save destination as a place" })
     .click();

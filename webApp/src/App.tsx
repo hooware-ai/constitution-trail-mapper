@@ -54,6 +54,7 @@ import {
 } from "./platform/navigation";
 import { acquirePlannerLocation } from "./platform/plannerLocation";
 import { addressIndexSource } from "./addressSearch";
+import { startBlockedReason } from "./startReason";
 
 // The synthetic address test seam: only the development server, only with ?addressFixture in the address, read once.
 // A built artifact (fixture or county) never has it, so an ordinary fixture page offers no address search.
@@ -1737,7 +1738,20 @@ export function App() {
     olderData =
       !!selected?.dataset &&
       !!network?.dataset &&
-      selected.dataset.contentSha256 !== network.dataset.contentSha256;
+      selected.dataset.contentSha256 !== network.dataset.contentSha256,
+    startReason =
+      preview && !checking
+        ? startBlockedReason({
+            canNavigate: preview.canNavigate,
+            online,
+            stale,
+            closureCount: preview.closures.length,
+            estimatedConnections: preview.accessGaps?.length ?? 0,
+            endpointConnections:
+              preview.accessGaps?.filter((gap) => gap.kind === "endpoint")
+                .length ?? 0,
+          })
+        : null;
   const shownRecent = library.recent.slice(0, 3),
     share = privateRouteShare(location.href, preview?.distance);
   return (
@@ -2288,7 +2302,10 @@ export function App() {
                         : "Known closure catalog checked on opening; live conditions are unverified. Check posted signs."}
                     </p>
                   )}
-                  <Legend />
+                  <details className="map-key-details">
+                    <summary>Map key</summary>
+                    <Legend />
+                  </details>
                   <p className="foreground-note" id="foreground-note">
                     <strong>
                       Keep this page open and visible while you ride.
@@ -2307,12 +2324,21 @@ export function App() {
                   <div className="start-dock">
                     <button
                       className="primary wide"
-                      aria-describedby="foreground-note"
+                      aria-describedby={
+                        startReason
+                          ? "foreground-note start-reason"
+                          : "foreground-note"
+                      }
                       disabled={checking || !preview.canNavigate || !online}
                       onClick={() => void startNavigation()}
                     >
                       {checking ? "Checking closures…" : "Start navigation"}
                     </button>
+                    {startReason && (
+                      <p className="start-reason" id="start-reason">
+                        {startReason}
+                      </p>
+                    )}
                   </div>
                   {preview.canNavigate && preview.assumedConnections && (
                     <p className="warning" role="note">
@@ -2373,14 +2399,6 @@ export function App() {
                     >
                       Share
                     </button>
-                    <button
-                      onClick={() => {
-                        setOrigin("planner");
-                        go("planner");
-                      }}
-                    >
-                      Edit
-                    </button>
                     <button onClick={() => setPopup("directions")}>
                       Directions
                     </button>
@@ -2390,11 +2408,24 @@ export function App() {
                     >
                       Recalculate route
                     </button>
-                    <button onClick={saveEndpoint}>
-                      Save {draft.mode === "loop" ? "start" : "destination"} as
-                      a place
-                    </button>
                   </div>
+                  <details className="more-actions">
+                    <summary>More actions</summary>
+                    <div className="actions preview-actions">
+                      <button
+                        onClick={() => {
+                          setOrigin("planner");
+                          go("planner");
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button onClick={saveEndpoint}>
+                        Save {draft.mode === "loop" ? "start" : "destination"}{" "}
+                        as a place
+                      </button>
+                    </div>
+                  </details>
                 </>
               )}
               {!preview && !checking && !error && (

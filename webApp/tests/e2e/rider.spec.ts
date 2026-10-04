@@ -48,6 +48,7 @@ test("point route, full preview, directions, saved/place persistence and private
   await expect(
     page.getByRole("button", { name: "Saved · View" }),
   ).toBeVisible();
+  await page.getByText("More actions", { exact: true }).click();
   await page
     .getByRole("button", { name: "Save destination as a place" })
     .click();

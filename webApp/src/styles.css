@@ -1509,3 +1509,33 @@ dialog::backdrop {
     box-shadow: 0 -6px 14px rgba(9, 59, 51, 0.08);
   }
 }
+
+/* Follow-up: the reason sits right under Start; secondary actions and the legend are disclosed. */
+.start-reason {
+  margin: 6px 2px 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  font-weight: 600;
+  color: #5a2a00;
+}
+.more-actions,
+.map-key-details {
+  margin: 6px 0;
+  font-size: 0.82rem;
+  color: #4c5a56;
+}
+.more-actions > summary,
+.map-key-details > summary {
+  cursor: pointer;
+  padding: 6px 2px;
+  min-height: 32px;
+  font-weight: 600;
+}
+.map-key-details .legend {
+  padding-top: 2px;
+}
+@media (max-width: 760px) {
+  .preview .start-dock .start-reason {
+    margin-bottom: 2px;
+  }
+}

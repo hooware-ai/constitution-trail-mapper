@@ -99,8 +99,20 @@ test("the preview leads with the route and a reachable Start, and says each thin
   ).toHaveCount(1);
   await expect(page.getByText("Ready when you are")).toHaveCount(0);
   // Secondary actions are all still present.
-  for (const name of ["Share", "Edit", "Directions", "Recalculate route"])
+  for (const name of ["Share", "Directions", "Recalculate route"])
     await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+  // The rarely used ones sit behind one disclosure and are all still reachable.
+  await expect(
+    page.getByRole("button", { name: "Edit", exact: true }),
+  ).toBeHidden();
+  await page.getByText("More actions", { exact: true }).click();
+  for (const name of ["Edit", "Save destination as a place"])
+    await expect(page.getByRole("button", { name })).toBeVisible();
+  await expect(page.getByText(/Street access/)).toBeHidden();
+  await page.getByText("Map key", { exact: true }).click();
+  await expect(
+    page.getByLabel("Map key").getByText("Street access"),
+  ).toBeVisible();
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
@@ -147,4 +159,76 @@ test("navigation says its one caption once, survives an interruption and can be 
     ).toBeVisible();
     await expect(start(page)).toBeEnabled();
   }
+});
+
+test("a blocked Start says why right beside it: estimated connections, offline", async ({
+  page,
+  context,
+}) => {
+  test.skip(
+    process.env.TRAIL_ASSUME_ESTIMATED_CONNECTIONS === "1",
+    "asserts the strict Start state",
+  );
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      value: {
+        watchPosition(success: PositionCallback) {
+          success({
+            coords: { latitude: 40.489, longitude: -88.95, accuracy: 5 },
+            timestamp: Date.now(),
+          } as GeolocationPosition);
+          return 1;
+        },
+        clearWatch() {},
+      },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await page.getByRole("button", { name: /^Start:/ }).click();
+  await page
+    .getByRole("button", { name: "Use current location", exact: true })
+    .click();
+  await choose(page, "Destination", "Review trailhead · East");
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(start(page)).toBeDisabled();
+  const reason = page.locator("#start-reason");
+  await expect(reason).toContainText(
+    "1 estimated connection (start/end included) is not confirmed",
+  );
+  // It is visible with the button, in the same screen, directly under it.
+  const b = (await start(page).boundingBox())!;
+  const r = (await reason.boundingBox())!;
+  expect(r.y).toBeGreaterThanOrEqual(b.y + b.height - 1);
+  expect(r.y - (b.y + b.height)).toBeLessThan(40);
+  expect(r.y + r.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await expect(start(page)).toHaveAttribute(
+    "aria-describedby",
+    "foreground-note start-reason",
+  );
+  // The full explanation is still on the page, unchanged.
+  await expect(
+    page.getByText(
+      /This route still has estimated connections that are not confirmed/,
+    ),
+  ).toBeVisible();
+  void context;
+});
+
+test("offline gives a plain reason beside an otherwise allowed Start, and online restores it", async ({
+  page,
+  context,
+}) => {
+  await plan(page);
+  await expect(page.locator("#start-reason")).toHaveCount(0);
+  await expect(start(page)).toHaveAttribute(
+    "aria-describedby",
+    "foreground-note",
+  );
+  await context.setOffline(true);
+  await expect(start(page)).toBeDisabled();
+  await expect(page.locator("#start-reason")).toContainText("You're offline");
+  await context.setOffline(false);
+  await expect(start(page)).toBeEnabled();
+  await expect(page.locator("#start-reason")).toHaveCount(0);
 });
