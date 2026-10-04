@@ -679,3 +679,21 @@ test("the stage manifest must agree with the audited original: a flipped verdict
     }
   }
 });
+
+test("Vite-style dash-separated content hashes count as hashed; names with no hash still do not", () => {
+  const ok = planStaging({
+    files: [
+      { path: "assets/index-D31K2X3c.js", bytes: 1, sha256: "a" },
+      { path: "assets/worker-DLY2vXrn.js", bytes: 1, sha256: "b" },
+      { path: "assets/index-BlRAjpK_.css", bytes: 1, sha256: "c" },
+    ],
+  });
+  assert.deepEqual(ok.problems, []);
+  const bad = planStaging({
+    files: [
+      { path: "assets/index.js", bytes: 1, sha256: "a" },
+      { path: "assets/app-short.js", bytes: 1, sha256: "b" },
+    ],
+  });
+  assert.equal(bad.problems.length, 2);
+});

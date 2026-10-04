@@ -28,7 +28,8 @@ import { artifactFiles, verifyProvenance } from "./provenance.mjs";
 export const STAGE_SCHEMA = "trail-mapper.stage/1";
 export const ORIGINAL_AUDIT_SCHEMA = "trail-mapper.stage-original-audit/1";
 export const HOSTING_SCHEMA = "trail-mapper.stage-hosting/1";
-const HASHED_NAME = /\.[0-9a-zA-Z_-]{8,}\.[a-z0-9]+$/;
+// A content hash set off by "." or "-" (Vite emits index-D31K2X3c.js; the package tools emit trails.<hash>.json).
+const HASHED_NAME = /[.-][0-9a-zA-Z_-]{8,}\.[a-z0-9]+$/;
 const WRAPPER_FILES = ["_worker.js", "_routes.json"];
 const HEADERS_SOURCE = new URL("../../hosting/headers.mjs", import.meta.url);
 const ADAPTER_SOURCE = new URL(
