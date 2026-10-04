@@ -226,3 +226,34 @@ test("ride controls stay on screen across phone widths and large text", async ({
     }
   }
 });
+
+test("a phone without WebGL keeps a flat map and can stop the ride", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
+      type,
+      ...args
+    ) {
+      if (type === "webgl2") return null;
+      return getContext.call(this, type, ...args);
+    } as typeof getContext;
+  });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await startRide(page);
+  await expect(page.locator(".ride-map-fallback .map-wrap")).toBeVisible();
+  await expect(page.getByText("Flat map on this device")).toBeVisible();
+  await page.evaluate(() =>
+    (window as any).__rideGps.fix(40.505, -88.95, null, 0),
+  );
+  await page.getByRole("button", { name: "Stop navigation" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview" }),
+  ).toBeVisible();
+  await page.waitForTimeout(100);
+  expect(pageErrors).toEqual([]);
+});

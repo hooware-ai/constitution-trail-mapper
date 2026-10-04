@@ -370,6 +370,7 @@ export function RideMap({
           county={county}
           osm={osm}
           follow={following}
+          preferCanvas={false}
           onManualPan={() => setFollowing(false)}
           tilesEnabled={tiles}
           onTilesChange={onTilesChange}

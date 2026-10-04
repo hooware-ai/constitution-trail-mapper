@@ -22,6 +22,6 @@ screen keeps a visible Start action; a blocked Start still shows its reason.
 Local evidence: the synthetic review build passed the core verification, build and
 distribution audit, built-artifact ride-camera smoke test under production CSP,
 and focused Chromium phone tests for 320–430px widths, 175% text, heading rotation,
-pan/recenter, GPS loss/recovery and Stop. These tests do not establish physical
+pan/recenter, GPS loss/recovery, WebGL fallback and Stop. These tests do not establish physical
 phone, sunlight, battery, outdoor GPS, or accessibility acceptance. No candidate
 was uploaded or deployed.

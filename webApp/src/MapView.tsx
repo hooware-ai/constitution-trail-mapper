@@ -35,6 +35,7 @@ export function MapView({
   cues = null,
   riddenMeters,
   follow = false,
+  preferCanvas = true,
   onManualPan,
   tilesEnabled,
   onTilesChange,
@@ -60,6 +61,7 @@ export function MapView({
   riddenMeters?: number;
   /** Flat-map fallback on devices without WebGL. */
   follow?: boolean;
+  preferCanvas?: boolean;
   onManualPan?: () => void;
   tilesEnabled?: boolean;
   onTilesChange?: (enabled: boolean) => void;
@@ -84,7 +86,7 @@ export function MapView({
     const m = L.map(root.current, {
       zoomControl: true,
       attributionControl: true,
-      preferCanvas: true,
+      preferCanvas,
     }).setView([40.502, -88.97], 13);
     // Leaflet's own prefix link would also replace this page; keep the credit, open it safely.
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
@@ -112,7 +114,7 @@ export function MapView({
       m.remove();
       map.current = null;
     };
-  }, []);
+  }, [preferCanvas]);
   useEffect(() => {
     const m = map.current;
     if (!m) return;
