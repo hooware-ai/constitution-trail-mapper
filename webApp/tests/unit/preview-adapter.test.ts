@@ -13,6 +13,7 @@ import {
   PREVIEW_CONTROL_FILES,
   createPreviewHandler,
   previewBindingPath,
+  previewMimeFamily,
   previewPath,
 } from "../../hosting/preview-adapter.mjs";
 import { buildWorkerSource } from "../../tools/lib/stage-hosting.mjs";
@@ -53,21 +54,44 @@ function binding(
     method: string;
     path: string;
     headers: Record<string, string>;
+    redirect: string;
   }[] = [];
   const present = new Set(options.present ?? Object.keys(files));
   return {
     calls,
     env: {
       ASSETS: {
-        async fetch(request: Request) {
+        async fetch(request: Request): Promise<Response> {
           const url = new URL(request.url);
           calls.push({
             method: request.method,
             path: url.pathname,
             headers: Object.fromEntries(request.headers),
+            redirect: request.redirect,
           });
           const override = options.override?.(url.pathname, request);
-          if (override) return override;
+          if (override) {
+            // A binding Request honors its redirect mode, as the runtime's Request does: only "manual" hands the 3xx back.
+            // Otherwise the redirect is followed here, and a foreign target answers with its own JavaScript.
+            if (
+              override.status >= 300 &&
+              override.status < 400 &&
+              override.status !== 304 &&
+              request.redirect !== "manual"
+            ) {
+              const next = new URL(
+                override.headers.get("location") ?? "/",
+                request.url,
+              );
+              return next.origin !== url.origin
+                ? new Response("alert('foreign')", {
+                    status: 200,
+                    headers: { "content-type": "text/javascript" },
+                  })
+                : this.fetch(new Request(next, { method: request.method }));
+            }
+            return override;
+          }
           const key =
             url.pathname === "/"
               ? "index.html"
@@ -731,4 +755,160 @@ test("the adapter is inert: it has no global network access, storage, process or
     /^\s*import\b/m,
   ])
     assert.doesNotMatch(code, forbidden, String(forbidden));
+});
+
+// ---- review corrections (TM-A2-REVIEW-1b9230e-20261004-01) ---------------------------------------------------------------
+
+for (const [label, handle] of handlers) {
+  const t = (name: string, run: () => Promise<void>) =>
+    test(`${label}: ${name}`, run);
+
+  t(
+    "every binding hop is asked with redirect manual, and a foreign redirect is never followed into a 200",
+    async () => {
+      const foreign = binding({
+        override: (path) =>
+          path === "/assets/app.0123456789ab.js"
+            ? new Response(null, {
+                status: 302,
+                headers: { location: "https://evil.invalid/x.js" },
+              })
+            : undefined,
+      });
+      await failed(
+        await handle(get("/assets/app.0123456789ab.js"), foreign.env),
+        502,
+      );
+      assert.ok(foreign.calls.every((c) => c.redirect === "manual"));
+      // The same binding, asked without manual mode, WOULD have produced a 200 (the control for this test).
+      const control = await foreign.env.ASSETS.fetch(
+        new Request("https://preview.invalid/assets/app.0123456789ab.js"),
+      );
+      assert.equal(control.status, 200);
+      let seen = 0;
+      const clean = binding({
+        override: (path) =>
+          path === "/assets/app.0123456789ab.js" && seen++ === 0
+            ? new Response(null, {
+                status: 308,
+                headers: { location: "/assets/app.0123456789ab.js" },
+              })
+            : undefined,
+      });
+      const ok = await handle(get("/assets/app.0123456789ab.js"), clean.env);
+      assert.equal(ok.status, 200);
+      assert.deepEqual(await bytesOf(ok), exact);
+      assert.deepEqual(
+        clean.calls.map((c) => c.redirect),
+        ["manual", "manual"],
+      );
+      let again = 0;
+      const second = binding({
+        override: (path) =>
+          path === "/assets/app.0123456789ab.js" && again++ < 2
+            ? new Response(null, {
+                status: 308,
+                headers: { location: "/assets/app.0123456789ab.js" },
+              })
+            : undefined,
+      });
+      await failed(
+        await handle(get("/assets/app.0123456789ab.js"), second.env),
+        502,
+      );
+    },
+  );
+
+  t(
+    "the binding's content type must belong to the file's family: valid aliases pass, a mismatch or a missing type is 502",
+    async () => {
+      const answer = (type: string | null, body: Uint8Array = exact) =>
+        new Response(body as unknown as BodyInit, {
+          status: 200,
+          headers: type === null ? {} : { "content-type": type },
+        });
+      const run = async (path: string, type: string | null) => {
+        const { env } = binding({
+          override: (p) =>
+            p === previewBindingPath(path) ? answer(type) : undefined,
+        });
+        return handle(get("/" + path, path === "index.html" ? nav : {}), env);
+      };
+      const js = "assets/app.0123456789ab.js";
+      for (const ok of [
+        "text/javascript",
+        "text/javascript; charset=utf-8",
+        "application/javascript",
+        "APPLICATION/JAVASCRIPT; charset=UTF-8",
+        "application/x-javascript",
+      ]) {
+        const response = await run(js, ok);
+        assert.equal(response.status, 200, ok);
+        assert.equal(
+          response.headers.get("content-type"),
+          "text/javascript; charset=utf-8",
+        );
+        assert.equal(
+          response.headers.get("cache-control"),
+          "public, max-age=31536000, immutable",
+        );
+      }
+      for (const bad of [
+        "application/json",
+        "text/html",
+        "text/css",
+        "image/png",
+        "application/octet-stream",
+        "",
+        null,
+      ])
+        await failed(await run(js, bad), 502);
+      assert.equal(
+        (await run("assets/app.0123456789ab.css", "text/css; charset=utf-8"))
+          .status,
+        200,
+      );
+      await failed(
+        await run("assets/app.0123456789ab.css", "application/json"),
+        502,
+      );
+      await failed(
+        await run("assets/app.0123456789ab.css", "text/javascript"),
+        502,
+      );
+      assert.equal(
+        (await run("data/dataset.json", "application/json")).status,
+        200,
+      );
+      await failed(await run("data/dataset.json", "text/html"), 502);
+      await failed(await run("data/dataset.json", "text/javascript"), 502);
+      assert.equal(
+        (await run("index.html", "text/html; charset=utf-8")).status,
+        200,
+      );
+      await failed(await run("index.html", "application/json"), 502);
+      await failed(await run("index.html", null), 502);
+    },
+  );
+}
+
+test("the accepted media-type families are exact and small", () => {
+  assert.deepEqual(previewMimeFamily("text/css; charset=utf-8"), ["text/css"]);
+  assert.deepEqual(previewMimeFamily("application/json; charset=utf-8"), [
+    "application/json",
+  ]);
+  assert.ok(
+    previewMimeFamily("text/javascript; charset=utf-8").includes(
+      "application/javascript",
+    ),
+  );
+  assert.ok(
+    !previewMimeFamily("text/javascript; charset=utf-8").includes(
+      "application/json",
+    ),
+  );
+  assert.ok(
+    previewMimeFamily("image/x-icon").includes("image/vnd.microsoft.icon"),
+  );
+  assert.deepEqual(previewMimeFamily("image/png"), ["image/png"]);
 });

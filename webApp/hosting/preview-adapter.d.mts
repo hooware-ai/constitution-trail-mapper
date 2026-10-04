@@ -16,3 +16,4 @@ export function createPreviewHandler(options: {
   inventory: Iterable<string>;
   policy: PreviewPolicy;
 }): (request: Request, env: PreviewEnv) => Promise<Response>;
+export function previewMimeFamily(policyType: string): string[];

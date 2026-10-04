@@ -27,6 +27,23 @@ export const PREVIEW_CONTROL_FILES = [
 ];
 const PREVIEW_ENCODINGS = ["gzip", "br", "zstd", "deflate"];
 
+const PREVIEW_MIME_ALIASES = {
+  "text/javascript": [
+    "application/javascript",
+    "application/x-javascript",
+    "text/ecmascript",
+    "application/ecmascript",
+  ],
+  "image/x-icon": ["image/vnd.microsoft.icon"],
+  "application/manifest+json": ["application/json"],
+};
+
+/** The accepted media types (lower case, no parameters) for a policy content type such as "text/css; charset=utf-8". */
+export function previewMimeFamily(policyType) {
+  const essence = policyType.split(";")[0].trim().toLowerCase();
+  return [essence, ...(PREVIEW_MIME_ALIASES[essence] ?? [])];
+}
+
 function previewExtension(segment) {
   const dot = segment.lastIndexOf(".");
   return dot > 0 ? segment.slice(dot).toLowerCase() : "";
@@ -114,6 +131,9 @@ export function createPreviewHandler({ inventory, policy }) {
           new Request(target, {
             method: head ? "HEAD" : "GET",
             headers: forward,
+            // A Request follows redirects by default; the adapter must see each one itself, so that a redirect to
+            // another origin or file is never followed by the binding before the checks below.
+            redirect: "manual",
           }),
         );
       } catch {
@@ -173,13 +193,13 @@ export function createPreviewHandler({ inventory, policy }) {
       return new Response(null, { status: 304, headers });
     }
     if (response.status !== 200) return failure(502, "Asset unavailable", head);
+    // The binding's own content type must belong to the file's expected family (charset and the usual aliases allowed);
+    // a missing or different one is a binding fault, never relabelled with the expected type and cached.
     const returned = (response.headers.get("content-type") ?? "")
       .split(";")[0]
       .trim()
       .toLowerCase();
-    const bindingHtml =
-      returned === "text/html" || returned === "application/xhtml+xml";
-    if (bindingHtml !== type.startsWith("text/html"))
+    if (!previewMimeFamily(type).includes(returned))
       return failure(502, "Asset unavailable", head);
     const length = response.headers.get("content-length");
     if (length !== null && /^\d+$/.test(length))

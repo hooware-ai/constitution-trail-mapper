@@ -637,3 +637,45 @@ test("the stager is inert: no network, process, host or credential access in its
       assert.doesNotMatch(source, forbidden, `${file} ${forbidden}`);
   }
 });
+
+test("the stage manifest must agree with the audited original: a flipped verdict, policy or file entry fails the manifests verdict only", async () => {
+  const edits: [string, (stage: any) => void][] = [
+    ["release verdict flipped", (m) => (m.publicRelease.allowed = true)],
+    ["blockers removed", (m) => (m.publicRelease.blockers = [])],
+    [
+      "cache policy changed",
+      (m) => (m.files[0].cacheControl = "public, max-age=1"),
+    ],
+    ["file hash changed", (m) => (m.files[1].sha256 = "0".repeat(64))],
+    ["file entry removed", (m) => m.files.pop()],
+    [
+      "header policy changed",
+      (m) =>
+        (m.headersForEveryResponse["Content-Security-Policy"] =
+          "default-src *"),
+    ],
+    ["https flag changed", (m) => (m.https = false)],
+    ["unknown schema", (m) => (m.schema = "x")],
+  ];
+  for (const [name, edit] of edits) {
+    const f = await fixtureArtifact();
+    try {
+      const out = join(f.root, "stage");
+      await stage(f);
+      assert.deepEqual(
+        Object.values(await auditStage(out)).map((a) => a.ok),
+        [true, true, true],
+      );
+      const file = join(out, "stage-manifest.json");
+      const manifest = JSON.parse(await readFile(file, "utf8"));
+      edit(manifest);
+      await writeFile(file, JSON.stringify(manifest, null, 2) + "\n");
+      const audits = await auditStage(out);
+      assert.equal(audits.manifests.ok, false, name);
+      assert.equal(audits.original.ok, true, `${name} original`);
+      assert.equal(audits.wrapper.ok, true, `${name} wrapper`);
+    } finally {
+      await cleanup(f.root);
+    }
+  }
+});

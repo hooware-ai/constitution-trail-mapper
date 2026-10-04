@@ -515,9 +515,46 @@ export async function auditStage(outDir) {
     );
   if (
     original.schema !== ORIGINAL_AUDIT_SCHEMA ||
-    hosting.schema !== HOSTING_SCHEMA
+    hosting.schema !== HOSTING_SCHEMA ||
+    stage.schema !== STAGE_SCHEMA
   )
     fail("manifests", "an unknown manifest schema");
+  // The stage manifest is the plan a host would read (release verdict, per-file policy), so it must agree with the audited
+  // original: it is recomputed from the audit record, and any difference (for example a flipped verdict) is refused. This
+  // is a local consistency check, not a signature and not a release gate.
+  try {
+    const expected = planStaging({
+      files: original.files,
+      publicRelease: original.provenance.publicRelease,
+      https: stage.https,
+    });
+    expected.files.push({
+      path: "provenance.json",
+      bytes: original.provenance.bytes,
+      sha256: original.provenance.sha256,
+      contentType: mimeTypes[".json"],
+      cacheControl: cacheControlFor("/provenance.json"),
+    });
+    for (const key of [
+      "inert",
+      "note",
+      "https",
+      "publicRelease",
+      "headersForEveryResponse",
+      "files",
+      "problems",
+    ])
+      if (JSON.stringify(stage[key]) !== JSON.stringify(expected[key]))
+        fail(
+          "manifests",
+          `stage-manifest.json ${key} disagrees with the audited original`,
+        );
+  } catch {
+    fail(
+      "manifests",
+      "stage-manifest.json cannot be checked against the audited original",
+    );
+  }
   const site = join(out, "site");
   const wrapperPaths = hosting.files.map((file) => file.path);
   let staged;
