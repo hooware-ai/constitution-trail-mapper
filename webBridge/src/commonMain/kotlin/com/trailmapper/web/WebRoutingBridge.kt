@@ -843,9 +843,18 @@ class WebRoutingBridge {
         val label = when (index) {
             0 -> "Start connection"
             route.segments.lastIndex -> if (route.kind == TrailRouteKind.ExerciseLoop) "Return connection" else "Destination connection"
-            else -> listOfNotNull(route.segments.getOrNull(index - 1), route.segments.getOrNull(index + 1))
-                .firstNotNullOfOrNull { it.name?.takeIf(String::isNotBlank) }
-                ?.let { "Near $it" } ?: "Along the route"
+            else -> {
+                val before = route.segments.getOrNull(index - 1)
+                val after = route.segments.getOrNull(index + 1)
+                val beforeName = before?.name?.takeIf(String::isNotBlank)
+                val afterName = after?.name?.takeIf(String::isNotBlank)
+                // A step between a named road and a trail says what it connects; anything else keeps the neutral wording.
+                when {
+                    before?.type == TrailRouteSegmentType.Access && beforeName != null && after?.type == TrailRouteSegmentType.Trail -> "$beforeName to trail"
+                    before?.type == TrailRouteSegmentType.Trail && after?.type == TrailRouteSegmentType.Access && afterName != null -> "Trail to $afterName"
+                    else -> (beforeName ?: afterName)?.let { "Near $it" } ?: "Along the route"
+                }
+            }
         }
         buildJsonObject {
             put("id", "gap-$index")

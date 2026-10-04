@@ -911,6 +911,68 @@ class WebRoutingBridgeTest {
         assertEquals(inspect(route)["accessGaps"], assumed["accessGaps"])
     }
 
+    /**
+     * The four rows of the owner's screenshot, rebuilt with their real measurements: "Start connection" 111 ft, "Near S Hershey Rd" 37 ft,
+     * "Near Prospect Ave" under 1 ft, "Destination connection" 90 ft. Each is classified for a stated reason.
+     */
+    @Test fun eachRowOfTheOwnersScreenshotIsTreatedForItsOwnReason() {
+        val ft = 0.3048
+        val p = (0..8).map { northMeters(it * 100.0) }
+        val startOff = northMeters(-111 * ft)
+        val roadEnd = northMeters(150.0); val trailEntry = northMeters(150.0 + 37 * ft)
+        val trailEnd = northMeters(600.0); val joinFar = northMeters(600.0 + 0.08)
+        val destination = northMeters(800.0 + 90 * ft)
+        val segments = listOf(
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(startOff, p[0]), isRouted = false),
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(p[0], roadEnd), isRouted = true, name = "S Hershey Rd"),
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(roadEnd, trailEntry), isRouted = false),
+            TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(trailEntry, trailEnd), isRouted = true),
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(trailEnd, joinFar), isRouted = false),
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(joinFar, p[8]), isRouted = true, name = "Prospect Ave"),
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(p[8], destination), isRouted = false),
+        )
+        val route = TrailRoute(segments = segments, totalDistanceMeters = 900.0, ordinaryAccessDistanceMeters = 300.0, totalCost = 1.0)
+        val result = inspect(route)
+        val gaps = result["accessGaps"]!!.jsonArray.map { it.jsonObject }
+        // Row 1 and row 4 (start and destination): real estimated connections, kept in the data, but obvious: kind endpoint.
+        // Row 2 (road to the trail beside it, 37 ft with no mapped link between them): a REAL estimated connection, kept and now named
+        // for what it joins. Row 3 (Prospect Ave, under 1 ft between two mapped segments): a coordinate discrepancy, not a gap.
+        assertEquals(listOf("gap-0", "gap-2", "gap-6"), gaps.map { it["id"]!!.jsonPrimitive.content })
+        assertEquals(listOf("endpoint", "interior", "endpoint"), gaps.map { it["kind"]!!.jsonPrimitive.content })
+        assertEquals(listOf("Start connection", "S Hershey Rd to trail", "Destination connection"), gaps.map { it["label"]!!.jsonPrimitive.content })
+        assertEquals(111 * ft, gaps[0]["distanceMeters"]!!.jsonPrimitive.double, 0.01)
+        assertEquals(37 * ft, gaps[1]["distanceMeters"]!!.jsonPrimitive.double, 0.01)
+        assertEquals(90 * ft, gaps[2]["distanceMeters"]!!.jsonPrimitive.double, 0.01)
+        // Honest geometry: the route still has all four unrouted connectors and its total; only the notice list differs.
+        val kept = Json.decodeFromJsonElement<TrailRoute>(result["route"]!!)
+        assertEquals(4, kept.segments.count { !it.isRouted })
+        assertEquals(route.totalDistanceMeters, result["distance"]!!.jsonPrimitive.double, 1e-9)
+        // Strict Start is still blocked by the remaining estimated connections, and the private test mode still warns about all three.
+        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        val assumed = inspect(route, loaded(assume = true))
+        assertTrue(assumed["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(assumed["warnings"]!!.jsonArray.any { it.jsonPrimitive.content.contains("3 estimated connection") })
+    }
+
+    @Test fun anInteriorStepBetweenARoadAndATrailIsNamedForWhatItJoins() {
+        val a = northMeters(0.0); val b = northMeters(100.0); val c = northMeters(110.0); val d = northMeters(300.0)
+        fun label(first: TrailRouteSegmentType, second: TrailRouteSegmentType, name: String?, nameOnFirst: Boolean): String {
+            val route = TrailRoute(
+                segments = listOf(
+                    TrailRouteSegment(first, listOf(a, b), isRouted = true, name = if (nameOnFirst) name else null),
+                    TrailRouteSegment(TrailRouteSegmentType.Access, listOf(b, c), isRouted = false),
+                    TrailRouteSegment(second, listOf(c, d), isRouted = true, name = if (nameOnFirst) null else name),
+                ),
+                totalDistanceMeters = 300.0, ordinaryAccessDistanceMeters = 110.0, totalCost = 1.0,
+            )
+            return inspect(route)["accessGaps"]!!.jsonArray.single().jsonObject["label"]!!.jsonPrimitive.content
+        }
+        assertEquals("Oak St to trail", label(TrailRouteSegmentType.Access, TrailRouteSegmentType.Trail, "Oak St", true))
+        assertEquals("Trail to Elm Ave", label(TrailRouteSegmentType.Trail, TrailRouteSegmentType.Access, "Elm Ave", false))
+        assertEquals("Near Elm Ave", label(TrailRouteSegmentType.Access, TrailRouteSegmentType.Access, "Elm Ave", true))
+        assertEquals("Along the route", label(TrailRouteSegmentType.Access, TrailRouteSegmentType.Trail, null, true))
+    }
+
     // ---- PRIVATE TEST MODE: estimated connections assumed traversable (default off) ----
 
     private fun gappedRoute(roles: Set<TrailNetworkRole> = emptySet()): TrailRoute {
