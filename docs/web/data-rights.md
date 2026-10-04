@@ -39,6 +39,29 @@ IDs retain the app's canonical `54:OBJECTID` / `16:OBJECTID` form so existing cl
 
 `--source-json PATH` can replay an existing JSON bundle with `licenseItem`, `licensedMetadata`, `licensedQuery`, and `selectionSources` (layer IDs mapping to `metadata` and `query`). All verification still applies. Offline replay verifies the saved evidence, not the current upstream license or trail status. `generatedAtUtc` records normalization time, while `reviewedOn` records manifest review; neither is a source edit date.
 
+## Current owner-private review package (October 4)
+
+The private v4 review artifact's `data/dataset.json` records network SHA-256
+`903e43cf077acf79988920eb114b02e0f90bab022180aca88f5205c7a1ed882d`:
+**258 trail features**, consisting of the 254 reviewed Existing county trails
+above and four separately identified reviewed OpenStreetMap paths. Its access
+package contains **3,424 Census TIGER/Line base roads** and **9,313
+OpenStreetMap service roads** loaded around trip endpoints, or **12,737 access
+roads** in total. Those roads are endpoint access legs, not an independently
+approved through-route or closure-detour network. All six Proposed features are
+absent under the owner's narrow first-release scope decision.
+
+This is a description of the exact private artifact, not a county-only release
+claim. The county CC BY evidence above applies to the reviewed county source;
+the OpenStreetMap paths and service roads retain their separate ODbL source
+terms. The committed `webApp/release/dataset.county.json` now matches the
+private package's public-release blockers. Its `omitted` entries are fallback
+descriptions used only when a package lacks those optional parts; the packaged
+record explicitly describes included supplements and access roads. The package
+and committed approval record both remain `approved: false`, with no approved
+composition, approver, or approval date. Public ODbL compliance, exact artifact
+approval, hosting, and physical-device acceptance remain open.
+
 ## Six proposed segments: unresolved release gate
 
 The current app and web map have blank licenseInfo, and the operational layers name McGIS and members as copyright holders without supplying an explicit redistribution grant:
