@@ -86,10 +86,13 @@ test("private test mode: the banner and route warning say estimated, the connect
   await expect(start(page)).toBeEnabled();
   await start(page).click();
   await expect(
-    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+    page.getByRole("heading", { name: "Ride in progress", exact: true }),
   ).toBeVisible();
-  // The assumption stays visible while riding.
-  await expect(page.locator(".test-mode-banner")).toBeVisible();
+  // The ride screen keeps the assumption visible next to its large controls.
+  await expect(page.locator(".ride-safety")).toContainText("PRIVATE TEST MODE");
+  await expect(page.locator(".ride-safety")).toContainText(
+    "Estimated connection: stop and verify it on the ground.",
+  );
 });
 
 test("private test mode: a recalculated route with the same estimated connection can also start, and is still labelled", async ({

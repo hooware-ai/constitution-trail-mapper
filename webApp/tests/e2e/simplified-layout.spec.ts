@@ -130,12 +130,10 @@ test("navigation says its one caption once, survives an interruption and can be 
     ).toBeVisible();
     await page.evaluate(() => (window as any).__gps.fix(40.505, -88.95));
     await expect(page.locator(".guidance.navigating")).toBeVisible();
+    await page.getByText("Ride details", { exact: true }).click();
     await expect(
-      page.getByText(/Guidance pauses when the page is hidden/),
+      page.getByText(/Keep this page open and visible. Guidance pauses/),
     ).toHaveCount(1);
-    await expect(page.getByText(/Keep this page open and visible/)).toHaveCount(
-      1,
-    );
     // Interruption and recovery.
     await page.evaluate(() => (window as any).__gps.visible(false));
     await expect(

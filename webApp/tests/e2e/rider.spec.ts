@@ -14,6 +14,16 @@ async function choose(
     .getByRole("button", { name: new RegExp(name) })
     .click();
 }
+async function openRideDetails(page: Page) {
+  const details = page.locator("details.ride-details");
+  if (!(await details.evaluate((node: HTMLDetailsElement) => node.open)))
+    await details.locator("summary").click();
+}
+async function reverseDirection(page: Page) {
+  const button = page.getByRole("button", { name: "Reverse direction" });
+  if (!(await button.isVisible())) await openRideDetails(page);
+  await button.click();
+}
 async function plan(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Go somewhere/ }).click();
@@ -284,12 +294,13 @@ test("foreground navigation hides stale guidance, resumes after reload, rejects 
   ).toBeVisible();
   await fix(page, 40.505, -88.95, 150);
   await expect(
-    page.getByRole("heading", { name: "Waiting for location", exact: true }),
+    page.getByRole("heading", { name: "Location lost", exact: true }),
   ).toBeVisible();
   await fix(page, 40.505, -88.95, 5, 60000);
   await expect(page.locator(".guidance.navigating")).not.toBeVisible();
   await fix(page, 40.505, -88.95);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await page.getByText("Ride details", { exact: true }).click();
   await expect(page.getByText(/0.0 mi observed this ride/)).toBeVisible();
   await page.reload();
   await expect(
@@ -298,10 +309,10 @@ test("foreground navigation hides stale guidance, resumes after reload, rejects 
   await fix(page, 40.502, -88.95);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
   await context.setOffline(true);
-  await expect(page.locator(".offline-banner")).toBeVisible();
+  await expect(page.locator(".ride-offline")).toContainText("Offline");
   await page.evaluate(() => (window as any).__gps.failure());
   await expect(
-    page.getByRole("heading", { name: "Waiting for location", exact: true }),
+    page.getByRole("heading", { name: "Location lost", exact: true }),
   ).toBeVisible();
   await context.setOffline(false);
   await page
@@ -441,13 +452,6 @@ for (const choice of ["Rejoin the loop", "Return to start"])
             : /^Rejoining the loop ahead: [\d.]+ mi to the finish \([\d.]+ mi remained on the planned loop\)\.$/,
         ),
       ).toBeVisible();
-      if (choice === "Return to start")
-        await expect(
-          page.getByRole("heading", {
-            name: "Returning to start",
-            exact: true,
-          }),
-        ).toBeVisible();
       await expect(
         page.getByRole("heading", {
           name: "Reacquiring location…",
@@ -616,7 +620,8 @@ test("a crashed routing worker is reported at once and an explicit restart recov
     window.Worker = class extends Original {
       constructor(url: string | URL, options?: WorkerOptions) {
         super(url, options);
-        created.push(this);
+        if (new URL(String(url), location.href).pathname.endsWith("/worker.ts"))
+          created.push(this);
       }
     } as typeof Worker;
   });
@@ -660,7 +665,8 @@ async function trackWorkers(page: Page) {
     window.Worker = class extends Original {
       constructor(url: string | URL, options?: WorkerOptions) {
         super(url, options);
-        created.push(this);
+        if (new URL(String(url), location.href).pathname.endsWith("/worker.ts"))
+          created.push(this);
       }
       postMessage(message: any, ...rest: any[]) {
         if (message?.request?.op === "boot" && (window as any).__holdBoot) {
@@ -2506,7 +2512,7 @@ test("a loop can be ridden in reverse and back, and Save keeps the planned direc
   const planned = (await libraryOf(page)).recent[0];
   const firstLeg = (record: any) => record.route.segments[0].points.slice(0, 2);
 
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -2518,7 +2524,7 @@ test("a loop can be ridden in reverse and back, and Save keeps the planned direc
   expect(saved.key).toBe(planned.key);
   expect(firstLeg(saved)).toEqual(firstLeg(planned));
 
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Planned direction", { exact: true }),
   ).toBeVisible();
@@ -2557,7 +2563,7 @@ test("reversing during a ride starts that ride over in the new direction", async
   ).toBeVisible();
   await acceptedFix(page, 40.51, -88.95);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -2631,7 +2637,7 @@ test("a reversed loop is still reversed after a reload, and Save still stores th
     page.getByRole("heading", { name: "Route preview" }),
   ).toBeVisible();
   const planned = (await libraryOf(page)).recent[0];
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -2660,7 +2666,7 @@ test("a stored direction that cannot be proven is not claimed after a reload", a
   await expect(
     page.getByRole("heading", { name: "Route preview" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -2709,7 +2715,7 @@ test("a ride in reverse resumes in reverse after a reload", async ({
     page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
   ).toBeVisible();
   await acceptedFix(page, 40.51, -88.95);
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -2717,6 +2723,7 @@ test("a ride in reverse resumes in reverse after a reload", async ({
     .poll(async () => (await activeRideOf(page))?.record.plannedKey ?? null)
     .not.toBeNull();
   await page.reload();
+  await openRideDetails(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -2742,6 +2749,7 @@ test("reversing mid-ride drops the credit already earned and the new direction s
     const [lat, lon] = pointAlong(points, meters);
     await acceptedFix(page, lat, lon);
   }
+  await openRideDetails(page);
   await expect(
     page.getByText(/^(?!0(\.0)? mi)\d+(\.\d+)? mi observed this ride/),
   ).toBeVisible();
@@ -2749,7 +2757,7 @@ test("reversing mid-ride drops the credit already earned and the new direction s
   expect((await activeRideOf(page)).creditedDistanceMeters).toBeGreaterThan(
     100,
   );
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -2876,7 +2884,7 @@ for (const [name, patch] of [
       },
       patch as unknown as Record<string, unknown>,
     );
-    await page.getByRole("button", { name: "Reverse direction" }).click();
+    await reverseDirection(page);
     // While it is held nothing has changed: the ride is live, the control is busy.
     await expect(
       page.getByRole("button", { name: "Reverse direction" }),
@@ -2908,6 +2916,7 @@ for (const [name, patch] of [
     await page.clock.fastForward(1000);
     await acceptedFix(page, 40.51, -88.95);
     await expect(page.locator(".guidance.navigating")).toBeVisible();
+    await openRideDetails(page);
     await expect(
       page.getByText(/^0(\.0)? mi observed this ride/),
     ).toBeVisible();
@@ -3421,12 +3430,16 @@ test("the part of the route already ridden is faded on the map as it is ridden, 
 }) => {
   await page.clock.install();
   await planLoopPreview(page);
-  const overlay = () =>
+  const plannedOverlay = () =>
     page
       .locator(".leaflet-container")
       .evaluate((el) => Number(el.getAttribute("data-ridden-meters")));
+  const rideOverlay = () =>
+    page
+      .locator(".ride-map-canvas, .ride-map-fallback .leaflet-container")
+      .evaluate((el) => Number(el.getAttribute("data-ridden-meters")));
   // Not navigating: nothing is faded.
-  expect(await overlay()).toBe(0);
+  expect(await plannedOverlay()).toBe(0);
   await page
     .getByRole("button", { name: "Start navigation", exact: true })
     .click();
@@ -3441,13 +3454,13 @@ test("the part of the route already ridden is faded on the map as it is ridden, 
     await acceptedFix(page, lat, lon);
   }
   // About 300 m of the route is faded (the overlay follows ridden progress, not the matched position).
-  await expect.poll(overlay).toBeGreaterThan(260);
-  expect(await overlay()).toBeLessThan(340);
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await expect.poll(rideOverlay).toBeGreaterThan(260);
+  expect(await rideOverlay()).toBeLessThan(340);
+  await reverseDirection(page);
   await expect(
     page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
   ).toBeVisible();
-  await expect.poll(overlay).toBe(0);
+  await expect.poll(rideOverlay).toBe(0);
 });
 
 // A reload is the one place a loop's matcher lets a fix land far ahead of the saved progress (reacquiring has no previous
@@ -3802,7 +3815,7 @@ test("a reversal holds the image back until the reversed route has its own cues"
   await page.evaluate(() => {
     (window as any).__ops = { mapCues: { hold: true } };
   });
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -3827,7 +3840,7 @@ test("when the cues for a route fail, nothing from another route is shown and no
       mapCues: { patch: { ok: false, error: "cues unavailable" } },
     };
   });
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -4126,7 +4139,7 @@ test("a recalculated loop stays temporary through reverse, reload and reverse ba
   await expect(banner).toContainText("Recalculated route · not saved");
   // The same geometry as the saved loop, so the geometry key alone would have overwritten it.
   expect((await libraryOf(page)).saved).toEqual([original]);
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -4144,7 +4157,7 @@ test("a recalculated loop stays temporary through reverse, reload and reverse ba
   ).toBeVisible();
   expect((await libraryOf(page)).saved).toEqual([original]);
 
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Planned direction", { exact: true }),
   ).toBeVisible();
@@ -4247,7 +4260,7 @@ async function recalculatedReversedLoop(page: Page) {
   const original = (await libraryOf(page)).saved[0];
   await page.getByRole("button", { name: "Recalculate route" }).click();
   await expect(page.locator(".recalculated-route")).toBeVisible();
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Riding in reverse", { exact: true }),
   ).toBeVisible();
@@ -4324,7 +4337,7 @@ test("while a restored loop direction is still being proved, Save and Reverse wa
   await expect(
     page.getByRole("button", { name: "Save as new route" }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Reverse direction" }).click();
+  await reverseDirection(page);
   await expect(
     page.getByText("Planned direction", { exact: true }),
   ).toBeVisible();

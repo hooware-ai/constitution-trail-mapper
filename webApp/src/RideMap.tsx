@@ -6,7 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { FeatureCollection, LineString } from "geojson";
 import type { Closure, Feature, MapCues, Point, RouteResult } from "./types";
 import type { LocationFix, NavigationPhase } from "./platform/navigation";
-import { riddenPolylines } from "./ridden";
+import { lengthMeters, riddenPolylines } from "./ridden";
 import {
   nearestBearing,
   nextRideHeading,
@@ -290,11 +290,15 @@ export function RideMap({
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
-    (m.getSource("ridden") as GeoJSONSource).setData(
-      lines(
-        cues && riddenMeters > 0
-          ? riddenPolylines(cues.pieces, riddenMeters)
-          : [],
+    const paths =
+      cues && riddenMeters > 0
+        ? riddenPolylines(cues.pieces, riddenMeters)
+        : [];
+    (m.getSource("ridden") as GeoJSONSource).setData(lines(paths));
+    root.current?.setAttribute(
+      "data-ridden-meters",
+      String(
+        Math.round(paths.reduce((sum, path) => sum + lengthMeters(path), 0)),
       ),
     );
   }, [cues, riddenMeters, ready]);
@@ -369,6 +373,8 @@ export function RideMap({
           fixture={fixture}
           county={county}
           osm={osm}
+          cues={cues}
+          riddenMeters={riddenMeters}
           follow={following}
           preferCanvas={false}
           onManualPan={() => setFollowing(false)}

@@ -2519,22 +2519,24 @@ export function App() {
                     {nav.phase === "navigating" &&
                     typeof nav.guidance?.distanceToNextInstruction === "number"
                       ? rideStepDistance(nav.guidance.distanceToNextInstruction)
-                      : nav.phase === "navigating"
+                      : nav.phase === "navigating" && nav.guidance
                         ? "On route"
                         : "Attention"}
                   </span>
                   <h2>
                     {nav.phase === "reacquiring"
-                      ? "Reacquiring location."
+                      ? "Reacquiring location…"
                       : nav.phase === "off-route"
                         ? "You are off route"
                         : nav.phase === "navigating"
-                          ? rideInstruction(
-                              nav.guidance?.instruction,
-                              nav.guidance?.distanceToNextInstruction as
-                                | number
-                                | undefined,
-                            )
+                          ? nav.guidance
+                            ? rideInstruction(
+                                nav.guidance.instruction,
+                                nav.guidance.distanceToNextInstruction as
+                                  | number
+                                  | undefined,
+                              )
+                            : nav.message || "Waiting for location"
                           : nav.phase === "paused"
                             ? "Navigation paused"
                             : nav.phase === "location-lost"
@@ -2549,9 +2551,16 @@ export function App() {
                 </div>
               </div>
               <div className="ride-dock">
-                {__TRAIL_ASSUME_ESTIMATED__ && preview?.assumedConnections && (
+                {!online && (
+                  <p className="ride-safety ride-offline" role="status">
+                    Offline · live map tiles and offline navigation unavailable.
+                  </p>
+                )}
+                {__TRAIL_ASSUME_ESTIMATED__ && (
                   <p className="ride-safety" role="status">
-                    Unverified connection: stop and check it on the ground.
+                    PRIVATE TEST MODE
+                    {preview?.assumedConnections &&
+                      " · Estimated connection: stop and verify it on the ground."}
                   </p>
                 )}
                 {nav.phase === "off-route" && (

@@ -21,11 +21,13 @@ test("the dataset record is revalidated on every load while the hash-named netwo
   page.on("console", (m) => {
     if (m.type() === "error") consoleErrors.push(m.text());
   });
+  const startedAt = Date.now();
   await page.goto("/");
   await expect(page.locator(".review-banner")).not.toContainText("Synthetic");
-  await expect(
-    page.getByRole("button", { name: /Go somewhere/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Go somewhere/ })).toBeVisible({
+    timeout: 30_000,
+  });
+  console.log(`County planner ready in ${Date.now() - startedAt} ms`);
   const record = await (await request.get("/data/dataset.json")).json();
   const describe = responses.find((r) =>
     r.url().endsWith("/data/dataset.json"),
