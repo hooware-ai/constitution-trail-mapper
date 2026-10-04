@@ -1790,7 +1790,7 @@ export function App() {
                 : "Synthetic review network — do not ride these paths."}
       </div>
       {__TRAIL_ASSUME_ESTIMATED__ && (
-        <div className="review-banner test-mode-banner" role="status">
+        <div className="test-mode-banner" role="status">
           PRIVATE TEST MODE · estimated road and trail connections are assumed
           traversable so routes can start. They are still estimated, not
           confirmed: verify each connection on the ground before riding.
