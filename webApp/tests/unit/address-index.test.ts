@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   AddressIndex,
+  MAX_REVERSE_METERS,
   buildAddressIndex,
   parseNumber,
   serializeAddressIndex,
@@ -213,4 +214,102 @@ test("the prototype is not wired into the app", () => {
       /addressIndex/.test(readFileSync(f, "utf8")),
   );
   assert.deepEqual(users, []);
+});
+
+// ---- review corrections (TM-LOCAL-PREP-7c675b5-20261004-01) ---------------------------------------------------------
+
+const indexOf = (extra: RawAddressRow[]) =>
+  new AddressIndex(
+    JSON.parse(
+      serializeAddressIndex(buildAddressIndex(extra).data),
+    ) as AddressIndexData,
+  );
+
+test("the same address recorded at two different points is two places and ambiguous; units group only at one recorded point", () => {
+  const found = indexOf([
+    row("421 NORTH MAIN STREET", "Normal", -89, 40.5, { unit: "A" }),
+    row("421 NORTH MAIN STREET", "Normal", -89, 40.504, { unit: "B" }),
+  ]).search("421 n main st");
+  assert.equal(found.kind, "matches");
+  if (found.kind !== "matches") return;
+  assert.equal(found.ambiguous, true);
+  assert.equal(found.places.length, 2);
+  assert.deepEqual(
+    found.places.map((p) => [p.latitude, p.units]),
+    [
+      [40.5, ["A"]],
+      [40.504, ["B"]],
+    ],
+  );
+  const same = indexOf([
+    row("421 NORTH MAIN STREET", "Normal", -89, 40.5, { unit: "A" }),
+    row("421 NORTH MAIN STREET", "Normal", -89, 40.5, { unit: "B" }),
+  ]).search("421 n main st");
+  assert.equal(same.kind === "matches" && same.ambiguous, false);
+  assert.deepEqual(same.kind === "matches" && same.places[0].units, ["A", "B"]);
+});
+
+test("a partly typed street type matches its canonical alias but never widens into unrelated names", () => {
+  const i = indexOf([
+    row("421 N Main Street", "Normal", -89, 40.5),
+    row("5 Main Stone Rd", "Normal", -89, 40.51),
+    row("7 Oak Avenue", "Normal", -89, 40.52),
+    row("9 Elm Boulevard", "Normal", -89, 40.53),
+  ]);
+  for (const typed of [
+    "421 n main s",
+    "421 n main st",
+    "421 n main stre",
+    "421 n main stree",
+    "421 n main street",
+  ]) {
+    const found = i.search(typed);
+    assert.equal(found.kind, "matches", typed);
+    assert.equal(
+      found.kind === "matches" && found.places[0].label,
+      "421 N Main St, Normal",
+      typed,
+    );
+  }
+  // "stre" is STREET in progress: it must not pull in "Main Stone Rd" for a number that only exists there.
+  const stone = i.search("5 main stre");
+  assert.notEqual(stone.kind, "matches");
+  assert.equal(i.search("7 oak aven").kind, "matches");
+  assert.equal(i.search("9 elm boul").kind, "matches");
+  assert.equal(i.search("9 elm boulev").kind, "matches");
+});
+
+test("the reverse bound is honoured on both axes and capped", () => {
+  const i = indexOf([
+    row("1 Center St", "Normal", -89, 40.5),
+    row("2 Birch St", "Normal", -88.995, 40.6),
+    row("3 North St", "Normal", -89, 40.7),
+  ]);
+  // 0.004 degrees of latitude is about 445 m: found at 500 m, absent at the default 75 m and at 400 m.
+  assert.equal(
+    i.nearest({ latitude: 40.496, longitude: -89 }, 500)?.label,
+    "1 Center St, Normal",
+  );
+  assert.equal(
+    i.nearest({ latitude: 40.504, longitude: -89 }, 500)?.label,
+    "1 Center St, Normal",
+  );
+  assert.equal(i.nearest({ latitude: 40.496, longitude: -89 }), null);
+  assert.equal(i.nearest({ latitude: 40.496, longitude: -89 }, 400), null);
+  // 0.005 degrees of longitude is about 425 m at this latitude.
+  assert.equal(
+    i.nearest({ latitude: 40.6, longitude: -88.99 }, 500)?.label,
+    "2 Birch St, Normal",
+  );
+  assert.equal(i.nearest({ latitude: 40.6, longitude: -88.99 }, 300), null);
+  // The cap: nothing 11 km away is found however large a bound is asked for.
+  assert.equal(
+    i.nearest({ latitude: 40.6, longitude: -89.2 }, 1_000_000),
+    null,
+  );
+  assert.equal(MAX_REVERSE_METERS, 2000);
+  assert.equal(
+    i.nearest({ latitude: 40.5, longitude: -89 }, -5)?.distanceMeters,
+    0,
+  );
 });

@@ -48,6 +48,8 @@ const pause = Number(arg("--pause") ?? 250);
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+// The exact bytes of every metadata response are kept, so what the item and layer said can be reviewed later.
+const sources = new Map();
 async function getJson(url) {
   for (let attempt = 1; attempt <= 4; attempt++) {
     try {
@@ -56,9 +58,11 @@ async function getJson(url) {
         signal: AbortSignal.timeout(60_000),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const value = await response.json();
+      const text = await response.text();
+      const value = JSON.parse(text);
       if (value.error)
         throw new Error(`service error ${JSON.stringify(value.error)}`);
+      sources.set(url, text);
       return value;
     } catch (error) {
       if (attempt === 4) throw new Error(`${url}: ${error.message}`);
@@ -77,6 +81,19 @@ if (item.id !== ITEM_ID)
 if (!/creativecommons\.org\/licenses\/by\/4\.0/.test(item.licenseInfo ?? ""))
   throw new Error(
     "The item no longer states CC BY 4.0: stop and review before using it.",
+  );
+// The item must describe exactly the service layer this tool queries (a reproducibility guard: the licence statement
+// applies to the item, so the item and the queried layer must be the same thing).
+const sameUrl = (a, b) =>
+  String(a ?? "")
+    .replace(/\/+$/, "")
+    .toLowerCase() ===
+  String(b ?? "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+if (!sameUrl(item.url, SERVICE_URL))
+  throw new Error(
+    `The item's service URL (${item.url}) is not the pinned service (${SERVICE_URL}): stop and review.`,
   );
 const layer = await getJson(`${SERVICE_URL}?f=json`);
 const maxRecordCount = layer.maxRecordCount;
@@ -158,6 +175,10 @@ const raw = JSON.stringify({
 });
 mkdirSync(dirname(outFile), { recursive: true });
 writeFileSync(outFile, raw);
+const itemText = sources.get(ITEM_URL);
+const layerText = sources.get(`${SERVICE_URL}?f=json`);
+writeFileSync(outFile.replace(/\.json$/, ".item.json"), itemText);
+writeFileSync(outFile.replace(/\.json$/, ".layer.json"), layerText);
 const manifest = {
   schema: "trail-mapper.address-points.fetch/1",
   retrievedAt,
@@ -169,8 +190,12 @@ const manifest = {
     url: `https://www.arcgis.com/home/item.html?id=${ITEM_ID}`,
     modified: new Date(item.modified).toISOString(),
     snippet: item.snippet,
-    licenseInfoText:
-      "This work is licensed under a Creative Commons Attribution 4.0 International License (https://creativecommons.org/licenses/by/4.0/)",
+    access: item.access,
+    serviceUrl: item.url,
+    // The licence statement exactly as the item publishes it (HTML, unedited).
+    licenseInfo: item.licenseInfo,
+    accessInformation: item.accessInformation ?? null,
+    itemJsonSha256: sha256(itemText),
   },
   service: {
     url: SERVICE_URL,
@@ -178,6 +203,9 @@ const manifest = {
     maxRecordCount,
     outSR: 4326,
     fields: FIELDS,
+    copyrightText: layer.copyrightText ?? null,
+    description: layer.description ?? null,
+    layerJsonSha256: sha256(layerText),
   },
   completeness: {
     serviceCount: count,

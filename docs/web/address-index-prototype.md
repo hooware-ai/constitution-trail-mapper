@@ -12,12 +12,14 @@ The county's address point says where the county records an address. It is **not
 | --- | --- |
 | ArcGIS item | `502eefa828f94f749bbab9da63b0d016`, "Addresses", Feature Service, public, owner `crystal.williams`, created 2017-02-17, **modified 2022-09-06** (tags: addresses, McLean County, OpenData). Its `url` is the service layer below. |
 | Service layer | `https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0` ("Address"; `maxRecordCount` 2000) |
-| License | the item's `licenseInfo` states **Creative Commons Attribution 4.0 International** (https://creativecommons.org/licenses/by/4.0/). The fetcher re-checks that text and stops if it is missing. |
+| License | the item's `licenseInfo` states **Creative Commons Attribution 4.0 International** (https://creativecommons.org/licenses/by/4.0/). The fetcher re-checks that text, requires `item.url` to equal the pinned service URL (a reproducibility guard: the statement applies to the item, so the item and the queried layer must be the same thing), stops if either fails, and keeps the original response bytes: `release-candidate-logs/address-index/source-item-metadata.json` and `source-layer-metadata.json` (hashes in the fetch manifest and the pin). The pin carries the item's `licenseInfo` verbatim, not stock wording. |
 | Access used | public, unauthenticated, read-only GET queries only: no account, no token, no terms accepted, no OAuth, no paid mode, no write. |
 | Fields requested | `OBJECTID_1, ADDRESS, Building, Unit, Post_Comm, Post_Code, Inc_Muni, County, State` and the point. Not requested: staff user and edit-date fields, or any owner or property data. No personal route, position or typed text is involved. |
 | Attribution and changes (carried in the pin manifest) | "Contains McLean County, Illinois address data from the county's public 'Addresses' ArcGIS item, licensed CC BY 4.0 ... not the county's own product and not endorsed by the county", plus the list of changes made: fields reduced, text normalized, points rounded to 1e-6 degrees, rows outside McLean County, without a number, without a point, or exact duplicates removed. |
 
 Staleness: the item says it was last modified in 2022; whether the service rows are newer is **not established**. A later use must decide how current an address list has to be.
+
+Reproducibility: the whole fetch was repeated on 2026-10-03 (second run, after the review corrections below, to capture the source metadata): the raw bytes were identical (same SHA-256), so the rows did not change between the two runs; that is all it shows.
 
 ## Completeness (no biased first-1000 claim)
 
@@ -58,14 +60,16 @@ Timings, Node 24.13 on this development machine, **not a phone**: build 225 ms; 
 | --- | --- |
 | exact number and street, one place | `matches`, `ambiguous: false` |
 | same number and street in several postal communities (`421 n main` gives Bloomington and ISU; `100 main` gives four) | `matches`, `ambiguous: true`: all listed, never merged or guessed |
-| several units at one number (`1020 S Morris Ave`: 12) | one place; the unit labels are listed, the point is shared |
+| several units at one number recorded at one identical point | one place; the unit labels are listed |
 | number not on the street (`2210 Stone Mountain Blvd`) | `nearest-numbers`: the numbers either side, no point invented |
+| the same address recorded at two different points (about 4% of addresses: 2,523 of 63,788 address groups; 197 of them spread over 50 m, 5 over 500 m, the widest 996 m) | separate places, `ambiguous: true`, each with its own point; unit labels are grouped only at one identical recorded point; no location is guessed |
+| a street type typed in part (`421 n main stre`, `7 oak aven`) | matches: the last token also matches the canonical alias it begins (STRE gives ST), by equality, so it never widens into other names such as `Main Stone Rd` |
 | number not found and several streets of that name (`99999 main st`) | the street list, no "nearest" |
 | street only (`main`) | `streets` list |
 | unknown street, empty text, number only, or an abbreviation not in the table (`stone mtn`) | `none` |
 | a leading directional left out (`901 hershey` finds `901 N Hershey Rd`) | `matches` |
 
-Reverse label: the nearest address point within a caller-given bound (default 75 m), with its distance, or `null` so the caller keeps its existing label.
+Reverse label: the nearest address point within a caller-given bound (default 75 m; reach is computed from the bound on both axes and the bound is capped at 2,000 m so the call cannot become a county scan), with its distance, or `null` so the caller keeps its existing label.
 
 ## Six catalog places compared (`release-candidate-logs/address-index/catalog-comparison.json`)
 
@@ -75,14 +79,14 @@ Reverse label: the nearest address point within a caller-given bound (default 75
 | Culver's Hershey Road, 901 Hershey Road | `901 N Hershey Rd, Bloomington` (directional absent from the typed text) | 1 m |
 | Culver's West Market, 1807 W. Market Street | `1807 W Market St, Bloomington` | 3 m |
 | Normal Public Library, 206 W. College Ave. | `206 W College Ave, Normal` (1 unit label) | 10 m |
-| Fairview Park, 801 North Main Street | **ambiguous**: Bloomington (3.9 km), Normal (49 m), Saybrook (40.9 km) | the nearest is the right one; without a city a rider is shown all three |
-| Miller Park, 1020 South Morris Avenue | `1020 S Morris Ave, Bloomington` (12 unit labels) | 125 m: a building point, not the park entrance; no reverse label inside 75 m |
+| Fairview Park, 801 North Main Street | **ambiguous**: six points: Bloomington (3.9 km, two points), Normal (49 m, 129 m, 146 m), Saybrook (40.9 km) | the nearest is the right one; without a city a rider is shown them all |
+| Miller Park, 1020 South Morris Avenue | **ambiguous**: eight recorded points for the one address, 123 m to 231 m from the marker (one without a unit label, seven with one); this was shown as a single place before the review correction | a building point, not the park entrance; no reverse label inside 75 m |
 
 The current catalog search (`searchPlaces`) finds all six by their labels and addresses; the index adds addresses that are not in the six-place catalog. Reverse label at each marker: Tipton, Hershey, West Market and the library name those same address points (50, 1.3, 3.1, 10.3 m); Fairview names `514 Mckinley St, Normal` (35 m), which shows that the nearest address is a nearby label, not the place; Miller Park has none within 75 m.
 
 ## Controls (unit tests, synthetic rows only)
 
-`tests/unit/address-index.test.ts`: normalization; determinism and order independence; a report for every exclusion; the same number in two cities stays ambiguous; units grouped; suffix is part of the number; missing number gives neighbors only; no-match, empty and number-only queries; non-county, no-number and no-point rows skipped; reverse label bound, tie-breaking and "county-address-point, never an entrance"; source scan proving no network, storage, timer, DOM or global use and no imports; and that no app source imports the module.
+`tests/unit/address-index.test.ts`: normalization; determinism and order independence; a report for every exclusion; the same number in two cities stays ambiguous; the same address at two recorded points stays ambiguous and units group only at one point; partly typed street types and no widening; the reverse bound on both axes, below the cap and capped; units grouped; suffix is part of the number; missing number gives neighbors only; no-match, empty and number-only queries; non-county, no-number and no-point rows skipped; reverse label bound, tie-breaking and "county-address-point, never an entrance"; source scan proving no network, storage, timer, DOM or global use and no imports; and that no app source imports the module.
 
 ## Inert HTTPS staging (`webApp/tools/stage-hosting.mjs`, `tools/lib/stage-hosting.mjs`)
 
@@ -90,9 +94,14 @@ Prepares what a host would serve, without choosing one. It verifies the artifact
 
 It has **no host, account, credential, upload or network code** (a test scans for them). The local tests (`tests/unit/stage-hosting.test.ts`) use a synthetic fixture artifact; the fixture is correctly reported not publishable. Policy gap recorded, not changed: `cacheControlFor` makes only `trails.<hash>.json` immutable, so a future hash-named data file such as an address index would revalidate on every load until that policy is deliberately extended in its own reviewed change.
 
+## Review corrections (TM-LOCAL-PREP-7c675b5-20261004-01)
+
+Three synthetic probes from the review were reproduced, fixed and pinned by tests that fail on the previous module (checked by running the new tests against it): (1) grouping now includes the recorded point, so two points for one address are two places; (2) the last typed token also matches the canonical form of any alias it begins; (3) the reverse lookup computes its cell reach from the bound on each axis (the latitude reach was fixed at one cell, so a point 445 m north was missed at a 500 m bound) and caps the bound at 2,000 m. The transform is unchanged: the raw hash `428e2c92...` and the index hash `ef5c3867...` are identical to the first checkpoint.
+
 ## Not established
 
-- Any owner or county approval to publish or ship this index; the service is public and unauthenticated but repeated or bulk use has not been agreed.
+- Any Trail Mapper owner approval to ship this index (an internal composition decision, separate from the source's CC BY 4.0 label, whose attribution and change statement a shipped build must carry).
+- Availability and rate tolerance of the county service for repeated bulk queries: an operational unknown, not a claim that any permission is missing for the already downloaded, CC BY-labelled bytes.
 - Currency of the data (the item was modified 2022-09-06), accuracy of any point, or fitness of any address as a trip start or end.
 - Phone load time and memory; the effect on payload and caching; how a future UI would present ambiguity.
 - Anything about native parity: native has no address search here, and this adds none to the app.

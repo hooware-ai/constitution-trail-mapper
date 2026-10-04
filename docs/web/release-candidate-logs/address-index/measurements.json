@@ -1,5 +1,12 @@
 {
  "rows": 85220,
+ "pointAmbiguity": {
+  "addressGroups": 63788,
+  "withMoreThanOnePoint": 2523,
+  "spreadOver50m": 197,
+  "spreadOver500m": 5,
+  "maxSpreadMeters": 996
+ },
  "countyCounts": {
   "MCLEAN COUNTY": 85216,
   "WOODFORD COUNTY": 3,
@@ -24,13 +31,13 @@
  },
  "indexSha256": "ef5c386736f099c01a1116b8f09ab85f4115815a23157de339c12eaf4f9cdc4f",
  "timings": {
-  "buildMs": 225,
-  "loadMs": 15,
-  "searchMedianMs": 0.152,
-  "searchP95Ms": 0.988,
-  "firstNearestIncludingGridMs": 3.8,
+  "buildMs": 233,
+  "loadMs": 16,
+  "searchMedianMs": 0.136,
+  "searchP95Ms": 0.673,
+  "firstNearestIncludingGridMs": 4,
   "nearestMedianMs": 0.007,
-  "nearestP95Ms": 0.03,
+  "nearestP95Ms": 0.029,
   "node": "v24.13.0",
   "note": "Node on this development machine; not a phone. Indicative only."
  }

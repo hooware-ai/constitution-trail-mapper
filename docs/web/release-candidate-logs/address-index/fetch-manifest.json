@@ -1,6 +1,6 @@
 {
   "schema": "trail-mapper.address-points.fetch/1",
-  "retrievedAt": "2026-10-03T23:56:03.287Z",
+  "retrievedAt": "2026-10-04T00:20:13.422Z",
   "item": {
     "id": "502eefa828f94f749bbab9da63b0d016",
     "title": "Addresses",
@@ -9,7 +9,11 @@
     "url": "https://www.arcgis.com/home/item.html?id=502eefa828f94f749bbab9da63b0d016",
     "modified": "2022-09-06T19:08:23.000Z",
     "snippet": "Address points for McLean County, IL",
-    "licenseInfoText": "This work is licensed under a Creative Commons Attribution 4.0 International License (https://creativecommons.org/licenses/by/4.0/)"
+    "access": "public",
+    "serviceUrl": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
+    "licenseInfo": "<a href='https://creativecommons.org/licenses/by/4.0/' rel='nofollow ugc'><img alt='Creative Commons License' src='https://i.creativecommons.org/l/by/4.0/88x31.png' style='border-width:0px;' /></a><br />This work is licensed under a <a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='nofollow ugc noopener noreferrer'>Creative Commons Attribution 4.0 International License</a>.",
+    "accessInformation": null,
+    "itemJsonSha256": "3d29d6a97df1a7f6dbe1286ac1602c98121ad6fe585ded77ce70dd9127429fb2"
   },
   "service": {
     "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
@@ -26,7 +30,10 @@
       "Inc_Muni",
       "County",
       "State"
-    ]
+    ],
+    "copyrightText": "",
+    "description": "",
+    "layerJsonSha256": "f8d57e777ffca872e608c176ab48facf1f399acb381a675b9d7e4661c2f0a104"
   },
   "completeness": {
     "serviceCount": 85220,

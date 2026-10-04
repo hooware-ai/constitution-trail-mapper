@@ -99,18 +99,33 @@
    "places": [
     {
      "label": "801 N Main St, Bloomington",
-     "units": 2,
+     "units": 1,
      "metersFromCatalogMarker": 3899
     },
     {
      "label": "801 N Main St, Normal",
-     "units": 2,
+     "units": 0,
      "metersFromCatalogMarker": 49
     },
     {
      "label": "801 N Main St, Saybrook",
      "units": 0,
      "metersFromCatalogMarker": 40884
+    },
+    {
+     "label": "801 N Main St, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 3897
+    },
+    {
+     "label": "801 N Main St, Normal",
+     "units": 1,
+     "metersFromCatalogMarker": 129
+    },
+    {
+     "label": "801 N Main St, Normal",
+     "units": 1,
+     "metersFromCatalogMarker": 146
     }
    ]
   },
@@ -127,12 +142,47 @@
   ],
   "index": {
    "kind": "matches",
-   "ambiguous": false,
+   "ambiguous": true,
    "places": [
     {
      "label": "1020 S Morris Ave, Bloomington",
-     "units": 12,
+     "units": 0,
      "metersFromCatalogMarker": 125
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 133
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 231
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 131
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 126
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 128
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 132
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 123
     }
    ]
   },

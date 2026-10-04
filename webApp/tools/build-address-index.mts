@@ -156,8 +156,67 @@ const timings = {
   note: "Node on this development machine; not a phone. Indicative only.",
 };
 
+// How often one address (street, number, suffix, postal community) has more than one recorded point: those searches are
+// ambiguous by design (a different point is a different place), so the rate matters to any later UI.
+const pointAmbiguity = (() => {
+  const d = loaded.data;
+  const groups = new Map<string, Set<string>>();
+  const spread = new Map<string, { lat: number[]; lon: number[] }>();
+  let la = 0,
+    lo = 0;
+  for (let e = 0; e < d.num.length; e++) {
+    la += d.lat[e];
+    lo += d.lon[e];
+    let street = 0;
+    {
+      let lowEnd = 0,
+        highEnd = d.start.length - 2;
+      while (lowEnd < highEnd) {
+        const mid = (lowEnd + highEnd + 1) >> 1;
+        if (d.start[mid] <= e) lowEnd = mid;
+        else highEnd = mid - 1;
+      }
+      street = lowEnd;
+    }
+    const key = `${street}|${d.num[e]}|${d.suffix[e]}|${d.city[e]}`;
+    (groups.get(key) ?? groups.set(key, new Set()).get(key)!).add(
+      `${la}|${lo}`,
+    );
+    const s = spread.get(key) ?? { lat: [], lon: [] };
+    s.lat.push(la);
+    s.lon.push(lo);
+    spread.set(key, s);
+  }
+  let multi = 0,
+    over50 = 0,
+    over500 = 0,
+    max = 0;
+  for (const [key, points] of groups) {
+    if (points.size < 2) continue;
+    multi++;
+    const s = spread.get(key)!;
+    const dy = ((Math.max(...s.lat) - Math.min(...s.lat)) / 1e6) * 111_195;
+    const dx =
+      ((Math.max(...s.lon) - Math.min(...s.lon)) / 1e6) *
+      111_195 *
+      Math.cos((40.5 * Math.PI) / 180);
+    const meters = Math.hypot(dx, dy);
+    if (meters > 50) over50++;
+    if (meters > 500) over500++;
+    max = Math.max(max, Math.round(meters));
+  }
+  return {
+    addressGroups: groups.size,
+    withMoreThanOnePoint: multi,
+    spreadOver50m: over50,
+    spreadOver500m: over500,
+    maxSpreadMeters: max,
+  };
+})();
+
 const measured = {
   rows: rows.length,
+  pointAmbiguity,
   countyCounts,
   report,
   size: {
@@ -224,9 +283,12 @@ if (manifestFile) {
       "owner or property data other than the address text and point",
     ],
     blockers: [
-      "No owner approval to publish this index or ship it in a build.",
+      "No Trail Mapper owner approval to ship this index in a build. That is an internal composition approval and is separate from the source's CC BY 4.0 label; a shipped build must carry the attribution and change statement above.",
       "Address points are not approved trail entrances; the no-gap Start rule is unchanged.",
-      "The service is public and unauthenticated, but its availability for repeated bulk use has not been agreed with the county.",
+    ],
+    operationalUnknowns: [
+      "Availability and rate tolerance of the county service for repeated bulk queries is unknown. It is an operational question, not a missing licence permission for the already downloaded, CC BY-labelled bytes.",
+      "Currency of the rows: the item was last modified 2022-09-06; whether the rows are newer is not established.",
     ],
   };
   mkdirSync(dirname(manifestFile), { recursive: true });

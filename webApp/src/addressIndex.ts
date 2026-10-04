@@ -11,6 +11,7 @@
 
 export const ADDRESS_INDEX_SCHEMA = "trail-mapper.address-index/1";
 export const TRANSFORM_VERSION = "1";
+export const MAX_REVERSE_METERS = 2_000;
 const COORDINATE_SCALE = 1_000_000; // 1e-6 degrees, about 0.11 m in latitude: finer than an address point is accurate
 
 // ---- normalization -----------------------------------------------------------------------------------------------------
@@ -61,6 +62,14 @@ export function tokens(text: string): string[] {
     .split(/\s+/)
     .filter(Boolean)
     .map((token) => CANONICAL[token] ?? token);
+}
+/** Canonical forms of every alias (full spelling) that the partly typed token begins; empty when it begins none. */
+export function aliasCompletions(token: string): Set<string> {
+  const found = new Set<string>();
+  if (token.length < 2) return found;
+  for (const [alias, canonical] of Object.entries(CANONICAL))
+    if (alias.startsWith(token)) found.add(canonical);
+  return found;
 }
 const NUMBER = /^(\d+)(?:-?([A-Z])|-(\d+)|(1\/2))?$/;
 /** A leading house number: its integer and its suffix ("A", "1/2", "-5"), or null when the text has none. */
@@ -414,10 +423,15 @@ export class AddressIndex {
     };
   }
 
-  /** Streets matching typed street tokens: all but the last token exactly, the last as a prefix; a leading directional may be left out. */
+  /**
+   * Streets matching typed street tokens: all but the last token exactly, the last as a prefix; a leading directional may
+   * be left out. A last token the rider has only partly typed also matches the canonical form of any alias it begins
+   * ("stre" while typing STREET matches ST), by equality, so it never widens into unrelated prefixes.
+   */
   private matchStreets(typed: string[]): number[] {
     const found: { street: number; rank: number }[] = [];
     const last = typed.length - 1;
+    const completions = aliasCompletions(typed[last]);
     for (let s = 0; s < this.streetTokens.length; s++) {
       const name = this.streetTokens[s];
       for (const offset of name.length > 1 &&
@@ -431,7 +445,7 @@ export class AddressIndex {
           const candidate = name[offset + i];
           ok =
             i === last
-              ? candidate.startsWith(typed[i])
+              ? candidate.startsWith(typed[i]) || completions.has(candidate)
               : candidate === typed[i];
         }
         if (ok) {
@@ -473,6 +487,7 @@ export class AddressIndex {
     const d = this.data;
     const wanted = d.suffixes.indexOf(number.suffix);
     const places: AddressPlace[] = [];
+    const placeKeys: string[] = [];
     for (const street of streets) {
       for (
         let e = d.start[street];
@@ -480,18 +495,18 @@ export class AddressIndex {
         e++
       ) {
         if (d.num[e] !== number.num || d.suffix[e] !== wanted) continue;
-        // Entries of one number, suffix and city are one place; their unit labels are listed.
-        const same = places.find(
-          (p) =>
-            p.city === formatCity(d.cities[d.city[e]]) &&
-            p.street === formatStreet(d.streets[street]) &&
-            p.number === this.place(e, street).number,
-        );
+        // Entries are one place only when street, number, suffix, city AND the recorded point are the same: their unit
+        // labels are then listed. A different recorded point is a different place, so the result is ambiguous and the
+        // caller is never handed a guessed location.
+        const key = `${street}|${d.num[e]}|${d.suffix[e]}|${d.city[e]}|${this.lat[e]}|${this.lon[e]}`;
         const unit = this.unitOf.get(e);
-        if (same) {
-          if (unit && !same.units.includes(unit)) same.units.push(unit);
+        const at = placeKeys.indexOf(key);
+        if (at >= 0) {
+          if (unit && !places[at].units.includes(unit))
+            places[at].units.push(unit);
           continue;
         }
+        placeKeys.push(key);
         places.push(this.place(e, street, unit ? [unit] : []));
       }
     }
@@ -548,9 +563,10 @@ export class AddressIndex {
     return (this.grid = grid);
   }
   /**
-   * The nearest address point within `maxMeters` (default 75 m), as a label for a map point. It names where the point is
-   * near; it does not say the point is an entrance or connected to anything. Null when nothing is that close (the caller
-   * keeps its existing label).
+   * The nearest address point within `maxMeters` (default 75 m; capped at MAX_REVERSE_METERS, 2,000 m, so a caller cannot
+   * turn the lookup into a scan of the county), as a label for a map point. It names where the point is near; it does not
+   * say the point is an entrance or connected to anything. Null when nothing is that close (the caller keeps its existing
+   * label).
    */
   nearest(
     point: { latitude: number; longitude: number },
@@ -565,15 +581,14 @@ export class AddressIndex {
     const metersPerLat = 111_194.93;
     const metersPerLon =
       metersPerLat * Math.cos((point.latitude * Math.PI) / 180);
-    const reach = Math.ceil(maxMeters / (AddressIndex.CELL * metersPerLon));
+    // The bound is both a distance and a cell reach on EACH axis, so a point as far away as the bound is always searched.
+    const bound = Math.min(Math.max(maxMeters, 0), MAX_REVERSE_METERS);
+    const latReach = Math.ceil(bound / (AddressIndex.CELL * metersPerLat));
+    const lonReach = Math.ceil(bound / (AddressIndex.CELL * metersPerLon));
     let best = -1,
       bestDistance = Infinity;
-    for (let a = latCell - 1; a <= latCell + 1; a++)
-      for (
-        let b = lonCell - Math.max(1, reach);
-        b <= lonCell + Math.max(1, reach);
-        b++
-      )
+    for (let a = latCell - latReach; a <= latCell + latReach; a++)
+      for (let b = lonCell - lonReach; b <= lonCell + lonReach; b++)
         for (const e of grid.get(this.cellKey(a, b)) ?? []) {
           const dy = ((this.lat[e] - latU) / COORDINATE_SCALE) * metersPerLat;
           const dx = ((this.lon[e] - lonU) / COORDINATE_SCALE) * metersPerLon;
@@ -586,7 +601,7 @@ export class AddressIndex {
             bestDistance = distance;
           }
         }
-    if (best < 0 || bestDistance > maxMeters) return null;
+    if (best < 0 || bestDistance > bound) return null;
     const street = this.streetOf(best);
     const unit = this.unitOf.get(best);
     return {

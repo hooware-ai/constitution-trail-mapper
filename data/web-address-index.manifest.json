@@ -13,7 +13,11 @@
       "url": "https://www.arcgis.com/home/item.html?id=502eefa828f94f749bbab9da63b0d016",
       "modified": "2022-09-06T19:08:23.000Z",
       "snippet": "Address points for McLean County, IL",
-      "licenseInfoText": "This work is licensed under a Creative Commons Attribution 4.0 International License (https://creativecommons.org/licenses/by/4.0/)"
+      "access": "public",
+      "serviceUrl": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
+      "licenseInfo": "<a href='https://creativecommons.org/licenses/by/4.0/' rel='nofollow ugc'><img alt='Creative Commons License' src='https://i.creativecommons.org/l/by/4.0/88x31.png' style='border-width:0px;' /></a><br />This work is licensed under a <a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='nofollow ugc noopener noreferrer'>Creative Commons Attribution 4.0 International License</a>.",
+      "accessInformation": null,
+      "itemJsonSha256": "3d29d6a97df1a7f6dbe1286ac1602c98121ad6fe585ded77ce70dd9127429fb2"
     },
     "service": {
       "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
@@ -30,7 +34,10 @@
         "Inc_Muni",
         "County",
         "State"
-      ]
+      ],
+      "copyrightText": "",
+      "description": "",
+      "layerJsonSha256": "f8d57e777ffca872e608c176ab48facf1f399acb381a675b9d7e4661c2f0a104"
     },
     "license": {
       "name": "Creative Commons Attribution 4.0 International",
@@ -39,7 +46,7 @@
       "attribution": "Contains McLean County, Illinois address data from the county's public 'Addresses' ArcGIS item (502eefa828f94f749bbab9da63b0d016), licensed CC BY 4.0. Trail Mapper reduced it to address text, postal community, postal code and point, normalized the text, rounded points to 1e-6 degrees and removed non-McLean and unnumbered rows. This is not the county's own product and is not endorsed by the county.",
       "changesMade": "reduced fields; address text upper-cased with punctuation removed and directional and street-type words made canonical; points rounded to 1e-6 degrees; rows outside McLean County, without a leading house number, without a point, or exact duplicates removed (counts below)"
     },
-    "retrievedAt": "2026-10-03T23:56:03.287Z",
+    "retrievedAt": "2026-10-04T00:20:13.422Z",
     "completeness": {
       "serviceCount": 85220,
       "fetchedRows": 85220,
@@ -95,8 +102,11 @@
     "owner or property data other than the address text and point"
   ],
   "blockers": [
-    "No owner approval to publish this index or ship it in a build.",
-    "Address points are not approved trail entrances; the no-gap Start rule is unchanged.",
-    "The service is public and unauthenticated, but its availability for repeated bulk use has not been agreed with the county."
+    "No Trail Mapper owner approval to ship this index in a build. That is an internal composition approval and is separate from the source's CC BY 4.0 label; a shipped build must carry the attribution and change statement above.",
+    "Address points are not approved trail entrances; the no-gap Start rule is unchanged."
+  ],
+  "operationalUnknowns": [
+    "Availability and rate tolerance of the county service for repeated bulk queries is unknown. It is an operational question, not a missing licence permission for the already downloaded, CC BY-labelled bytes.",
+    "Currency of the rows: the item was last modified 2022-09-06; whether the rows are newer is not established."
   ]
 }
