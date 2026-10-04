@@ -69,19 +69,19 @@ test("only a house number plus street text starts address search", () => {
     assert.equal(looksLikeAddress(no), false, no);
 });
 
-test("a build with no index, or a county build, offers no address source; only a fixture build or an opted-in review build does", () => {
-  assert.equal(addressIndexSource(false, null), null);
-  assert.deepEqual(addressIndexSource(true, null), {
+test("a build with no index offers no address source, fixture or county; only an opted-in review build or the development test seam does", () => {
+  const built = { file: "data/address-index.abc.json", sha256: "x" };
+  assert.equal(addressIndexSource(null, false), null);
+  assert.deepEqual(addressIndexSource(null, true), {
     url: FIXTURE_ADDRESS_INDEX_PATH,
     sha256: null,
   });
-  assert.deepEqual(
-    addressIndexSource(false, {
-      file: "data/address-index.abc.json",
-      sha256: "x",
-    }),
-    { url: "data/address-index.abc.json", sha256: "x" },
-  );
+  assert.deepEqual(addressIndexSource(built, false), {
+    url: built.file,
+    sha256: "x",
+  });
+  // A built index wins over the seam: the seam never replaces a real, pinned file.
+  assert.equal(addressIndexSource(built, true)?.url, built.file);
 });
 
 test("the same address at two recorded points gives two distinct choices with city, units, point and the not-an-entrance label", () => {

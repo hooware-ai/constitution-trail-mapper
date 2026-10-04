@@ -17,15 +17,23 @@ export interface AddressIndexSource {
   url: string;
   sha256: string | null;
 }
-/** Review fixtures read a synthetic index from this path (tests intercept it); a county build never asks for it. */
+/**
+ * The synthetic test seam: only the development server (never a built artifact, fixture or county) reads a synthetic index
+ * from this path, and only the tests serve one there. No build ships a file at this path.
+ */
 export const FIXTURE_ADDRESS_INDEX_PATH = "data/address-index.fixture.json";
 
+/**
+ * Where this build's address index is: the opt-in, hash-pinned file a review build was made with, or, only when `devSeam`
+ * is true (development server running the synthetic fixture), the test path. Otherwise null and address search is off,
+ * so an ordinary fixture or county build never requests a file it does not contain.
+ */
 export function addressIndexSource(
-  fixture: boolean,
   built: { file: string; sha256: string } | null,
+  devSeam: boolean,
 ): AddressIndexSource | null {
-  if (fixture) return { url: FIXTURE_ADDRESS_INDEX_PATH, sha256: null };
-  return built ? { url: built.file, sha256: built.sha256 } : null;
+  if (built) return { url: built.file, sha256: built.sha256 };
+  return devSeam ? { url: FIXTURE_ADDRESS_INDEX_PATH, sha256: null } : null;
 }
 
 /** A house number followed by street text ("421 n main", "12A Oak"): the only input that starts address search. */

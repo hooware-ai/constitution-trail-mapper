@@ -258,9 +258,23 @@ export function PlaceChooser({
         </p>
       )}
       <p className="caption">
-        Not an address or business search: only {places.length} public places
-        near Bloomington–Normal{fixture ? " (plus review trailheads)" : ""} and
-        your saved places, searched on this device.{" "}
+        {addressSource ? (
+          <>
+            Searches {places.length} public places near Bloomington–Normal
+            {fixture ? " (plus review trailheads)" : ""} and your saved places
+            on this device. Typing a house number and street also searches
+            county address points, loaded to this device only when you do.
+            County address points are not verified trail entrances, and this is
+            not a business search.
+          </>
+        ) : (
+          <>
+            Not an address or business search: only {places.length} public
+            places near Bloomington–Normal
+            {fixture ? " (plus review trailheads)" : ""} and your saved places,
+            searched on this device.
+          </>
+        )}{" "}
         {start
           ? "Results near your selected start are shown first."
           : "Start has no resolved coordinate, so results are not ordered by distance."}

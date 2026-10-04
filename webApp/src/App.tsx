@@ -54,6 +54,12 @@ import {
 } from "./platform/navigation";
 import { acquirePlannerLocation } from "./platform/plannerLocation";
 import { addressIndexSource } from "./addressSearch";
+
+// The synthetic address test seam: only the development server, only with ?addressFixture in the address, read once.
+// A built artifact (fixture or county) never has it, so an ordinary fixture page offers no address search.
+const ADDRESS_FIXTURE_SEAM =
+  import.meta.env.DEV &&
+  new URLSearchParams(window.location.search).has("addressFixture");
 import { ForegroundWakeLock } from "./platform/wakeLock";
 import { BrowserSessionStore, type BrowserSession } from "./platform/session";
 import {
@@ -2786,8 +2792,8 @@ export function App() {
           saved={library.places}
           fixture={fixtureData}
           addressSource={addressIndexSource(
-            fixtureData,
             __TRAIL_ADDRESS_INDEX__,
+            fixtureData && ADDRESS_FIXTURE_SEAM,
           )}
           onChoose={choose}
           onMap={() => {

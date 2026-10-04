@@ -226,11 +226,10 @@ export function HelpDialog({
               Finding places
             </h3>
             <p>
-              Place search is not an address or business search. It looks only
-              in {places.length} public places near Bloomington–Normal and in
-              places you saved, on this device, and sends nothing you type
-              anywhere. If your place is not listed, use{" "}
-              <strong>Pick on map</strong>,{" "}
+              {__TRAIL_ADDRESS_INDEX__
+                ? "Place search is not a business search. It looks in the public places near Bloomington–Normal and in places you saved, and, when you type a house number and street, in county address points that are loaded to this device only then. County address points are not verified trail entrances. Nothing you type is sent anywhere."
+                : `Place search is not an address or business search. It looks only in ${places.length} public places near Bloomington–Normal and in places you saved, on this device, and sends nothing you type anywhere.`}{" "}
+              If your place is not listed, use <strong>Pick on map</strong>,{" "}
               <strong>Use current location</strong> or choose a place you saved.
             </p>
           </section>

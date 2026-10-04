@@ -44,7 +44,7 @@ async function serveIndex(page: Page) {
   return requests;
 }
 async function openChooser(page: Page, field: "Start" | "Destination") {
-  await page.goto("/");
+  await page.goto("/?addressFixture");
   await page.getByRole("button", { name: /Go somewhere/ }).click();
   await page
     .getByRole("button", { name: new RegExp("^" + field + ":") })
@@ -166,4 +166,17 @@ test("when the address data cannot be loaded the chooser says so and every other
       .getByRole("dialog")
       .getByRole("button", { name: /^Review trailhead · East/ }),
   ).toBeVisible();
+});
+
+test("with an address index the footer states the real behavior and keeps the not-an-entrance caveat", async ({
+  page,
+}) => {
+  await serveIndex(page);
+  await openChooser(page, "Start");
+  const footer = page.locator("dialog p.caption");
+  await expect(footer).toContainText("also searches county address points");
+  await expect(footer).toContainText(
+    "County address points are not verified trail entrances",
+  );
+  await expect(footer).not.toContainText("Not an address or business search");
 });

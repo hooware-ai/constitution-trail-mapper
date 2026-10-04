@@ -3,7 +3,7 @@
   "kind": "address-index-prototype",
   "id": "mclean-address-index",
   "testOnly": false,
-  "scope": "PROTOTYPE INPUT PIN ONLY. It records which fetched county address bytes and which transform produced which index, so a later review can reproduce them. It is not a rights approval, not an owner approval of any dataset composition and not a publication approval, and nothing in the web app loads this index.",
+  "scope": "PROTOTYPE INPUT PIN ONLY. It records which fetched county address bytes and which transform produced which index, so a later review can reproduce them. It is not a rights approval, not an owner approval of any dataset composition and not a publication approval, and no default or public build contains this index. Only an explicitly opt-in REVIEW build (TRAIL_ADDRESS_INDEX_FILE, review channel only, bytes equal to the pin below) can carry the real index, and the place chooser then fetches it only when a rider types an address; publication and composition approval are still absent.",
   "source": {
     "item": {
       "id": "502eefa828f94f749bbab9da63b0d016",
