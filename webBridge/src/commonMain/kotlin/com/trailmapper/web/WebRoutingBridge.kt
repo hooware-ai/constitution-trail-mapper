@@ -833,6 +833,13 @@ class WebRoutingBridge {
         if (segment.isRouted) return@mapIndexedNotNull null
         val meters = segment.points.zipWithNext().sumOf { (a, b) -> TrailDistanceSijko.metersBetween(a, b) }
         if (!(meters > 0.01)) return@mapIndexedNotNull null
+        val endpoint = index == 0 || index == route.segments.lastIndex
+        // An interior connector whose two ends are within mapping precision (JOINED_WITHIN_METERS) and which sits between two MAPPED
+        // segments is a coordinate discrepancy where the mapped road and trail meet, not a missing link: the routed geometry on both
+        // sides demonstrably reaches the same place. Endpoint connections and anything longer stay estimated gaps.
+        if (!endpoint && meters <= JOINED_WITHIN_METERS &&
+            route.segments[index - 1].isRouted && route.segments[index + 1].isRouted
+        ) return@mapIndexedNotNull null
         val label = when (index) {
             0 -> "Start connection"
             route.segments.lastIndex -> if (route.kind == TrailRouteKind.ExerciseLoop) "Return connection" else "Destination connection"
@@ -842,12 +849,15 @@ class WebRoutingBridge {
         }
         buildJsonObject {
             put("id", "gap-$index")
+            // "endpoint": the start or destination/return connection, obvious to the rider; "interior": between mapped parts.
+            put("kind", if (endpoint) "endpoint" else "interior")
             put("distanceMeters", meters)
             put("from", json.encodeToJsonElement(segment.points.first()))
             put("to", json.encodeToJsonElement(segment.points.last()))
             put("label", label)
         }
     })
+    private companion object { const val JOINED_WITHIN_METERS = 1.0 }
     private fun strings(values: List<String>): JsonArray = JsonArray(values.map(::JsonPrimitive))
     private fun instructionJson(instruction: TrailRouteInstruction): JsonObject = buildJsonObject {
         put("text", instruction.text); put("distance", instruction.distanceMeters)

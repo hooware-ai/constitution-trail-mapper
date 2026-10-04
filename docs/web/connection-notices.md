@@ -1,0 +1,13 @@
+# Which estimated connections are announced (2026-10-04)
+
+Jesse's feedback on the private test site: the start and end connection notices are obvious, one interior notice was "the same road", and one "isn't even a gap".
+
+**Diagnosis on the real review package (30 catalog pairs, all of which showed four notices).** Each route's connections are the unrouted `Access` segments in the route: the first and last (start and destination or loop-return, `kind: endpoint`) and the joins where the access road meets the trail (`kind: interior`, labelled `Near <adjacent name>`). In the real data the interior joins were of two kinds: a mapped road end and a trail snap point within 0.03 to 0.86 m of each other (coordinate discrepancies where two mapped features meet, for example `Near N School St` 0.1 m, `Near McCormick Blvd` 0.27 m, `Near W North St` 0.86 m, `Near Gettysburg Dr` 0.03 m), and genuine inferred road-to-trail links (`Near Hubbard Dr` 13.84 m, `Near White Oak Rd` 78.44 m). The exact route Jesse used was not available, so which of these he saw as "the same road" is not established.
+
+**Correction.**
+- Bridge (`accessGapJson`): an interior unrouted connector of 1.0 m or less between two MAPPED (routed) segments is not a gap: the mapped geometry on both sides reaches the same place within mapping precision. Same road name alone, short length alone, endpoint connectors and connectors next to another estimated segment are NOT joined (tests). The route data is unchanged (the connector is still an unrouted segment and its length stays in the distance). Each remaining gap carries `kind`.
+- Web: only interior connections get a numbered notice and numbered map marker. Start and destination connections are not announced, but they remain in the route data and in counts and warnings, are drawn as a dashed estimated line with the tooltip "Estimated connection, not confirmed", and the map section carries `data-estimated-connections`. The strict Start-blocked caption and the private test-mode banner, warning and note are unchanged.
+
+**Effect on the 30 pairs (strict build).** Routes and distances identical; gap counts 4 for all before, now 3 for 16 pairs, 2 for 12 and 4 for 2 (the genuine longer joins remain); every pair still has at least its endpoint connections, so strict Start remains blocked for all 30. This is a strict-Start classification change only for routes whose sole interior joins are 1 m or less between mapped segments and which have no endpoint connection.
+
+**Limits.** 1.0 m is a mapping-precision judgment, stated here and pinned in tests, not a surveyed fact. Genuine interior links (13 m, 78 m) are still estimated and still announced. No connection is verified by any of this.

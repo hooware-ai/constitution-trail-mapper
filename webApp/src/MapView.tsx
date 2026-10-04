@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 import type { Feature, Point, RouteResult, Closure, MapCues } from "./types";
 import { ChevronLayer } from "./chevrons";
 import { lengthMeters, riddenPolylines } from "./ridden";
-import { gapDistance } from "./gapDistance";
+import { connectionsToCheck, gapDistance } from "./gapDistance";
 const routePoints = (route: RouteResult) => [
   ...route.segments.flatMap((segment) => segment.points),
   ...(route.accessGaps ?? []).flatMap((gap) => [gap.from, gap.to]),
@@ -290,7 +290,25 @@ export function MapView({
             .addTo(g);
       }
     }
-    (route?.accessGaps ?? []).forEach((gap, index) => {
+    // Start and destination (or loop return) connections are obvious: they get a dashed line and no numbered notice. Connections
+    // BETWEEN mapped parts keep their numbered marker, popup and list entry.
+    (route?.accessGaps ?? [])
+      .filter((gap) => gap.kind === "endpoint")
+      .forEach((gap) => {
+        L.polyline([xy(gap.from), xy(gap.to)], {
+          color: "#093b33",
+          weight: 3,
+          opacity: 0.8,
+          dashArray: "4 6",
+          interactive: false,
+          className: "estimated-connection",
+        })
+          .bindTooltip("Estimated connection, not confirmed", {
+            sticky: true,
+          })
+          .addTo(g);
+      });
+    connectionsToCheck(route?.accessGaps ?? []).forEach((gap, index) => {
       const bounds = L.latLngBounds([xy(gap.from), xy(gap.to)]);
       const label = `Connection ${index + 1}: ${gap.label}, ${gapDistance(gap.distanceMeters)}`;
       const details = document.createElement("div");
@@ -440,6 +458,7 @@ export function MapView({
   return (
     <section
       className={"map-wrap" + (picking ? " picking" : "")}
+      data-estimated-connections={route?.accessGaps?.length ?? 0}
       aria-label={
         route?.accessGaps?.length
           ? "Route map with unverified connections"

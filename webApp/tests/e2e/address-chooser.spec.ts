@@ -138,9 +138,10 @@ test("an address endpoint far from any mapped trail keeps its unverified connect
   await expect(
     page.getByRole("heading", { name: "Route preview", exact: true }),
   ).toBeVisible();
-  // The address point was not moved onto a trail: the connection is still there, measured, and still blocks Start.
-  const details = page.getByRole("region", { name: "1 connection to check" });
-  await expect(details).toContainText("365 ft");
+  // The address point was not moved onto a trail: the start connection is still there (dashed, not announced) and blocks Start.
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeDisabled();

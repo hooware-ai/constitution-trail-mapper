@@ -45,6 +45,8 @@ export type Segment = {
 };
 export type AccessGap = {
   id: string;
+  /** "endpoint": the start or destination/return connection; "interior": between mapped parts of the route. */
+  kind?: "endpoint" | "interior";
   distanceMeters: number;
   from: Point;
   to: Point;

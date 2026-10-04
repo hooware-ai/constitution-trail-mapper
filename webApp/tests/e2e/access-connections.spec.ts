@@ -36,49 +36,38 @@ async function planFromLocation(page: Page, latitude: number) {
   ).toBeVisible();
 }
 
-test("unverified connections have measured details and accessible map focus", async ({
+test("an obvious start connection is not announced, but it is still estimated: dashed on the map, counted, and Start stays blocked", async ({
   page,
 }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await planFromLocation(page, 40.489);
-  const details = page.getByRole("region", { name: "1 connection to check" });
-  await expect(details).toContainText("365 ft");
+  // The start connection is obvious: no numbered notice and no numbered marker...
+  await expect(
+    page.getByRole("region", { name: /connections? to check/ }),
+  ).toHaveCount(0);
+  await expect(page.locator(".connection-marker")).toHaveCount(0);
+  // ...but nothing is relabelled as confirmed: the route is still described as having unverified connections, drawn dashed.
+  await expect(
+    page.getByRole("region", {
+      name: "Route map with unverified connections",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
   await expect(
     page.getByText(/unmapped ground|unsafe or unverified/),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeDisabled();
-  const show = details.getByRole("button", {
-    name: /Show connection 1: Start connection/,
-  });
-  await show.press("Enter");
-  const map = page.getByRole("region", {
-    name: "Route map with unverified connections",
-    exact: true,
-  });
-  const marker = map.getByRole("button", {
-    name: /Connection 1: Start connection/,
-  });
-  await expect(marker).toBeFocused();
-  await expect(page.locator(".leaflet-popup")).toContainText(
-    "Map data does not confirm a traversable connection here",
-  );
-  const box = await marker.boundingBox();
-  const viewport = page.viewportSize()!;
-  expect(box).not.toBeNull();
-  expect(box!.y).toBeGreaterThanOrEqual(0);
-  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
-  await page
-    .getByRole("button", { name: "Close popup", exact: true })
-    .press("Enter");
-  await page.getByRole("button", { name: "Fit route", exact: true }).click();
-  await show.press("Enter");
-  await expect(marker).toBeFocused();
-  await expect(page.locator(".leaflet-popup")).toBeVisible();
+  await expect(
+    page.getByText(/still has estimated connections that are not confirmed/),
+  ).toBeVisible();
   await page.screenshot({
-    path: `output/playwright/access-gap-focus-${info.project.name}.png`,
+    path: `output/playwright/access-gap-dashed-${info.project.name}.png`,
     fullPage: true,
   });
   const results = await new AxeBuilder({ page })
@@ -97,17 +86,16 @@ test("unverified connections have measured details and accessible map focus", as
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeDisabled();
-  await expect(page.locator(".leaflet-popup")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
-test("sub-foot connection is visible and still blocks navigation", async ({
+test("a sub-foot start connection is still estimated and still blocks navigation", async ({
   page,
 }) => {
   await planFromLocation(page, 40.489998);
-  const details = page.getByRole("region", { name: "1 connection to check" });
-  await expect(details).toContainText("Less than 1 ft total");
-  await expect(details).toContainText("<1 ft");
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeDisabled();

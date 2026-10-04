@@ -49,8 +49,8 @@ test("default build: no test banner, the estimated connection blocks Start", asy
   await planFromLocation(page, 40.489);
   await expect(page.getByText(/PRIVATE TEST MODE/)).toHaveCount(0);
   await expect(
-    page.getByRole("region", { name: "1 connection to check" }),
-  ).toContainText("365 ft");
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
   await expect(start(page)).toBeDisabled();
 });
 
@@ -66,8 +66,9 @@ test("private test mode: the banner and route warning say estimated, the connect
     "estimated, not confirmed",
   );
   // Nothing is relabelled as confirmed: the same measured, unverified connection is listed and drawn.
-  const details = page.getByRole("region", { name: "1 connection to check" });
-  await expect(details).toContainText("365 ft");
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
   await expect(
     page.getByRole("region", {
       name: "Route map with unverified connections",
@@ -100,8 +101,8 @@ test("private test mode: a recalculated route with the same estimated connection
     .getByRole("button", { name: "Recalculate route", exact: true })
     .click();
   await expect(
-    page.getByRole("region", { name: "1 connection to check" }),
-  ).toContainText("365 ft");
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
   await expect(
     page.getByText(
       /PRIVATE TEST MODE: this route includes 1 estimated connection/,

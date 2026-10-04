@@ -2325,10 +2325,10 @@ export function App() {
                         ? "Navigation is unavailable until this route is recalculated on the current trail data."
                         : selected?.temporary
                           ? preview.accessGaps?.length
-                            ? "This recalculated route cannot be started: its connections listed above are still unverified. Your saved route is unchanged."
+                            ? "This recalculated route cannot be started: it still has estimated connections that are not confirmed. Your saved route is unchanged."
                             : "This recalculated route cannot be started: review the notices above. Your saved route is unchanged."
                           : preview.accessGaps?.length
-                            ? "Navigation needs a continuously mapped route. The connections listed above are still unverified."
+                            ? "Navigation needs a continuously mapped route. This route still has estimated connections that are not confirmed."
                             : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
                     </p>
                   )}

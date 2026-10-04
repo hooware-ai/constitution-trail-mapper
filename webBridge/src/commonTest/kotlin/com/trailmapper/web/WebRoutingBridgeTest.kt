@@ -143,15 +143,17 @@ class WebRoutingBridgeTest {
         val route = TrailRoute(segments = segments, totalDistanceMeters = 343.275, ordinaryAccessDistanceMeters = 243.275, totalCost = 1.0)
         val result = inspect(route)
         val gaps = result["accessGaps"]!!.jsonArray.map { it.jsonObject }
-        assertEquals(listOf("gap-0", "gap-2", "gap-4", "gap-6"), gaps.map { it["id"]!!.jsonPrimitive.content })
-        assertEquals(listOf("Start connection", "Near Matlock Dr", "Near Test Trail", "Destination connection"), gaps.map { it["label"]!!.jsonPrimitive.content })
-        listOf(24.0, 5.0, 0.275, 14.0).forEachIndexed { index, expected ->
+        // The 0.275 m connector between two mapped segments (index 4) is a coordinate discrepancy, not a gap (see the join tests below).
+        assertEquals(listOf("gap-0", "gap-2", "gap-6"), gaps.map { it["id"]!!.jsonPrimitive.content })
+        assertEquals(listOf("Start connection", "Near Matlock Dr", "Destination connection"), gaps.map { it["label"]!!.jsonPrimitive.content })
+        assertEquals(listOf("endpoint", "interior", "endpoint"), gaps.map { it["kind"]!!.jsonPrimitive.content })
+        listOf(0 to 24.0, 2 to 5.0, 6 to 14.0).forEachIndexed { index, (segmentIndex, expected) ->
             assertEquals(expected, gaps[index]["distanceMeters"]!!.jsonPrimitive.double, 1e-8)
-            assertEquals(Json.encodeToJsonElement(segments[index * 2].points.first()), gaps[index]["from"])
-            assertEquals(Json.encodeToJsonElement(segments[index * 2].points.last()), gaps[index]["to"])
+            assertEquals(Json.encodeToJsonElement(segments[segmentIndex].points.first()), gaps[index]["from"])
+            assertEquals(Json.encodeToJsonElement(segments[segmentIndex].points.last()), gaps[index]["to"])
         }
         assertEquals(243.275, result["accessDistance"]!!.jsonPrimitive.double)
-        assertEquals(43.275, gaps.sumOf { it["distanceMeters"]!!.jsonPrimitive.double }, 1e-8)
+        assertEquals(43.0, gaps.sumOf { it["distanceMeters"]!!.jsonPrimitive.double }, 1e-8)
         assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
         assertTrue(result["warnings"]!!.jsonArray.isEmpty())
         assertEquals(3, result["segments"]!!.jsonArray.size)
@@ -200,7 +202,7 @@ class WebRoutingBridgeTest {
         assertTrue(expected > TrailDistanceSijko.metersBetween(start, connection))
         assertEquals(Json.encodeToJsonElement(start), described["from"])
         assertEquals(Json.encodeToJsonElement(connection), described["to"])
-        assertEquals(setOf("id", "distanceMeters", "from", "to", "label"), described.keys)
+        assertEquals(setOf("id", "kind", "distanceMeters", "from", "to", "label"), described.keys)
     }
 
     @Test fun savedRouteIsBlockedWhenOfficialClosureBecomesActive() {
@@ -826,6 +828,88 @@ class WebRoutingBridgeTest {
     private fun inspect(route: TrailRoute, bridge: WebRoutingBridge = loaded()): JsonObject = call(bridge, buildJsonObject {
         put("op", "inspect"); put("route", Json.encodeToJsonElement(route)); put("now", now)
     })
+
+    // ---- interior connectors: a mapped join is not a gap, a genuine missing link still is ----
+
+    private fun northMeters(meters: Double) = MapPoint(40.4 + meters / 6_371_008.8 * 180.0 / kotlin.math.PI, -89.0)
+    /** mapped road, then a connector of [joinMeters], then a mapped trail (both mapped parts routed). */
+    private fun joinedRoute(joinMeters: Double, roadName: String? = "Test Dr", trailName: String? = "Test Trail", trailRoles: Set<TrailNetworkRole> = emptySet()): TrailRoute {
+        val a = northMeters(0.0); val b = northMeters(200.0); val c = northMeters(200.0 + joinMeters); val d = northMeters(400.0 + joinMeters)
+        return TrailRoute(
+            segments = listOf(
+                TrailRouteSegment(TrailRouteSegmentType.Access, listOf(a, b), isRouted = true, name = roadName),
+                TrailRouteSegment(TrailRouteSegmentType.Access, listOf(b, c), isRouted = false),
+                TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(c, d), isRouted = true, name = trailName, routeRoles = trailRoles),
+            ),
+            totalDistanceMeters = 400.0 + joinMeters, ordinaryAccessDistanceMeters = 200.0 + joinMeters, totalCost = 1.0,
+        )
+    }
+
+    @Test fun anInteriorConnectorBetweenTwoMappedSegmentsIsAGapOnlyBeyondMappingPrecision() {
+        for (join in listOf(0.03, 0.1, 0.27, 0.86, 1.0)) {
+            val result = inspect(joinedRoute(join))
+            assertTrue(result["accessGaps"]!!.jsonArray.isEmpty(), "a $join m join is a coordinate discrepancy")
+            assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean, "a $join m join does not block Start")
+            // The route itself is untouched: the connector is still an unrouted segment with its length in the total.
+            assertEquals(3, Json.decodeFromJsonElement<TrailRoute>(result["route"]!!).segments.size)
+            assertFalse(Json.decodeFromJsonElement<TrailRoute>(result["route"]!!).segments[1].isRouted)
+            assertEquals(400.0 + join, result["distance"]!!.jsonPrimitive.double, 1e-6)
+        }
+        for (join in listOf(1.5, 5.0, 13.84)) {
+            val result = inspect(joinedRoute(join))
+            val gap = result["accessGaps"]!!.jsonArray.single().jsonObject
+            assertEquals("interior", gap["kind"]!!.jsonPrimitive.content)
+            assertEquals(join, gap["distanceMeters"]!!.jsonPrimitive.double, 1e-3)
+            assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        }
+    }
+
+    @Test fun sharingARoadNameDoesNotJoinAConnectorThatIsLongerThanMappingPrecision() {
+        // Same name on both mapped sides is not proof of continuity: a 3 m break stays a gap, a 0.4 m one does not.
+        assertEquals(1, inspect(joinedRoute(3.0, roadName = "Same Rd", trailName = "Same Rd"))["accessGaps"]!!.jsonArray.size)
+        assertEquals(0, inspect(joinedRoute(0.4, roadName = "Same Rd", trailName = "Same Rd"))["accessGaps"]!!.jsonArray.size)
+        assertEquals(0, inspect(joinedRoute(0.4, roadName = null, trailName = null))["accessGaps"]!!.jsonArray.size)
+    }
+
+    @Test fun aConnectorNextToAnEstimatedSegmentOrAtAnEndStaysAGapHoweverShort() {
+        val a = northMeters(0.0); val b = northMeters(0.4); val c = northMeters(200.0); val d = northMeters(200.4)
+        // an end connector of 0.4 m is still reported (kind endpoint)
+        val atEnd = TrailRoute(
+            segments = listOf(
+                TrailRouteSegment(TrailRouteSegmentType.Access, listOf(a, b), isRouted = false),
+                TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(b, c), isRouted = true),
+            ),
+            totalDistanceMeters = 200.0, ordinaryAccessDistanceMeters = 0.4, totalCost = 1.0,
+        )
+        val endGap = inspect(atEnd)["accessGaps"]!!.jsonArray.single().jsonObject
+        assertEquals("endpoint", endGap["kind"]!!.jsonPrimitive.content)
+        assertEquals("Start connection", endGap["label"]!!.jsonPrimitive.content)
+        // two estimated segments in a row: the short one has an estimated neighbour, so it is not a join between two mapped parts
+        val next = TrailRoute(
+            segments = listOf(
+                TrailRouteSegment(TrailRouteSegmentType.Access, listOf(a, b), isRouted = true),
+                TrailRouteSegment(TrailRouteSegmentType.Access, listOf(b, c), isRouted = false),
+                TrailRouteSegment(TrailRouteSegmentType.Access, listOf(c, d), isRouted = false),
+                TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(d, northMeters(400.0)), isRouted = true),
+            ),
+            totalDistanceMeters = 400.0, ordinaryAccessDistanceMeters = 200.4, totalCost = 1.0,
+        )
+        val ids = inspect(next)["accessGaps"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+        assertEquals(listOf("gap-1", "gap-2"), ids)
+    }
+
+    @Test fun aJoinedConnectorNeverBypassesProposedStaleOrTestModeRules() {
+        val proposed = inspect(joinedRoute(0.5, trailRoles = setOf(TrailNetworkRole.ProposedTrails)))
+        assertTrue(proposed["accessGaps"]!!.jsonArray.isEmpty())
+        assertFalse(proposed["canNavigate"]!!.jsonPrimitive.boolean)
+        val stale = inspect(joinedRoute(0.5), loaded(trust = false))
+        assertFalse(stale["canNavigate"]!!.jsonPrimitive.boolean)
+        // the private test mode counts and warns about the remaining estimated connections only
+        val route = joinedRoute(5.0)
+        val assumed = inspect(route, loaded(assume = true))
+        assertTrue(assumed["warnings"]!!.jsonArray.any { it.jsonPrimitive.content.contains("1 estimated connection") })
+        assertEquals(inspect(route)["accessGaps"], assumed["accessGaps"])
+    }
 
     // ---- PRIVATE TEST MODE: estimated connections assumed traversable (default off) ----
 
