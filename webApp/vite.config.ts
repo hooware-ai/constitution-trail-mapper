@@ -39,10 +39,20 @@ try {
 } catch {
   /* dev servers may run before the core is built; Help then omits it */
 }
+// PRIVATE TEST MODE (build time only, default off, never a URL or runtime setting): estimated road-to-trail connections are
+// ASSUMED traversable so a route that contains them may Start. The connections stay estimated everywhere they are shown.
+// Review channel only; the artifact's provenance records it and blocks public release.
+const assumeEstimatedConnections =
+  process.env.TRAIL_ASSUME_ESTIMATED_CONNECTIONS === "1";
+if (assumeEstimatedConnections && channel !== "review")
+  throw new Error(
+    "TRAIL_ASSUME_ESTIMATED_CONNECTIONS is a private test mode and can only be used in a review build.",
+  );
 const buildInfo = {
   commit: git("rev-parse", "--short=12", "HEAD") ?? "unknown",
   dirty: status === null ? null : status.length > 0,
   core: coreHash,
+  assumeEstimated: assumeEstimatedConnections,
 };
 // OPT-IN county address index (review builds only). It is never part of a default build: the index is data the owner has not
 // approved for any composition, so it is added only when a file is named, only in the review channel, and only if its bytes
@@ -82,6 +92,7 @@ export default defineConfig({
     __TRAIL_DATASET__: JSON.stringify(datasetKind),
     __TRAIL_CHANNEL__: JSON.stringify(channel),
     __TRAIL_BUILD__: JSON.stringify(buildInfo),
+    __TRAIL_ASSUME_ESTIMATED__: JSON.stringify(assumeEstimatedConnections),
     __TRAIL_ADDRESS_INDEX__: JSON.stringify(
       addressIndex
         ? { file: addressIndex.file, sha256: addressIndex.sha256 }

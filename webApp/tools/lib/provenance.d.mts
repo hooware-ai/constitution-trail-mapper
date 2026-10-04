@@ -35,6 +35,7 @@ export function publicReleaseBlockers(
   dataset: DatasetIdentity,
   source?: SourceState,
   distFiles?: Array<{ path: string; sha256: string }>,
+  build?: { assumeEstimatedConnections?: boolean },
 ): string[];
 export function artifactFiles(
   dir?: string,
@@ -43,6 +44,7 @@ export function writeProvenance(options?: {
   allowDirty?: boolean;
   paths?: ProvenancePaths;
   source?: SourceState;
+  build?: { assumeEstimatedConnections?: boolean };
 }): Promise<any>;
 export function verifyProvenance(options?: {
   requirePublic?: boolean;

@@ -202,6 +202,8 @@ async function handle(event: MessageEvent) {
             access: data.access,
             dataset: data.identity,
             trustSerializedRoutes: data.trustSerializedRoutes,
+            // Build-time private test mode only; false in every default build.
+            assumeEstimatedConnections: __TRAIL_ASSUME_ESTIMATED__,
             now: Date.now(),
           }),
         ),

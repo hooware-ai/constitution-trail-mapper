@@ -400,3 +400,46 @@ test("a malformed percent-escape returns 400 and the server keeps answering", as
     server.kill();
   }
 });
+
+test("an artifact built in the private estimated-connections test mode is never releasable, and the flag cannot be edited out", async () => {
+  const { root, paths } = await fakeRepo();
+  try {
+    await writeFile(
+      paths.datasetFile,
+      JSON.stringify(await approvedDataset(root)),
+    );
+    // The same otherwise-releasable artifact: allowed by default, blocked and recorded in test mode.
+    const plain = await writeProvenance({ paths, source: clean });
+    assert.equal(plain.publicRelease.allowed, true);
+    assert.equal(plain.build.assumeEstimatedConnections, false);
+    const testMode = await writeProvenance({
+      paths,
+      source: clean,
+      build: { assumeEstimatedConnections: true },
+    });
+    assert.equal(testMode.build.assumeEstimatedConnections, true);
+    assert.equal(testMode.publicRelease.allowed, false);
+    assert.ok(
+      testMode.publicRelease.blockers.some((b: string) =>
+        /private test mode that assumes estimated road and trail connections/.test(
+          b,
+        ),
+      ),
+    );
+    await verifyProvenance({ paths });
+    await assert.rejects(
+      verifyProvenance({ paths, requirePublic: true, source: clean }),
+      /private test mode/,
+    );
+    // Editing the recorded flag away does not make it releasable: the verdict is recomputed.
+    await edit(join(paths.distDir, "provenance.json"), (p) => {
+      p.build.assumeEstimatedConnections = false;
+    });
+    await assert.rejects(
+      verifyProvenance({ paths }),
+      /verdict is inconsistent/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

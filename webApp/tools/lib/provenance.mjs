@@ -262,8 +262,12 @@ export async function loadDataset(paths = {}) {
  * approval flag alone never suffices: the record must be internally consistent and its content must be a file that
  * is actually in the artifact with the declared hash.
  */
-export function publicReleaseBlockers(dataset, source, distFiles) {
+export function publicReleaseBlockers(dataset, source, distFiles, build = {}) {
   const blockers = [];
+  if (build?.assumeEstimatedConnections)
+    blockers.push(
+      "built in the private test mode that assumes estimated road and trail connections are traversable",
+    );
   if (source?.dirty)
     blockers.push(
       "built from a working tree with uncommitted or untracked source files",
@@ -355,6 +359,11 @@ export async function writeProvenance({
   allowDirty = true,
   paths = {},
   source = sourceState(),
+  // Build-time flags that make an artifact unsuitable for release, recorded so the verdict can be recomputed.
+  build = {
+    assumeEstimatedConnections:
+      process.env.TRAIL_ASSUME_ESTIMATED_CONNECTIONS === "1",
+  },
 } = {}) {
   if (source.dirty && !allowDirty)
     throw new Error(
@@ -364,12 +373,15 @@ export async function writeProvenance({
   const dataset = await loadDataset(paths);
   const dir = paths.distDir ?? distDir;
   const files = await artifactFiles(dir);
-  const blockers = publicReleaseBlockers(dataset, source, files);
+  const blockers = publicReleaseBlockers(dataset, source, files, build);
   const provenance = {
     schema: 1,
     artifact: "trail-mapper-web",
     builtAt: new Date().toISOString(),
     source,
+    build: {
+      assumeEstimatedConnections: build.assumeEstimatedConnections === true,
+    },
     core: {
       inputsSha256: core.inputs.sha256,
       outputSha256: core.outputs.sha256,
@@ -432,7 +444,12 @@ export async function verifyProvenance({
       "recorded dataset identity/approval differs from the dataset record and content",
     );
   // The verdict is recomputed from the recorded build-time source state and must equal what was recorded.
-  const expected = publicReleaseBlockers(dataset, recorded.source, files);
+  const expected = publicReleaseBlockers(
+    dataset,
+    recorded.source,
+    files,
+    recorded.build,
+  );
   if (
     recorded.publicRelease?.allowed !== (expected.length === 0) ||
     JSON.stringify(recorded.publicRelease?.blockers ?? []) !==
@@ -447,7 +464,12 @@ export async function verifyProvenance({
       problems.push(
         "artifact was built from a different commit than the current checkout",
       );
-    for (const blocker of publicReleaseBlockers(dataset, now, files))
+    for (const blocker of publicReleaseBlockers(
+      dataset,
+      now,
+      files,
+      recorded.build,
+    ))
       problems.push(`not publishable: ${blocker}`);
   }
   if (problems.length)

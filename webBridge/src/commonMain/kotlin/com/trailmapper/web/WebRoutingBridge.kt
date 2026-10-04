@@ -27,6 +27,12 @@ class WebRoutingBridge {
     private var datasetIdentity: JsonElement = JsonNull
     /** Fixture-only: accept serialized routes that carry no feature identities (hand-built test geometry). */
     private var trustSerializedRoutes = false
+    /**
+     * PRIVATE TEST MODE, off unless a review build asks at initialize: a route with estimated (unverified) access
+     * connections may start, resume and navigate. Nothing about the connections changes: they stay unrouted segments, stay in
+     * `accessGaps`, and the description says the assumption is in force. Closures, stale networks and Proposed trails still block.
+     */
+    private var assumeEstimatedConnections = false
     private var featureIndex: Map<String, TrailNetworkFeature> = emptyMap()
     private val revalidationCache = mutableMapOf<String, NetworkCheck>()
     private val geometryIndexes = mutableMapOf<String, GeometryIndex>()
@@ -68,6 +74,7 @@ class WebRoutingBridge {
         localOrdinals.clear()
         datasetIdentity = JsonNull
         trustSerializedRoutes = false
+        assumeEstimatedConnections = false
         featureIndex = emptyMap()
         revalidationCache.clear()
         geometryIndexes.clear()
@@ -87,6 +94,7 @@ class WebRoutingBridge {
         featureIndex = loaded.associateBy { it.id }
         datasetIdentity = request["dataset"] ?: JsonNull
         trustSerializedRoutes = request.boolean("trustSerializedRoutes")
+        assumeEstimatedConnections = request.boolean("assumeEstimatedConnections")
         return buildJsonObject {
             put("dataset", datasetIdentity)
             put("featureCount", loaded.size)
@@ -295,6 +303,11 @@ class WebRoutingBridge {
             val actualMiles = kotlin.math.round(route.totalDistanceMeters / 1609.344 * 10.0) / 10.0
             warnings += "The closest available loop is $actualMiles miles for your $requestedMiles-mile target. Review its length before riding."
         }
+        val assumed = estimated && assumeEstimatedConnections
+        if (assumed) {
+            val total = accessGaps.sumOf { it.jsonObject.getValue("distanceMeters").jsonPrimitive.double }
+            warnings += "PRIVATE TEST MODE: this route includes ${accessGaps.size} estimated connection(s), about ${kotlin.math.round(total)} m in all, that the map data does not confirm. They are assumed connected only in this private test build. Verify the actual connection before riding."
+        }
         if (proposed) warnings += "This route includes proposed trails and is preview-only. They are not confirmed usable infrastructure."
         return buildJsonObject {
             put("route", json.encodeToJsonElement(route))
@@ -323,7 +336,8 @@ class WebRoutingBridge {
             put("proposed", proposed)
             put("evaluatedAt", now)
             put("network", network.toJson())
-            put("canNavigate", networkCurrent && blocking.isEmpty() && !estimated && !proposed && route.segments.any { it.points.size >= 2 })
+            put("assumedConnections", assumed)
+            put("canNavigate", networkCurrent && blocking.isEmpty() && (!estimated || assumeEstimatedConnections) && !proposed && route.segments.any { it.points.size >= 2 })
         }
     }
 

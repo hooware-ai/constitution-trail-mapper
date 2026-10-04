@@ -1789,6 +1789,13 @@ export function App() {
                 ? "Loading trail data…"
                 : "Synthetic review network — do not ride these paths."}
       </div>
+      {__TRAIL_ASSUME_ESTIMATED__ && (
+        <div className="review-banner test-mode-banner" role="status">
+          PRIVATE TEST MODE · estimated road and trail connections are assumed
+          traversable so routes can start. They are still estimated, not
+          confirmed: verify each connection on the ground before riding.
+        </div>
+      )}
       {!online && (
         <div className="offline-banner" role="status">
           Offline. Street maps are unavailable. This browser app does not
@@ -2304,6 +2311,14 @@ export function App() {
                   >
                     {checking ? "Checking closures…" : "Start navigation"}
                   </button>
+                  {preview.canNavigate && preview.assumedConnections && (
+                    <p className="warning" role="note">
+                      Private test mode: this route can start only because its
+                      estimated connections ({preview.accessGaps?.length ?? 0})
+                      are assumed traversable. They are not confirmed. Verify
+                      the actual connection before riding.
+                    </p>
+                  )}
                   {!preview.canNavigate && (
                     <p className="caption">
                       {stale

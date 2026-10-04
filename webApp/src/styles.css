@@ -188,6 +188,12 @@ header .quiet {
   font-size: 0.8rem;
   border-bottom: 1px solid #cbdad0;
 }
+.test-mode-banner {
+  background: #fff1c2;
+  color: #5a3b00;
+  border-bottom-color: #e6c26a;
+  font-weight: 600;
+}
 .offline-banner {
   background: #fdebd8;
   padding: 10px 28px;
