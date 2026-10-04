@@ -1,0 +1,19 @@
+{
+ "nativeCounty": "310f1d50326a207ea22eb05cda78759bc62d1c4df55bd0515f6608f974b8b3a8",
+ "nativeOsm": "2f97e23b5d6dae09be245772c9cfebfab13c44fe71df6a60a6d93a63797ae317",
+ "nativeAccess": "23a9719dd45297352cef641014697ca0b263184af9fdace48573b0d6ba264d07",
+ "packagedNetwork": "8a626073d42c1e4a3b72dfa9c4abc0d90eec81047330c8b37efb5499aeedbaee",
+ "packagedAccessBase": "544b1add4dd62d6efce664c0f3d859ec58b06dd057c3789a2712a73748c40322",
+ "packagedAccessIndex": "672e9d1c871121c97896e03fe1825f228a8024ebc386270eba0d8b67008536e0",
+ "combinedAccess": "ab38f3515e7f54a3570b6d777a0b2ef2e0dbadf18d400e21285d2e8c90902cdd",
+ "version": "2026-09-28.ab38f3515e7f"
+}
+PASS  native assets match the recorded hashes
+PASS  counts: native default-active 258 = packaged 258  :: 258 vs 258
+PASS  per-id content: every packaged feature has native's geometry, status, route role, facility type and comfort  :: missing ids 0; differing fields by count {}
+FAIL  ORDER: packaged feature order equals native default-active order  :: 4 of 258 positions differ; native starts 54:61,54:68,54:1284,54:1305; packaged starts 54:61,54:68,54:1284,54:1305; native layers 54:65 16:195 verified-osm:4; packaged layers 8:254 verified-osm:4
+PASS  no Proposed feature is packaged
+PASS  base access roads (TIGER 3424) agree in order, ids, geometry, class and name  :: 3424 vs 3424; mismatches 0
+PASS  local OSM service roads: 9313 in tiles, same ids and geometry as native  :: union 9313 (assignments 10323), missing 0, extra 0, geometry differences 0
+INFO  local-road ORDER: tile order differs from native order (the browser loads tiles on demand; the core reads them in the order added)
+NOTE: PARTIAL. Package made with the county order fix only (OSM ways still lexical): the ORDER check above fails at the four OSM positions. Same stop of the broad tail.

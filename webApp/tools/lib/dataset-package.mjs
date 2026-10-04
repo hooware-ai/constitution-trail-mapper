@@ -341,6 +341,7 @@ export function admit(inputText, manifest) {
   const seen = new Set();
   const layerCounts = {};
   const features = [];
+  const reviewedOrder = new Map([...entries.keys()].map((id, i) => [id, i]));
   for (const [index, feature] of layer.features.entries()) {
     const id = feature?.id;
     if (typeof id !== "string") refuse("A feature has no identifier.");
@@ -413,6 +414,8 @@ export function admit(inputText, manifest) {
       (layerCounts[entry.selectionLayerId] ?? 0) + 1;
     features.push({
       ...feature,
+      // Where the reviewed manifest lists this feature: the canonical traversal order (see toNetworkText).
+      reviewedIndex: reviewedOrder.get(id),
       // The exact source text of what the hashes cover, spliced verbatim into the shipped network.
       pathsText: canonical(featureTree.paths),
       attributesText: canonical(featureTree.provenance.attributes),
@@ -439,6 +442,14 @@ export function admit(inputText, manifest) {
 /**
  * The runtime network as text: what the router reads plus the raw evidence the hashes cover. Geometry and attributes are
  * spliced in exactly as the extractor wrote them, so anyone can recompute the reviewed digests from the shipped file.
+ *
+ * ORDER IS PART OF THE CONTRACT. The router's node ownership and tie-breaking follow feature order, so a package must walk
+ * the county features exactly as native does: the layer-54 block, then the layer-16 block, each in object-id order. That is
+ * the order of `features` in the committed reviewed manifest (checked against native's own traversal when this was written),
+ * so it is carried by each admitted feature as `reviewedIndex` and used here. It is NOT the numeric (layer id, object id)
+ * order this function once used: that put layer 16 before layer 54 and changed representative routes (2239 m to 2243 m,
+ * 4892 m to 4766 m) and made a native-planned OpenStreetMap route read as stale. The order is explicit, needs no native
+ * asset at runtime, and is independent of the order of the input features.
  */
 export function toNetworkText(
   features,
@@ -446,11 +457,17 @@ export function toNetworkText(
   supplementLayer = null,
   proposedLayer = null,
 ) {
-  const ordered = [...features].sort((a, b) => {
-    const [la, oa] = a.id.split(":").map(Number);
-    const [lb, ob] = b.id.split(":").map(Number);
-    return la - lb || oa - ob;
-  });
+  const indexes = features.map((feature) => feature.reviewedIndex);
+  if (
+    !indexes.every((index) => Number.isInteger(index) && index >= 0) ||
+    new Set(indexes).size !== indexes.length
+  )
+    refuse(
+      "Every county feature needs a distinct reviewed order position; the package order cannot be derived without it.",
+    );
+  const ordered = [...features].sort(
+    (a, b) => a.reviewedIndex - b.reviewedIndex,
+  );
   const one = (feature) =>
     `{"id":${JSON.stringify(feature.id)},"name":${JSON.stringify(feature.name ?? null)},"status":"Existing",` +
     `"routeRoles":${JSON.stringify(feature.routeRoles)},"facilityType":${JSON.stringify(feature.facilityType ?? null)},` +
@@ -868,6 +885,11 @@ export function checkPackage(
   const ids = new Set(features.map((f) => f.id));
   if (features.length !== ids.size || !sameSet(ids, new Set(entries.keys())))
     refuse("The packaged trails are not exactly the reviewed set.");
+  const reviewedIds = [...entries.keys()];
+  if (features.some((f, i) => f.id !== reviewedIds[i]))
+    refuse(
+      "The packaged trails are not in the reviewed traversal order (native's layer-54 block, then layer 16).",
+    );
   for (const id of ids)
     if (excluded.has(id)) refuse(`${id} is excluded but present.`);
   const domains = authenticateDomains(tree.domains, manifest);

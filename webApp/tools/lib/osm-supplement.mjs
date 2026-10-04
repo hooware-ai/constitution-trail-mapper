@@ -204,7 +204,13 @@ export function admitSupplement(inputText, manifest) {
   }
   if (seen.size !== ways.size || [...ways.keys()].some((id) => !seen.has(id)))
     refuse("The supplement is not exactly the reviewed set of ways.");
-  features.sort((a, b) => a.id.localeCompare(b.id));
+  // The reviewed manifest's own order, which is native's order for these ways (1424898800, 854311297, 854311298,
+  // 1281779634). It was a lexical sort of the ids, which shipped 1281779634 first: feature order steers the router's node
+  // ownership, so it is part of the package contract and is recomputed here from the manifest, never copied.
+  const reviewedPosition = new Map([...ways.keys()].map((id, i) => [id, i]));
+  features.sort(
+    (a, b) => reviewedPosition.get(a.id) - reviewedPosition.get(b.id),
+  );
   return {
     layer: {
       id: SUPPLEMENT_LAYER_ID,

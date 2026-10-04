@@ -179,3 +179,75 @@ test("the audit refuses a package whose supplement layer or description was alte
   unknown.supplements[0].id = "mystery";
   check(unknown, body);
 });
+
+// ---- the ways ship in the reviewed manifest's order, not a lexical order ---------------------------------------------------
+
+test("the supplement layer follows the reviewed manifest order for any input order, and the wrong sequence is not one a manifest lists", () => {
+  const s = makeSupplement();
+  // A manifest that lists 880002 first: a lexical sort of the ids would put 880001 first.
+  s.manifest.features.reverse();
+  const reviewed = [880002, 880001];
+  const { layer, facts } = admit(s);
+  assert.deepEqual(
+    layer.features.map(
+      (f: { provenance: { wayId: number } }) => f.provenance.wayId,
+    ),
+    reviewed,
+  );
+  assert.deepEqual(facts.wayIds, reviewed);
+  const shuffled = clone(s);
+  shuffled.input.layers[0].features.reverse();
+  assert.equal(JSON.stringify(admit(shuffled).layer), JSON.stringify(layer));
+  // The default fixture lists 880001 first, and that is what it ships.
+  assert.deepEqual(admit().facts.wayIds, [880001, 880002]);
+});
+
+test("a package whose OpenStreetMap ways are in another sequence is refused even when its record is consistently re-hashed", async () => {
+  const county = makeCounty();
+  const supplement = makeSupplement();
+  supplement.manifest.features.reverse();
+  const supplementManifestBytes = Buffer.from(
+    JSON.stringify(supplement.manifest),
+  );
+  const { record, body } = await buildPackage({
+    inputText: JSON.stringify(county.input),
+    manifest: county.manifest,
+    manifestBytes: Buffer.from(JSON.stringify(county.manifest)),
+    approval: county.approval,
+    supplement: {
+      inputText: JSON.stringify(supplement.input),
+      manifest: supplement.manifest,
+      manifestBytes: supplementManifestBytes,
+    },
+  });
+  const countyManifest = Buffer.from(JSON.stringify(county.manifest));
+  const good = JSON.parse(body.toString("utf8"));
+  assert.deepEqual(
+    good.layers[1].features.map(
+      (f: { provenance: { wayId: number } }) => f.provenance.wayId,
+    ),
+    [880002, 880001],
+  );
+  const wrong = clone(good);
+  wrong.layers[1].features.reverse();
+  const bytes = Buffer.from(JSON.stringify(wrong));
+  const { createHash } = await import("node:crypto");
+  const sha = createHash("sha256").update(bytes).digest("hex");
+  const forged = clone(record);
+  forged.content = {
+    ...forged.content,
+    file: `trails.${sha.slice(0, 12)}.json`,
+    sha256: sha,
+    bytes: bytes.length,
+  };
+  assert.throws(
+    () =>
+      checkPackage(
+        forged as never,
+        bytes,
+        countyManifest,
+        supplementManifestBytes,
+      ),
+    /allow-listed form/,
+  );
+});

@@ -77,7 +77,7 @@ test("the reviewed subset packages deterministically, hash-named, with truthful 
   assert.equal(network.schema, "trail-mapper.network/1");
   assert.deepEqual(
     network.layers[0].features.map((f: { id: string }) => f.id),
-    ["16:9003", "16:9004", "16:9005", "54:9001", "54:9002"],
+    ["54:9001", "54:9002", "16:9003", "16:9004", "16:9005"],
   );
   assert.ok(
     network.layers[0].features.every(
@@ -580,4 +580,107 @@ test("the committed reviewed manifest admits exactly 254 features and excludes t
   ]);
   for (const id of excludedIds(manifest)) assert.equal(entries.has(id), false);
   assert.equal(manifest.license, "CC BY 4.0");
+});
+
+// ---- feature order is part of the package contract (native walks layer 54, then layer 16) ---------------------------------
+
+const idsOf = (body: Buffer) =>
+  (
+    JSON.parse(body.toString("utf8")).layers[0].features as { id: string }[]
+  ).map((f) => f.id);
+
+test("the county traversal is the reviewed manifest order (native 54 block, then 16), not the numeric layer order", async () => {
+  const county = makeCounty();
+  const reviewed = county.manifest.features.map(
+    (f: { selectionLayerId: number; objectId: number }) =>
+      `${f.selectionLayerId}:${f.objectId}`,
+  );
+  assert.deepEqual(reviewed, [
+    "54:9001",
+    "54:9002",
+    "16:9003",
+    "16:9004",
+    "16:9005",
+  ]);
+  const built = await build(county);
+  assert.deepEqual(idsOf(built.body), reviewed);
+  // Numeric (layer id, object id) order would have put 16 first: that is the defect this pins.
+  const numeric = [...reviewed].sort((a, b) => {
+    const [la, oa] = a.split(":").map(Number);
+    const [lb, ob] = b.split(":").map(Number);
+    return la - lb || oa - ob;
+  });
+  assert.notDeepEqual(idsOf(built.body), numeric);
+  // The order is the manifest's, not hard-coded: a manifest that lists layer 16 first packages layer 16 first.
+  const swapped = clone(county);
+  swapped.manifest.features = [
+    ...swapped.manifest.features.slice(2),
+    ...swapped.manifest.features.slice(0, 2),
+  ];
+  assert.deepEqual(idsOf((await build(swapped)).body), [
+    "16:9003",
+    "16:9004",
+    "16:9005",
+    "54:9001",
+    "54:9002",
+  ]);
+});
+
+test("the order of the extract's features does not change the package: shuffled input gives identical bytes", async () => {
+  const county = makeCounty();
+  const base = await build(county);
+  const features = county.input.layers[0].features;
+  const permutations = [
+    [...features].reverse(),
+    [...features.slice(3), ...features.slice(0, 3)],
+    [features[2], features[4], features[0], features[3], features[1]],
+  ];
+  for (const order of permutations) {
+    const shuffled = clone(county);
+    shuffled.input.layers[0].features = clone(order);
+    const built = await build(shuffled);
+    assert.deepEqual(built.body, base.body);
+    assert.equal(built.record.content.sha256, base.record.content.sha256);
+  }
+});
+
+test("verification refuses a consistently re-hashed package whose trails are in numeric rather than reviewed order", async () => {
+  const { dir, files } = await workspace();
+  try {
+    const built = await packageFromFiles({
+      inputFile: files.input,
+      manifestPath: files.manifest,
+      approvalPath: files.approval,
+      outDir: files.out,
+    });
+    const network = join(files.out, built.file);
+    const parsed = JSON.parse(await readFile(network, "utf8"));
+    parsed.layers[0].features.sort((a: { id: string }, b: { id: string }) => {
+      const [la, oa] = a.id.split(":").map(Number);
+      const [lb, ob] = b.id.split(":").map(Number);
+      return la - lb || oa - ob;
+    });
+    const forged = Buffer.from(JSON.stringify(parsed));
+    const { createHash } = await import("node:crypto");
+    const sha = createHash("sha256").update(forged).digest("hex");
+    const record = JSON.parse(
+      await readFile(join(files.out, "dataset.json"), "utf8"),
+    );
+    const forgedFile = `trails.${sha.slice(0, 12)}.json`;
+    await rm(network);
+    await writeFile(join(files.out, forgedFile), forged);
+    record.content = {
+      ...record.content,
+      file: forgedFile,
+      sha256: sha,
+      bytes: forged.length,
+    };
+    await writeFile(join(files.out, "dataset.json"), JSON.stringify(record));
+    await assert.rejects(
+      verifyPackageDir(files.out, files.manifest),
+      /reviewed traversal order/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

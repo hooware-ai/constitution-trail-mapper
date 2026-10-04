@@ -1,0 +1,107 @@
+{
+ "config": "packaged-production",
+ "init": {
+  "features": 258,
+  "access": 3424
+ },
+ "steps": {
+  "IllinoisCentral mapped p2p": {
+   "found": true,
+   "geometry": "3bda857096697f82df877d115f7fa296a9cfaa1f77a5e4a4120552b7efa72677",
+   "meters": 2239,
+   "gaps": 0,
+   "start": true,
+   "closures": [],
+   "network": "current"
+  },
+  "reviewed OSM mapped p2p": {
+   "found": true,
+   "geometry": "47874615e211b04ef2a0e918eba43c15e30872595a32094f3d81f7423edf7ea1",
+   "meters": 220,
+   "gaps": 0,
+   "start": true,
+   "closures": [],
+   "network": "current"
+  },
+  "mapped-start 3 mi loop (Illinois Central)": {
+   "found": true,
+   "geometry": "a8162c9b6cad693ff55fb21d08d4a05289e7d83e2c8af7aee9bf6c972b8dec3a",
+   "meters": 4892,
+   "gaps": 2,
+   "start": false,
+   "closures": [],
+   "network": "current"
+  },
+  "WARM own-configuration inspect of those three (same loaded state, no reinitialize)": {
+   "ic": {
+    "status": "current",
+    "start": true,
+    "geometry": true
+   },
+   "osm": {
+    "status": "current",
+    "start": true,
+    "geometry": true
+   },
+   "loop": {
+    "status": "current",
+    "start": false,
+    "geometry": true
+   }
+  },
+  "Willow actual leg: before / activation / after, Start and recalculate": {
+   "before": {
+    "found": true,
+    "geometry": "c93752552d3c5f653e1ae0b3d08ca9938952c1215467000d1fdcda955916d646",
+    "meters": 789,
+    "gaps": 0,
+    "start": true,
+    "closures": [],
+    "network": "current"
+   },
+   "activation": {
+    "start": false,
+    "snapshotOk": false,
+    "closures": [
+     "willow-trail-crossing-2026-10-05"
+    ]
+   },
+   "afterEstimate": {
+    "start": false,
+    "snapshotOk": false,
+    "closures": [
+     "willow-trail-crossing-2026-10-05"
+    ]
+   },
+   "recalculate": {
+    "route": true,
+    "start": true,
+    "closures": []
+   },
+   "interior5m": {
+    "eligibleBefore": true,
+    "gapsBefore": 0,
+    "startAtActivation": false,
+    "recalculateRoute": false
+   }
+  },
+  "COLD inspect of routes planned on NATIVE, after this configuration is re-initialized (nothing loaded)": {
+   "ic": {
+    "status": "current",
+    "start": true
+   },
+   "osm": {
+    "status": "current",
+    "start": true
+   },
+   "loop": {
+    "status": "current",
+    "start": false
+   }
+  }
+ },
+ "subjects": {
+  "illinoisCentral": "54:2578",
+  "osm": "verified-osm:way:854311297"
+ }
+}
