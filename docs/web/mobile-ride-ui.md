@@ -62,7 +62,19 @@ load time remains unmeasured.
 
 Focused real-asset closure tests passed 29/29, including Willow and Camelback
 interval, Start, and recalculation controls. This is bounded local evidence for
-the candidate, not public-data approval or outdoor acceptance. The inherited
-release dataset description still says OSM supplements and access roads are
-omitted although this private package includes them; its rights and provenance
-record needs owner reconciliation before any publication.
+the candidate, not public-data approval or outdoor acceptance. The release
+dataset description now states that this private package includes the four OSM
+paths and 12,737 endpoint roads. The public composition and ODbL classification
+remain unapproved.
+
+## Independent code review
+
+A read-only native Codex review of the isolated branch found one material map
+regression: the ride map drew a retraced return leg from raw route segments,
+while its ridden overlay used the offset return leg from map cues. The ride map
+now draws both route and ridden progress from the same routed cues, with raw
+segments as a fallback when cues are unavailable. A retraced-return regression
+passes, as do all six mobile ride-camera browser cases, the existing
+out-and-back return browser case, TypeScript, and the build. The earlier full
+109-case mobile suite passed before this focused geometry correction; the
+affected cases were rerun after it.

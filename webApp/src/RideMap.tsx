@@ -7,6 +7,7 @@ import type { FeatureCollection, LineString } from "geojson";
 import type { Closure, Feature, MapCues, Point, RouteResult } from "./types";
 import type { LocationFix, NavigationPhase } from "./platform/navigation";
 import { lengthMeters, riddenPolylines } from "./ridden";
+import { rideRoutePaths } from "./rideRoutePaths";
 import {
   nearestBearing,
   nextRideHeading,
@@ -35,14 +36,6 @@ const lines = (paths: Point[][]): FeatureCollection<LineString> => ({
 });
 const routePaths = (route: RouteResult | null) =>
   route?.segments.map((part) => part.points) ?? [];
-const mappedRoutePaths = (route: RouteResult | null) =>
-  route?.segments
-    .filter((part) => part.type !== "Access")
-    .map((part) => part.points) ?? [];
-const accessPaths = (route: RouteResult | null) =>
-  route?.segments
-    .filter((part) => part.type === "Access")
-    .map((part) => part.points) ?? [];
 const estimatedPaths = (route: RouteResult | null) =>
   route?.accessGaps?.map((gap) => [gap.from, gap.to]) ?? [];
 const allRoutePoints = (route: RouteResult | null) => routePaths(route).flat();
@@ -259,10 +252,9 @@ export function RideMap({
           .flatMap((feature) => feature.paths),
       ),
     );
-    (m.getSource("route") as GeoJSONSource).setData(
-      lines(mappedRoutePaths(route)),
-    );
-    (m.getSource("access") as GeoJSONSource).setData(lines(accessPaths(route)));
+    const drawnRoute = rideRoutePaths(route, cues);
+    (m.getSource("route") as GeoJSONSource).setData(lines(drawnRoute.mapped));
+    (m.getSource("access") as GeoJSONSource).setData(lines(drawnRoute.access));
     (m.getSource("estimated") as GeoJSONSource).setData(
       lines(estimatedPaths(route)),
     );
@@ -285,7 +277,7 @@ export function RideMap({
       );
       m.fitBounds(bounds, { padding: 64, maxZoom: 15, duration: 0 });
     }
-  }, [features, route, closures, ready]);
+  }, [features, route, closures, cues, ready]);
 
   useEffect(() => {
     const m = map.current;
