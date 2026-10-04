@@ -1,0 +1,48 @@
+{
+  "schema": "trail-mapper.address-points.fetch/1",
+  "retrievedAt": "2026-10-03T23:56:03.287Z",
+  "item": {
+    "id": "502eefa828f94f749bbab9da63b0d016",
+    "title": "Addresses",
+    "type": "Feature Service",
+    "owner": "crystal.williams",
+    "url": "https://www.arcgis.com/home/item.html?id=502eefa828f94f749bbab9da63b0d016",
+    "modified": "2022-09-06T19:08:23.000Z",
+    "snippet": "Address points for McLean County, IL",
+    "licenseInfoText": "This work is licensed under a Creative Commons Attribution 4.0 International License (https://creativecommons.org/licenses/by/4.0/)"
+  },
+  "service": {
+    "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
+    "name": "Address",
+    "maxRecordCount": 2000,
+    "outSR": 4326,
+    "fields": [
+      "OBJECTID_1",
+      "ADDRESS",
+      "Building",
+      "Unit",
+      "Post_Comm",
+      "Post_Code",
+      "Inc_Muni",
+      "County",
+      "State"
+    ]
+  },
+  "completeness": {
+    "serviceCount": 85220,
+    "fetchedRows": 85220,
+    "distinctIds": 85220,
+    "objectIdRange": [
+      1,
+      202800
+    ],
+    "windowIds": 1500,
+    "windows": 136,
+    "rowsWithoutPoint": 0,
+    "transferLimitHit": false
+  },
+  "rawFile": {
+    "bytes": 10805388,
+    "sha256": "428e2c921afd011cc64e553b301946806e4af582090f0cb3ea3b1783ca6cd7cf"
+  }
+}

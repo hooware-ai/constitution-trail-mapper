@@ -1,0 +1,37 @@
+{
+ "rows": 85220,
+ "countyCounts": {
+  "MCLEAN COUNTY": 85216,
+  "WOODFORD COUNTY": 3,
+  "LIVINGSTON COUNTY": 1
+ },
+ "report": {
+  "rows": 85220,
+  "indexed": 85075,
+  "skippedNoNumber": 4,
+  "skippedNoPoint": 0,
+  "skippedNotMcLean": 4,
+  "exactDuplicatesDropped": 137,
+  "streets": 3284,
+  "cities": 37,
+  "withUnit": 22001
+ },
+ "size": {
+  "indexBytes": 2363849,
+  "gzipBytes": 630275,
+  "brotliBytes": 501629,
+  "rawBytes": 10805388
+ },
+ "indexSha256": "ef5c386736f099c01a1116b8f09ab85f4115815a23157de339c12eaf4f9cdc4f",
+ "timings": {
+  "buildMs": 225,
+  "loadMs": 15,
+  "searchMedianMs": 0.152,
+  "searchP95Ms": 0.988,
+  "firstNearestIncludingGridMs": 3.8,
+  "nearestMedianMs": 0.007,
+  "nearestP95Ms": 0.03,
+  "node": "v24.13.0",
+  "note": "Node on this development machine; not a phone. Indicative only."
+ }
+}
