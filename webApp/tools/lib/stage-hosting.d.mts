@@ -1,4 +1,6 @@
 export const STAGE_SCHEMA: string;
+export const ORIGINAL_AUDIT_SCHEMA: string;
+export const HOSTING_SCHEMA: string;
 export interface StagedFile {
   path: string;
   bytes: number;
@@ -15,6 +17,16 @@ export interface StagePlan {
   headersForEveryResponse: Record<string, string>;
   files: StagedFile[];
   problems: string[];
+  manifests?: Record<string, { sha256: string }>;
+}
+export interface PartAudit {
+  ok: boolean;
+  problems: string[];
+}
+export interface StageAudits {
+  original: PartAudit;
+  wrapper: PartAudit;
+  manifests: PartAudit;
 }
 export function responseFor(
   path: string,
@@ -29,6 +41,11 @@ export function planStaging(input: {
   publicRelease?: { allowed: boolean; blockers: string[] };
   https?: boolean;
 }): StagePlan;
+export function buildWorkerSource(input: {
+  headersSource: string;
+  adapterSource: string;
+  inventory: Iterable<string>;
+}): string;
 export function stageSite(options: {
   distDir: string;
   outDir: string;
@@ -36,4 +53,8 @@ export function stageSite(options: {
   requirePublic?: boolean;
   paths?: Record<string, unknown>;
   source?: unknown;
-}): Promise<{ plan: StagePlan; outDir: string }>;
+  hooks?: {
+    afterCopy?: (paths: { dist: string; site: string }) => void | Promise<void>;
+  };
+}): Promise<{ plan: StagePlan; outDir: string; audits: StageAudits }>;
+export function auditStage(outDir: string): Promise<StageAudits>;
