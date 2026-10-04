@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { RoutingClient, ROUTING_UNAVAILABLE_MESSAGE } from "./core";
 import {
   BrowserHistorySync,
@@ -55,6 +55,35 @@ import {
 import { acquirePlannerLocation } from "./platform/plannerLocation";
 import { addressIndexSource } from "./addressSearch";
 import { startBlockedReason } from "./startReason";
+
+// The WebGL camera is loaded only for a ride; planning stays fast on a phone.
+const RideMap = lazy(() =>
+  import("./RideMap").then((module) => ({ default: module.RideMap })),
+);
+
+function rideSymbol(instruction?: string): string {
+  const text = instruction?.toLowerCase() ?? "";
+  if (text.includes("left")) return "↰";
+  if (text.includes("right")) return "↱";
+  if (text.includes("turn around") || text.includes("u-turn")) return "↶";
+  if (text.includes("arrive")) return "◎";
+  return "↑";
+}
+function rideInstruction(instruction?: string, meters?: number): string {
+  if (!instruction) return "Checking your position.";
+  if (
+    /^arrive\b/i.test(instruction) &&
+    typeof meters === "number" &&
+    meters > 80
+  )
+    return "Continue toward destination";
+  return instruction;
+}
+function rideStepDistance(meters: number): string {
+  if (meters < 30) return "Now";
+  if (meters < 161) return `${Math.round((meters * 3.28084) / 25) * 25} ft`;
+  return `${(meters / 1609.344).toFixed(1)} mi`;
+}
 
 // The synthetic address test seam: only the development server, only with ?addressFixture in the address, read once.
 // A built artifact (fixture or county) never has it, so an ordinary fixture page offers no address search.
@@ -209,6 +238,7 @@ export function App() {
     [proofEnded, setProofEnded] = useState(0),
     [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
     [showClosures, setShowClosures] = useState(true),
+    [basemap, setBasemap] = useState(false),
     [fitSignal, setFitSignal] = useState(0),
     [retryPlan, setRetryPlan] = useState(false),
     [error, setError] = useState(""),
@@ -1767,56 +1797,88 @@ export function App() {
       >
         Skip to route controls
       </a>
-      <header className="app-header">
-        <button
-          className="brand"
-          onClick={() => go("plan")}
-          aria-label="Trail Mapper home"
-        >
-          <span aria-hidden="true">↗</span>
-          <span>
-            Trail Mapper<small>Bloomington–Normal</small>
-          </span>
-        </button>
-        <div className="header-actions">
+      {screen !== "navigation" && (
+        <header className="app-header">
           <button
-            className="help-button"
-            aria-haspopup="dialog"
-            onClick={() => setPopup("help")}
+            className="brand"
+            onClick={() => go("plan")}
+            aria-label="Trail Mapper home"
           >
-            Help
-            <span className="visually-hidden"> and about</span>
+            <span aria-hidden="true">↗</span>
+            <span>
+              Trail Mapper<small>Bloomington–Normal</small>
+            </span>
           </button>
-          <span className="local-badge">On this browser · no account</span>
+          <div className="header-actions">
+            <button
+              className="help-button"
+              aria-haspopup="dialog"
+              onClick={() => setPopup("help")}
+            >
+              Help
+              <span className="visually-hidden"> and about</span>
+            </button>
+            <span className="local-badge">On this browser · no account</span>
+          </div>
+        </header>
+      )}
+      {screen !== "navigation" && (
+        <div className="review-banner" role="status">
+          {network?.mode === "county"
+            ? network.datasetRecord?.approval.approved
+              ? "Existing reviewed trails only · check posted signs and closures before you ride."
+              : "Review candidate · county trail data that is not approved for public release."
+            : network?.mode === "local"
+              ? "Local data review · current closures and access still need your attention."
+              : local
+                ? "Loading local trail data…"
+                : __TRAIL_DATASET__ === "county"
+                  ? "Loading trail data…"
+                  : "Synthetic review network — do not ride these paths."}
         </div>
-      </header>
-      <div className="review-banner" role="status">
-        {network?.mode === "county"
-          ? network.datasetRecord?.approval.approved
-            ? "Existing reviewed trails only · check posted signs and closures before you ride."
-            : "Review candidate · county trail data that is not approved for public release."
-          : network?.mode === "local"
-            ? "Local data review · current closures and access still need your attention."
-            : local
-              ? "Loading local trail data…"
-              : __TRAIL_DATASET__ === "county"
-                ? "Loading trail data…"
-                : "Synthetic review network — do not ride these paths."}
-      </div>
-      {__TRAIL_ASSUME_ESTIMATED__ && (
+      )}
+      {screen !== "navigation" && __TRAIL_ASSUME_ESTIMATED__ && (
         <div className="test-mode-banner" role="status">
           PRIVATE TEST MODE · estimated road and trail connections are assumed
           traversable so routes can start. They are still estimated, not
           confirmed: verify each connection on the ground before riding.
         </div>
       )}
-      {!online && (
+      {!online && screen !== "navigation" && (
         <div className="offline-banner" role="status">
           Offline. Street maps are unavailable. This browser app does not
           provide offline navigation.
         </div>
       )}
       <main className="workspace">
+        {screen === "navigation" && (
+          <Suspense
+            fallback={
+              <div className="ride-map-loading" role="status">
+                Opening ride map…
+              </div>
+            }
+          >
+            <RideMap
+              features={network?.features ?? []}
+              route={showRoute}
+              position={nav.fix}
+              phase={nav.phase}
+              closures={network?.closures ?? []}
+              cues={cues}
+              riddenMeters={nav.riddenMeters}
+              fixture={fixtureData}
+              county={network?.mode === "county"}
+              osm={
+                Boolean(network?.datasetRecord?.supplements?.length) ||
+                (network?.datasetRecord?.access?.index.localFeatureCount ?? 0) >
+                  0
+              }
+              tiles={basemap}
+              onTilesChange={setBasemap}
+            />
+          </Suspense>
+        )}
         <MapView
           features={network?.features ?? []}
           route={showRoute}
@@ -1824,7 +1886,9 @@ export function App() {
           proposed={draft.proposed}
           picking={screen === "map-picker"}
           onPick={chooseMap}
-          position={nav.fix ?? undefined}
+          position={
+            screen === "navigation" ? undefined : (nav.fix ?? undefined)
+          }
           closures={
             screen === "explore" && !showClosures
               ? []
@@ -1832,9 +1896,11 @@ export function App() {
           }
           fitSignal={fitSignal}
           cues={cues}
-          riddenMeters={screen === "navigation" ? nav.riddenMeters : undefined}
+          riddenMeters={undefined}
           fixture={fixtureData}
           county={network?.mode === "county"}
+          tilesEnabled={basemap}
+          onTilesChange={setBasemap}
           osm={
             Boolean(network?.datasetRecord?.supplements?.length) ||
             (network?.datasetRecord?.access?.index.localFeatureCount ?? 0) > 0
@@ -1847,16 +1913,14 @@ export function App() {
           tabIndex={-1}
           ref={panelRef}
         >
-          {!topScreen && (
+          {!topScreen && screen !== "navigation" && (
             <button className="back" onClick={back}>
               ←{" "}
-              {screen === "navigation"
-                ? "Stop navigation"
-                : screen === "searching"
-                  ? "Cancel search"
-                  : screen === "map-picker"
-                    ? "Cancel map selection"
-                    : "Back"}
+              {screen === "searching"
+                ? "Cancel search"
+                : screen === "map-picker"
+                  ? "Cancel map selection"
+                  : "Back"}
             </button>
           )}
           {!network && !bootError && (
@@ -2434,113 +2498,143 @@ export function App() {
             </>
           )}
           {screen === "navigation" && (
-            <>
-              <h1>
-                {selected?.title === "Returning to start"
-                  ? "Returning to start"
-                  : "Ride in progress"}
-              </h1>
-              <p className="caption">
-                Keep this page open and visible. Guidance pauses when the page
-                is hidden or the screen locks, and distance traveled while
-                unobserved is not credited.
-              </p>
-              <div className={"guidance " + nav.phase} aria-live="polite">
-                <h2>
-                  {nav.phase === "reacquiring"
-                    ? "Reacquiring location…"
-                    : nav.phase === "off-route"
-                      ? "You are off route"
+            <div className="ride-ui">
+              <h1 className="visually-hidden">Ride in progress</h1>
+              <div
+                className={"guidance ride-guidance " + nav.phase}
+                aria-live="polite"
+              >
+                <span className="ride-turn-icon" aria-hidden="true">
+                  {rideSymbol(
+                    rideInstruction(
+                      nav.guidance?.instruction,
+                      nav.guidance?.distanceToNextInstruction as
+                        | number
+                        | undefined,
+                    ),
+                  )}
+                </span>
+                <div className="ride-guidance-copy">
+                  <span className="ride-step-distance">
+                    {nav.phase === "navigating" &&
+                    typeof nav.guidance?.distanceToNextInstruction === "number"
+                      ? rideStepDistance(nav.guidance.distanceToNextInstruction)
                       : nav.phase === "navigating"
-                        ? (nav.guidance?.instruction ??
-                          "Checking your position…")
-                        : nav.phase === "paused"
-                          ? "Navigation paused"
-                          : "Waiting for location"}
-                </h2>
-                {nav.message && <p>{nav.message}</p>}
-                {nav.guidance && (
-                  <p>
-                    <strong>{miles(nav.guidance.remainingMeters)} mi</strong>{" "}
-                    remaining
-                    {typeof nav.guidance.distanceToNextInstruction === "number"
-                      ? ` · ${Math.round(nav.guidance.distanceToNextInstruction)} m to next instruction`
-                      : ""}
+                        ? "On route"
+                        : "Attention"}
+                  </span>
+                  <h2>
+                    {nav.phase === "reacquiring"
+                      ? "Reacquiring location."
+                      : nav.phase === "off-route"
+                        ? "You are off route"
+                        : nav.phase === "navigating"
+                          ? rideInstruction(
+                              nav.guidance?.instruction,
+                              nav.guidance?.distanceToNextInstruction as
+                                | number
+                                | undefined,
+                            )
+                          : nav.phase === "paused"
+                            ? "Navigation paused"
+                            : nav.phase === "location-lost"
+                              ? "Location lost"
+                              : nav.phase === "permission-denied"
+                                ? "Location blocked"
+                                : "Waiting for location"}
+                  </h2>
+                  {nav.phase !== "navigating" && nav.message && (
+                    <p>{nav.message}</p>
+                  )}
+                </div>
+              </div>
+              <div className="ride-dock">
+                {__TRAIL_ASSUME_ESTIMATED__ && preview?.assumedConnections && (
+                  <p className="ride-safety" role="status">
+                    Unverified connection: stop and check it on the ground.
                   </p>
                 )}
-              </div>
-              <p>
-                {miles(nav.creditedDistanceMeters)} mi observed this ride
-                {nav.fix
-                  ? ` · location accuracy ${Math.round(nav.fix.accuracy)} m`
-                  : ""}
-              </p>
-              {preview?.kind === "ExerciseLoop" && (
-                <DirectionControl
-                  reversed={reverseOf !== null}
-                  busy={busy || directionPending}
-                  onReverse={() => void reverseDirection()}
-                />
-              )}
-              {nav.phase === "off-route" && (
-                <div className="reroute-actions">
-                  <h2>Choose what comes next</h2>
-                  {preview?.kind === "ExerciseLoop" ? (
-                    <>
+                {nav.phase === "off-route" && (
+                  <div className="reroute-actions">
+                    <p>Stop before changing your route.</p>
+                    {preview?.kind === "ExerciseLoop" ? (
+                      <>
+                        <button
+                          className="primary wide"
+                          disabled={busy}
+                          onClick={() => void reroute("rejoin")}
+                        >
+                          Rejoin the loop
+                        </button>
+                        <button
+                          className="wide"
+                          disabled={busy}
+                          onClick={() => void reroute("return")}
+                        >
+                          Return to start
+                        </button>
+                      </>
+                    ) : (
                       <button
                         className="primary wide"
                         disabled={busy}
-                        onClick={() => void reroute("rejoin")}
+                        onClick={() => void reroute("destination")}
                       >
-                        Rejoin the loop
+                        Reroute
                       </button>
-                      <button
-                        className="wide"
-                        disabled={busy}
-                        onClick={() => void reroute("return")}
-                      >
-                        Return to start
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      className="primary wide"
-                      disabled={busy}
-                      onClick={() => void reroute("destination")}
-                    >
-                      {selected?.title === "Returning to start"
-                        ? "Reroute to start"
-                        : "Reroute"}
-                    </button>
-                  )}
+                    )}
+                  </div>
+                )}
+                <div className="ride-progress">
+                  <strong>
+                    {nav.guidance
+                      ? `${miles(nav.guidance.remainingMeters)} mi`
+                      : "—"}
+                  </strong>
+                  <span>remaining</span>
+                  <button onClick={() => setPopup("directions")}>
+                    Directions
+                  </button>
                 </div>
-              )}
-              {nav.phase === "permission-denied" && (
-                <p>
-                  Allow location in your browser settings, then stop and start
-                  navigation again. You can still view the route and directions.
-                </p>
-              )}
-              {nav.wakeLock !== "held" && nav.wakeLock !== "requesting" && (
-                <div className="wake-status" role="status">
-                  Screen wake lock:{" "}
-                  {nav.wakeLock === "unsupported"
-                    ? "not supported in this browser"
-                    : nav.wakeLock === "denied"
-                      ? "not allowed — the screen may lock"
-                      : nav.wakeLock === "released"
-                        ? "released by the browser"
-                        : "inactive"}
-                  .
+                <div className="ride-actions">
+                  <details className="ride-details">
+                    <summary>Ride details</summary>
+                    <p>
+                      Keep this page open and visible. Guidance pauses if the
+                      screen locks or you leave this page.
+                    </p>
+                    <p>
+                      {miles(nav.creditedDistanceMeters)} mi observed this ride
+                      {nav.fix
+                        ? ` · location accuracy ${Math.round(nav.fix.accuracy)} m`
+                        : ""}
+                    </p>
+                    {nav.phase === "permission-denied" && (
+                      <p>
+                        Allow location in browser settings, then stop and
+                        restart navigation.
+                      </p>
+                    )}
+                    {nav.wakeLock !== "held" &&
+                      nav.wakeLock !== "requesting" && (
+                        <p className="wake-status" role="status">
+                          Screen wake lock {nav.wakeLock}; the screen may lock.
+                        </p>
+                      )}
+                    {preview?.kind === "ExerciseLoop" && (
+                      <DirectionControl
+                        reversed={reverseOf !== null}
+                        busy={busy || directionPending}
+                        onReverse={() => void reverseDirection()}
+                      />
+                    )}
+                  </details>
+                  <button className="ride-stop" onClick={stopNavigation}>
+                    Stop navigation
+                  </button>
                 </div>
-              )}
-              <button className="wide" onClick={() => setPopup("directions")}>
-                View directions
-              </button>
-              <button className="primary wide" onClick={stopNavigation}>
-                Stop navigation
-              </button>
-            </>
+              </div>
+            </div>
           )}
           {network && screen === "saved" && (
             <>

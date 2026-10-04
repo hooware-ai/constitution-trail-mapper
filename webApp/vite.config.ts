@@ -88,6 +88,8 @@ const countyPackage = resolve(
 
 // Review data is a loopback-only dev endpoint. It is NEVER a public asset or build input.
 export default defineConfig({
+  // MapLibre resolves its own worker URL; Vite's dependency prebundle otherwise points to a missing optimized worker.
+  optimizeDeps: { exclude: ["maplibre-gl"] },
   define: {
     __TRAIL_DATASET__: JSON.stringify(datasetKind),
     __TRAIL_CHANNEL__: JSON.stringify(channel),

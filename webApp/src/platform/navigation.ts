@@ -9,6 +9,9 @@ export interface LocationFix {
   longitude: number;
   accuracy: number;
   timestamp: number;
+  /** Browser motion heading and speed are optional, and never decide route matching or safety. */
+  heading?: number | null;
+  speed?: number | null;
 }
 export interface LocationFailure {
   code: number;
@@ -540,6 +543,8 @@ export function browserLocationPort(geolocation: Geolocation): LocationPort {
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy,
             timestamp: position.timestamp,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
           }),
         failure,
         { enableHighAccuracy: true, maximumAge: 0, timeout: MAX_FIX_AGE_MS },

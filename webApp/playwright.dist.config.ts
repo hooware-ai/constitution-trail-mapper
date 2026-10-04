@@ -14,7 +14,7 @@ export default defineConfig({
   webServer: {
     command: `node tools/serve-dist.mjs --port ${port}`,
     url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.TRAIL_REUSE_SERVER === "1",
   },
   reporter: "list",
 });

@@ -34,7 +34,7 @@ test("the CSP is exactly the documented policy and nothing in it is a wildcard o
       "style-src-attr": ["'unsafe-inline'"],
       "img-src": ["'self'", "data:", "blob:", TILE_ORIGIN],
       "font-src": ["'self'", "data:"],
-      "connect-src": ["'self'"],
+      "connect-src": ["'self'", TILE_ORIGIN],
       "worker-src": ["'self'", "blob:"],
       "manifest-src": ["'self'"],
       "object-src": ["'none'"],
@@ -51,7 +51,7 @@ test("the CSP is exactly the documented policy and nothing in it is a wildcard o
     .filter((value) => value.startsWith("https:") || value.includes("//"));
   assert.deepEqual(
     foreign,
-    [TILE_ORIGIN],
+    [TILE_ORIGIN, TILE_ORIGIN],
     "the optional basemap host is the only outside origin",
   );
 });
@@ -60,9 +60,13 @@ test("extra connect origins are added to connect-src only, and HTTPS adds upgrad
   const extra = parse(
     contentSecurityPolicy({ extraConnect: ["https://example.invalid"] }),
   );
-  assert.deepEqual(extra["connect-src"], ["'self'", "https://example.invalid"]);
+  assert.deepEqual(extra["connect-src"], [
+    "'self'",
+    TILE_ORIGIN,
+    "https://example.invalid",
+  ]);
   assert.deepEqual(
-    { ...extra, "connect-src": ["'self'"] },
+    { ...extra, "connect-src": ["'self'", TILE_ORIGIN] },
     parse(contentSecurityPolicy()),
   );
   const https = parse(contentSecurityPolicy({ https: true }));
@@ -114,7 +118,7 @@ test("the runbook table names every header and value the policy sends", () => {
   for (const directive of [
     "default-src 'self'",
     "img-src 'self' data: blob: https://tile.openstreetmap.org",
-    "connect-src 'self'",
+    "connect-src 'self' https://tile.openstreetmap.org",
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'none'",

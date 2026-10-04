@@ -1,6 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-// The server is started on a port this run owns and is never reused: an occupied port fails the run instead of
-// silently testing another checkout's build. `npm run release:check` picks a free port; manual runs default to 4173.
+// CI owns a fresh server; an explicit manual override may attach to a server already started on the selected port.
 const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
 export default defineConfig({
   testDir: "tests/e2e",
@@ -15,7 +14,7 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.TRAIL_REUSE_SERVER === "1",
   },
   reporter: "list",
 });

@@ -12,13 +12,14 @@ export function contentSecurityPolicy({
   const directives = {
     "default-src": ["'self'"],
     "script-src": ["'self'"],
-    // React and Leaflet set inline style attributes; no inline <style> or style-src element is needed.
+    // React, Leaflet and the MapLibre navigation camera set inline style attributes.
     "style-src": ["'self'"],
     "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:", TILE_ORIGIN],
     "font-src": ["'self'", "data:"],
     // Routing runs in a same-origin module worker; add auth/sync origins here when #31-#33 decide them.
-    "connect-src": ["'self'", ...extraConnect],
+    // MapLibre loads the same optional OSM raster tiles via fetch from its worker rather than an <img>.
+    "connect-src": ["'self'", TILE_ORIGIN, ...extraConnect],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
     "object-src": ["'none'"],

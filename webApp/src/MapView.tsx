@@ -34,6 +34,10 @@ export function MapView({
   fitSignal = 0,
   cues = null,
   riddenMeters,
+  follow = false,
+  onManualPan,
+  tilesEnabled,
+  onTilesChange,
 }: {
   features: Feature[];
   route: RouteResult | null;
@@ -54,6 +58,11 @@ export function MapView({
   cues?: MapCues | null;
   /** While navigating: how far along the route the rider has credibly ridden. That part is faded, as in native. */
   riddenMeters?: number;
+  /** Flat-map fallback on devices without WebGL. */
+  follow?: boolean;
+  onManualPan?: () => void;
+  tilesEnabled?: boolean;
+  onTilesChange?: (enabled: boolean) => void;
 }) {
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
@@ -63,9 +72,13 @@ export function MapView({
   const riddenLayer = useRef<L.LayerGroup | null>(null);
   const drawRidden = useRef<() => void>(() => {});
   const pick = useRef(onPick),
-    [tiles, setTiles] = useState(false),
+    manualPan = useRef(onManualPan),
+    [localTiles, setLocalTiles] = useState(false),
     [tileError, setTileError] = useState(false);
+  const tiles = tilesEnabled ?? localTiles;
+  const setTiles = onTilesChange ?? setLocalTiles;
   pick.current = onPick;
+  manualPan.current = onManualPan;
   useEffect(() => {
     if (!root.current) return;
     const m = L.map(root.current, {
@@ -89,6 +102,7 @@ export function MapView({
       );
     };
     m.on("moveend zoomend", publishView);
+    m.on("dragstart", () => manualPan.current?.());
     publishView();
 
     const ro = new ResizeObserver(() => m.invalidateSize());
@@ -427,6 +441,9 @@ export function MapView({
       marker.remove();
     };
   }, [position?.latitude, position?.longitude]);
+  useEffect(() => {
+    if (follow && position) map.current?.panTo(xy(position), { animate: true });
+  }, [follow, position?.latitude, position?.longitude]);
   useEffect(() => {
     if (!map.current || !tiles || fixture) return;
     const tile = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {

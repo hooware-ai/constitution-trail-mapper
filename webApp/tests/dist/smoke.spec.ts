@@ -137,6 +137,57 @@ test("the routing worker starts and plans a route, and a reload works", async ({
     ),
   ).toBe(false);
 });
+test("the built ride camera loads under CSP and keeps optional street tiles off", async ({
+  page,
+}) => {
+  test.skip(county, "plans between synthetic review places");
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      value: {
+        watchPosition(success: PositionCallback) {
+          (window as any).__rideFix = () =>
+            success({
+              coords: {
+                latitude: 40.505,
+                longitude: -88.95,
+                accuracy: 5,
+                heading: 0,
+                speed: 4,
+              },
+              timestamp: Date.now(),
+            } as GeolocationPosition);
+          return 1;
+        },
+        clearWatch() {},
+      },
+    });
+  });
+  const seen = await collect(page);
+  await page.goto("/");
+  await planRoute(page);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(page.locator(".ride-map, .ride-map-fallback")).toBeVisible();
+  await expect(page.locator(".ride-map-canvas")).toBeVisible();
+  await page.evaluate(() => (window as any).__rideFix());
+  await expect(page.locator(".ride-map-canvas")).toHaveAttribute(
+    "data-actual-pitch",
+    "48",
+  );
+  expect(
+    seen.consoleErrors.filter((message) =>
+      /CSP|Content Security Policy|Worker failed/i.test(message),
+    ),
+  ).toEqual([]);
+  expect(
+    [...seen.requestedOrigins].some((origin) =>
+      origin.includes("openstreetmap"),
+    ),
+  ).toBe(false);
+  await page.getByRole("button", { name: "Stop navigation" }).click();
+  await expect(page.locator(".ride-map-canvas")).toHaveCount(0);
+});
 test("a blocked worker asset gives a recoverable error and Retry recovers", async ({
   page,
 }) => {

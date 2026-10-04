@@ -1539,3 +1539,413 @@ dialog::backdrop {
     margin-bottom: 2px;
   }
 }
+
+/* Ride mode is a separate, glanceable surface. The planner keeps its detailed controls. */
+.navigation .workspace {
+  position: relative;
+  display: block;
+  height: 100dvh;
+  min-height: 420px;
+  overflow: hidden;
+  background: #dce9e0;
+}
+.navigation .ride-map,
+.navigation .ride-map-fallback,
+.navigation .ride-map-fallback .map-wrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  margin: 0;
+  z-index: 0;
+}
+.ride-map-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #e3ede5;
+}
+.navigation .workspace > .map-wrap {
+  display: none;
+}
+.navigation .ride-map > .ride-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #e3ede5;
+}
+.ride-map .maplibregl-control-container .maplibregl-ctrl-bottom-right {
+  bottom: 150px;
+}
+.ride-map .maplibregl-ctrl-attrib {
+  max-width: min(80vw, 380px);
+  font-size: 11px;
+}
+.ride-credit {
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 160px;
+  max-width: min(75%, 360px);
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #fffffff0;
+  color: #354940;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  text-align: right;
+}
+.ride-pin {
+  width: 24px;
+  height: 24px;
+  border: 4px solid white;
+  border-radius: 50%;
+  background: #1066d4;
+  box-shadow: 0 1px 9px #00264f7a;
+}
+.ride-pin.has-heading::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: -15px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #1066d4;
+  filter: drop-shadow(0 0 2px #fff);
+}
+.ride-map-control {
+  position: absolute;
+  z-index: 6;
+  top: clamp(145px, 25dvh, 220px);
+  right: max(12px, env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+.ride-map-control button {
+  min-height: 56px;
+  min-width: 112px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 2px 15px #13342a3a;
+  font-size: 0.95rem;
+}
+.ride-map-control .ride-recenter:not(:disabled) {
+  background: #063e35;
+  color: white;
+}
+.ride-map-control .ride-tiles {
+  min-height: 48px;
+  background: #ffffffed;
+}
+.ride-map-error {
+  position: absolute;
+  left: 12px;
+  bottom: 165px;
+  z-index: 5;
+  background: white;
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+.ride-map-fallback .ride-map-control span {
+  background: white;
+  border-radius: 10px;
+  padding: 5px 9px;
+}
+.navigation .panel {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+}
+.navigation .panel > .error {
+  position: absolute;
+  z-index: 8;
+  left: 12px;
+  right: 12px;
+  top: 160px;
+  pointer-events: auto;
+}
+.ride-ui {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.navigation .ride-guidance {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  width: min(100%, 520px);
+  padding: 14px 18px;
+  margin: 0;
+  border: 0;
+  border-radius: 22px;
+  background: #fff;
+  color: #092e28;
+  box-shadow: 0 4px 22px #17382c40;
+  pointer-events: auto;
+}
+.navigation .ride-guidance.off-route,
+.navigation .ride-guidance.location-lost,
+.navigation .ride-guidance.permission-denied,
+.navigation .ride-guidance.unsupported,
+.navigation .ride-guidance.paused {
+  background: #fff2dd;
+  color: #5e3100;
+}
+.ride-turn-icon {
+  font-size: 3.2rem;
+  font-weight: 750;
+  line-height: 1;
+  text-align: center;
+  color: #08725f;
+}
+.ride-guidance-copy {
+  min-width: 0;
+}
+.ride-step-distance {
+  display: block;
+  font-size: clamp(1.65rem, 6vw, 2.45rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+.navigation .ride-guidance h2 {
+  margin: 2px 0 0;
+  font-size: clamp(1.12rem, 4vw, 1.45rem);
+  line-height: 1.18;
+}
+.navigation .ride-guidance p {
+  margin: 5px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+.ride-dock {
+  width: min(100%, 540px);
+  align-self: center;
+  padding: 13px 15px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 4px 22px #17382c40;
+  pointer-events: auto;
+}
+.ride-safety {
+  margin: 0 0 8px;
+  font-weight: 750;
+  color: #762b00;
+}
+.ride-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ride-progress strong {
+  font-size: 1.8rem;
+  line-height: 1;
+  color: #063e35;
+}
+.ride-progress span {
+  color: #47645b;
+  font-size: 0.85rem;
+}
+.ride-progress button {
+  min-height: 52px;
+  margin-left: auto;
+  border-radius: 14px;
+}
+.ride-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+.ride-details {
+  flex: 1;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.ride-details summary,
+.ride-stop {
+  min-height: 52px;
+  border-radius: 14px;
+  padding: 13px 15px;
+  line-height: 1.2;
+}
+.ride-details summary {
+  background: #eef5f1;
+  list-style: none;
+}
+.ride-details summary::-webkit-details-marker {
+  display: none;
+}
+.ride-details[open] {
+  position: absolute;
+  z-index: 7;
+  left: 12px;
+  right: 12px;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  max-height: min(48dvh, 380px);
+  overflow: auto;
+  padding: 12px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 22px #17382c40;
+}
+.ride-details[open] p {
+  margin: 8px 0;
+}
+.ride-stop {
+  border-color: #c9d6d1;
+  background: #fff;
+  color: #27463d;
+}
+.ride-dock .reroute-actions {
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+.ride-dock .reroute-actions p {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+.ride-dock .reroute-actions .wide {
+  margin: 5px 0;
+  min-height: 52px;
+}
+@media (max-width: 760px) {
+  .app-header {
+    min-height: 62px;
+    flex-wrap: nowrap;
+    padding: 8px 14px;
+    gap: 8px;
+  }
+  .app-header .brand {
+    font-size: 1.1rem;
+    line-height: 1.05;
+  }
+  .app-header .brand > span:last-child {
+    min-width: 0;
+  }
+  .app-header .brand small {
+    display: block;
+    font-size: 0.63rem;
+    letter-spacing: 0;
+  }
+  .app-header .header-actions {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .app-header .local-badge {
+    display: none;
+  }
+  .app-header .help-button {
+    min-height: 48px;
+    padding: 8px 12px;
+  }
+  .plan .map-wrap {
+    height: 38dvh;
+    min-height: 225px;
+  }
+  .plan .panel {
+    padding: 12px 18px 24px;
+  }
+  .plan .panel > .eyebrow,
+  .plan .panel > .lead {
+    display: none;
+  }
+  .plan .panel h1 {
+    margin: 0 0 8px;
+    font-size: 1.45rem;
+  }
+  .plan .route-choice {
+    min-height: 72px;
+    padding: 10px 14px;
+  }
+  .planner .map-wrap {
+    height: 33dvh;
+    min-height: 205px;
+  }
+  .preview .map-wrap {
+    height: 50dvh;
+    min-height: 260px;
+  }
+  .preview .panel {
+    padding: 18px 18px 145px;
+  }
+  .preview .start-dock {
+    position: fixed;
+    z-index: 1050;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 10px 18px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid #c9d9d0;
+    border-radius: 18px 18px 0 0;
+    background: #fff;
+    box-shadow: 0 -5px 20px #103a2d25;
+  }
+  .preview .start-dock .wide {
+    margin: 0;
+  }
+  .preview .start-dock button {
+    min-height: 56px;
+    font-size: 1.1rem;
+  }
+  .map-tools button {
+    min-height: 56px;
+    font-size: 0.95rem;
+  }
+  .leaflet-control-zoom a {
+    width: 48px !important;
+    height: 48px !important;
+    line-height: 48px !important;
+  }
+  .navigation .workspace {
+    height: 100dvh;
+    min-height: 420px;
+  }
+  .navigation .panel {
+    padding: 0;
+  }
+}
+@media (max-height: 620px) {
+  .ride-map-control {
+    top: 135px;
+  }
+  .ride-ui {
+    gap: 6px;
+  }
+  .navigation .ride-guidance {
+    padding: 10px 14px;
+  }
+  .ride-dock {
+    padding: 8px 12px;
+  }
+  .ride-actions {
+    margin-top: 4px;
+  }
+}
