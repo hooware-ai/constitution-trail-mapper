@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   AddressIndex,
   MAX_REVERSE_METERS,
@@ -201,7 +201,7 @@ test("the module cannot upload typed text or positions: no network, storage, tim
   }
 });
 
-test("the prototype is not wired into the app", () => {
+test("the index is used only by the address search module and the chooser, and loaded only on demand", () => {
   const src = join(import.meta.dirname, "../../src");
   const walk = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -211,9 +211,18 @@ test("the prototype is not wired into the app", () => {
     (f) =>
       /\.(ts|tsx)$/.test(f) &&
       !f.endsWith("addressIndex.ts") &&
-      /addressIndex/.test(readFileSync(f, "utf8")),
+      /addressIndex"/.test(readFileSync(f, "utf8")),
   );
-  assert.deepEqual(users, []);
+  assert.deepEqual(users.map((f) => basename(f)).sort(), [
+    "addressSearch.ts",
+    "components.tsx",
+  ]);
+  // components.tsx imports the TYPE only: the index module and its data are never in the start-up path.
+  const chooser = readFileSync(join(src, "components.tsx"), "utf8");
+  assert.match(
+    chooser,
+    /import type \{ AddressIndex \} from "\.\/addressIndex"/,
+  );
 });
 
 // ---- review corrections (TM-LOCAL-PREP-7c675b5-20261004-01) ---------------------------------------------------------

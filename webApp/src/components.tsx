@@ -1,6 +1,20 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Draft, Endpoint, Network, Point } from "./types";
 import { places, searchPlaces } from "./search";
+import type { AddressIndex } from "./addressIndex";
+import {
+  addressChoices,
+  loadAddressIndex,
+  looksLikeAddress,
+  type AddressIndexSource,
+} from "./addressSearch";
 import type { PlaceRecord, RouteRecord } from "./platform/storage";
 export interface DialogNotice {
   kind: "error" | "success";
@@ -116,6 +130,7 @@ export function PlaceChooser({
   start,
   saved,
   fixture,
+  addressSource = null,
   onChoose,
   onMap,
   onLocation,
@@ -125,6 +140,8 @@ export function PlaceChooser({
   start: Point | null;
   saved: PlaceRecord[];
   fixture: boolean;
+  /** Where this build's county address index is, or null when it ships none (address search is then off). */
+  addressSource?: AddressIndexSource | null;
   onChoose: (p: Endpoint) => void;
   onMap: () => void;
   onLocation: () => void;
@@ -135,6 +152,38 @@ export function PlaceChooser({
     ...saved,
     ...(fixture ? [...reviewPlaces, ...places] : places),
   ]);
+  const wantsAddress = looksLikeAddress(query);
+  const [index, setIndex] = useState<AddressIndex | null>(null);
+  const [addressState, setAddressState] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
+  useEffect(() => {
+    // The index is fetched only once a rider types an address, and only a fixed file is requested: the text stays here.
+    if (!wantsAddress || !addressSource || index) return;
+    let current = true;
+    setAddressState("loading");
+    loadAddressIndex(addressSource).then(
+      (loaded) => {
+        if (!current) return;
+        setIndex(loaded);
+        setAddressState("idle");
+      },
+      () => current && setAddressState("error"),
+    );
+    return () => {
+      current = false;
+    };
+  }, [wantsAddress, addressSource, index]);
+  const addresses = useMemo(
+    () =>
+      wantsAddress && index
+        ? addressChoices(
+            index.search(query),
+            start ? { ...start, label: "start" } : null,
+          )
+        : null,
+    [wantsAddress, index, query, start],
+  );
   return (
     <Modal title={"Choose " + field} onClose={onClose}>
       <label className="field">
@@ -164,7 +213,44 @@ export function PlaceChooser({
           </li>
         ))}
       </ul>
-      {!options.length && (
+      {wantsAddress && !addressSource && (
+        <p role="status">Address search is not available in this build.</p>
+      )}
+      {wantsAddress && addressSource && addressState === "loading" && (
+        <p role="status">Loading county address data on this device…</p>
+      )}
+      {wantsAddress && addressSource && addressState === "error" && (
+        <p role="alert">
+          The county address data could not be loaded. Saved places, the public
+          places, Use current location and Pick on map still work.
+        </p>
+      )}
+      {addresses && (
+        <section aria-label="County address results">
+          <h3>County addresses</h3>
+          <p className="muted">
+            County address points show where the county records an address. They
+            are not verified trail entrances: the route starts or ends exactly
+            at the point you choose, and any unverified connection to a mapped
+            trail still blocks Start.
+          </p>
+          {addresses.notice && <p role="status">{addresses.notice}</p>}
+          <ul className="place-results">
+            {addresses.choices.map((choice) => (
+              <li key={choice.key}>
+                <button
+                  className="route-row"
+                  onClick={() => onChoose(choice.endpoint)}
+                >
+                  <strong>{choice.title}</strong>
+                  <span>{choice.detail}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {!options.length && !addresses?.choices.length && (
         <p>
           No matching place. This search only knows {places.length} public
           places and the places you saved. Use Pick on map, Use current location

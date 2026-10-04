@@ -53,6 +53,7 @@ import {
   type NavigationState,
 } from "./platform/navigation";
 import { acquirePlannerLocation } from "./platform/plannerLocation";
+import { addressIndexSource } from "./addressSearch";
 import { ForegroundWakeLock } from "./platform/wakeLock";
 import { BrowserSessionStore, type BrowserSession } from "./platform/session";
 import {
@@ -2784,6 +2785,10 @@ export function App() {
           start={field === "destination" ? draft.start : null}
           saved={library.places}
           fixture={fixtureData}
+          addressSource={addressIndexSource(
+            fixtureData,
+            __TRAIL_ADDRESS_INDEX__,
+          )}
           onChoose={choose}
           onMap={() => {
             setPickField(field);

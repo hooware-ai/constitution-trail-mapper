@@ -1,4 +1,4 @@
-# Address index prototype and inert hosting stager (UNAPPROVED, not wired into the app)
+# Address index prototype and inert hosting stager (UNAPPROVED; chooser integration is opt-in per build)
 
 Recorded 2026-10-03 in the local release-candidate worktree (`codex/web-release-candidate`). **This approves nothing, publishes nothing and changes no app behavior.** Nothing in `webApp/src` imports the prototype (a unit test pins that), no generated address file is committed, and nothing here is a rights, owner, hosting or public-release decision. Committed approval stays `approved: false`, `approvedComposition: null`, approver and date null; every rights, data, device, hosting and public blocker is unchanged. Start and the estimated-gap rule are untouched.
 
@@ -114,3 +114,13 @@ Three synthetic probes from the review were reproduced, fixed and pinned by test
     npx tsx tools/build-address-index.mts --manifest ../data/web-address-index.manifest.json
     npx tsx tools/compare-address-catalog.mts
     npx tsx --test tests/unit/address-index.test.ts tests/unit/stage-hosting.test.ts
+
+## Update 2026-10-04: place chooser integration (local, opt-in)
+
+The start and destination `PlaceChooser` now offers county address results, from the same `addressIndex.ts` and the pinned index in `data/web-address-index.manifest.json`:
+
+- **On demand only.** Nothing loads at start-up. The index file is fetched once, when the rider types a house number plus street text (`looksLikeAddress`); the request is for a fixed file, so typed text never leaves the device, and the file's SHA-256 is checked when the build records one. A failure says so and every other way to choose (saved places, the six public places, current location, map picker) still works.
+- **Distinct points stay distinct.** The same address recorded at different points (or in different postal communities) is several selectable choices, each showing city and postal code, unit labels, "Point n of m", its coordinates and, when a start exists, its distance from it, under an ambiguity notice. A missing house number offers only the nearest numbers and says they are not the typed address.
+- **Honest label, no snapping.** Every result says "County address point · not a verified trail entrance". The chosen endpoint is exactly the recorded point; nothing snaps it to a trail, and the routing core's estimated-connection and closure rules apply unchanged, so an address far from a mapped trail still shows its measured unverified connection and Start stays blocked.
+- **Not in a default build.** The index is added to a build only when `TRAIL_ADDRESS_INDEX_FILE` names a file, only in the review channel, and only if its bytes equal the pinned index (a public-channel build, or any other file, refuses). Without it the chooser says address search is not available in this build. Review fixtures read a synthetic index from `data/address-index.fixture.json`, which the tests serve from memory; a county build never asks for that path. The real generated index is ignored and uncommitted, and nothing here approves the index or any composition.
+- **Tests:** `tests/unit/address-search.test.ts` and `tests/e2e/address-chooser.spec.ts` (synthetic rows only): lazy load, two distinct ambiguous choices for start and destination, an address endpoint 365 ft from a trail keeping its connection and a disabled Start, failure fallback.
