@@ -108,15 +108,25 @@ test("[sim-device] distance travelled while the page was hidden is not credited"
   await expect(page.getByText(/0\.0 mi observed this ride/)).toBeVisible();
 });
 
-test("[sim-device] a reload during a ride keeps the ride, shows no stale guidance, and resumes only after a fresh fix", async ({
+test("[sim-device] a reload during a settled ride keeps the ride, shows no stale guidance, and resumes only after a fresh fix", async ({
   page,
 }) => {
   await riding(page);
+  // Exercise a fully loaded ride. Reloading while Vite worker imports are still starting
+  // can cancel the old document's module requests before the map load event.
+  await expect(page.locator(".ride-map-canvas")).toHaveAttribute(
+    "data-ready",
+    "true",
+  );
   await page.reload();
   await expect(heading(page, "Reacquiring location…")).toBeVisible();
   await expect(guidance(page)).not.toBeVisible();
   await fix(page, 40.502, -88.95);
   await expect(guidance(page)).toBeVisible();
+  await expect(page.locator(".ride-map-canvas")).toHaveAttribute(
+    "data-ready",
+    "true",
+  );
   // The ride lives in this browser's storage, and survives the engine's storage rules.
   const stored = await page.evaluate(() =>
     Object.keys(localStorage).some((key) =>
