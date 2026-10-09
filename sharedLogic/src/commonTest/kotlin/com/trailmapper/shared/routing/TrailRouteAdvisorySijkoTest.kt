@@ -183,6 +183,8 @@ class TrailRouteAdvisorySijkoTest {
         val farFuture = 1_845_000_000_000L // 2028-06-19, past the June 2028 construction target
         val warning = TrailRouteAdvisorySijko.forRoute(route, farFuture).single()
         assertTrue(warning.message.contains("construction target does not confirm a reopening"))
+        assertTrue(warning.message.contains("initial closure north of Vernon"))
+        assertTrue(warning.message.contains("no verified current status, exact endpoints or reopening confirmation"))
         val corridor = TrailRouteAdvisorySijko.approximateCorridors(farFuture).single { it.advisoryId.startsWith("uptown") }
         assertTrue(corridor.label.contains("not exact closure limits"))
         assertEquals(phoenixCrossing, corridor.points.first())

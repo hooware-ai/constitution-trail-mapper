@@ -512,7 +512,9 @@ object TrailRouteAdvisorySijko {
                 "Phoenix Avenue to Broadway Avenue, north on Broadway to the north sidewalk of Beaufort Street, " +
                 "then east on Beaufort to Uptown Circle and the trailhead north of it. On Uptown sidewalks, " +
                 "dismount and walk your bike; in the street, follow traffic up Beaufort and around Uptown Circle. " +
-                "This route has not been detoured. The construction target does not confirm a reopening.",
+                "This route has not been detoured. Reviewed October 9, 2026: the initial closure north of Vernon " +
+                "has no verified current status, exact endpoints or reopening confirmation and is not mapped here. " +
+                "The construction target does not confirm a reopening.",
             sourceUrl = UptownNoticeUrl,
             locationDescription = "Constitution Trail from Phoenix Avenue to Uptown Circle, Uptown Normal. " +
                 "The map overlay follows the county trail line and is approximate.",
