@@ -539,17 +539,30 @@ test("a synthetic fixture cannot pass the real committed manifest, and a test-on
     () => admitAccessSource(JSON.stringify(makeAccessExtract()), committed),
     AccessSourceError,
   );
-  // The committed manifest pins the native baseline extract by hash and is not test-only.
+  // The fresh web review is separate from the retained historical native identity.
   const manifest = JSON.parse(committed.toString("utf8"));
   assert.equal(
     manifest.sourceInputSha256,
-    "23a9719dd45297352cef641014697ca0b263184af9fdace48573b0d6ba264d07",
+    "f7be4a62cf5062147afff3206a5abf538ca02b083a059cf012acfe95cd82e033",
   );
   assert.equal(manifest.testOnly, false);
   assert.deepEqual(manifest.sourceInput.layerCounts, {
     "8": 3424,
+    "osm-service": 9344,
+  });
+  assert.equal(
+    manifest.sourceReviewHistory[0].sourceInputSha256,
+    "23a9719dd45297352cef641014697ca0b263184af9fdace48573b0d6ba264d07",
+  );
+  assert.deepEqual(manifest.sourceReviewHistory[0].sourceInput.layerCounts, {
+    "8": 3424,
     "osm-service": 9313,
   });
+  assert.equal(
+    manifest.freshSourceReviews[0].sourceInputSha256,
+    manifest.sourceInputSha256,
+  );
+  assert.match(manifest.nativeBaseline.statement, /Historical/);
   assert.match(manifest.sourceInput.perWayTimestamps, /UNKNOWN/);
   assert.equal(manifest.rights.status, "unresolved");
   // A package made from a synthetic (test-only) manifest is blocked by the audit even when its approval matches.

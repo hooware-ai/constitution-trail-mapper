@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "web-20261009-original-public-rebuild",
+  "scope": "Source review evidence; not rights, public composition or publication approval. Raw responses and road geometry remain ignored, outside Git.",
+  "capture": {
+    "schemaVersion": 1,
+    "startedAtUtc": "2026-10-09T04:12:56.034343+00:00",
+    "boundingBoxWgs84": [
+      -89.2,
+      40.4,
+      -88.9,
+      40.6
+    ],
+    "includedMtfcc": [
+      "S1400",
+      "S1640",
+      "S1710",
+      "S1730",
+      "S1780",
+      "S1820"
+    ],
+    "overpassQuery": "[out:json][timeout:120];way[\"highway\"=\"service\"](40.4,-89.2,40.6,-88.9);out tags geom;",
+    "requests": [
+      {
+        "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8?f=json",
+        "file": "metadata.json",
+        "startedAtUtc": "2026-10-09T04:04:01.489308+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:01.612577+00:00",
+        "status": 200,
+        "bytes": 8042,
+        "sha256": "3c2f187eb4c47930b0a46eadbcc5a598f32e65a757bf9802b405543d87475b9f",
+        "finalUrl": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8?f=json",
+        "headers": {
+          "Content-Type": "application/json;charset=UTF-8",
+          "Date": "Fri, 09 Oct 2026 04:04:01 GMT",
+          "ETag": "\"646902eb\"",
+          "Last-Modified": null
+        }
+      },
+      {
+        "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnCountOnly=true",
+        "file": "before-count.json",
+        "startedAtUtc": "2026-10-09T04:04:01.613244+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:02.599439+00:00",
+        "status": 200,
+        "bytes": 14,
+        "sha256": "660a863e0397de5f0cf088dc15e4ceeaca9b8588b085e81d2a831612289ab58c",
+        "finalUrl": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnCountOnly=true",
+        "headers": {
+          "Content-Type": "application/json;charset=UTF-8",
+          "Date": "Fri, 09 Oct 2026 04:04:02 GMT",
+          "ETag": "\"1784752640\"",
+          "Last-Modified": null
+        }
+      },
+      {
+        "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnIdsOnly=true",
+        "file": "before-ids.json",
+        "startedAtUtc": "2026-10-09T04:04:02.600345+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:03.580633+00:00",
+        "status": 200,
+        "bytes": 28434,
+        "sha256": "811bf00abda0237a7d8a4b212dcfa0e6f25cca95f6a8b9f21d7d148f46dc85fc",
+        "finalUrl": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnIdsOnly=true",
+        "headers": {
+          "Content-Type": "application/json;charset=UTF-8",
+          "Date": "Fri, 09 Oct 2026 04:04:03 GMT",
+          "ETag": "\"1784752640\"",
+          "Last-Modified": null
+        }
+      },
+      {
+        "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC%20IN%20%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2,40.4,-88.9,40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,OID,NAME,BASENAME,MTFCC,RTTYP&returnGeometry=true&outSR=4326&f=json&orderByFields=OBJECTID&resultOffset=0&resultRecordCount=2000",
+        "file": "page-0.json",
+        "startedAtUtc": "2026-10-09T04:04:03.582105+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:05.133803+00:00",
+        "status": 200,
+        "bytes": 1395861,
+        "sha256": "dced52de01225db94b52ea1335b5491835633e84bcb75df44d3da1f089370559",
+        "finalUrl": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC%20IN%20%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2,40.4,-88.9,40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,OID,NAME,BASENAME,MTFCC,RTTYP&returnGeometry=true&outSR=4326&f=json&orderByFields=OBJECTID&resultOffset=0&resultRecordCount=2000",
+        "headers": {
+          "Content-Type": "application/json;charset=UTF-8",
+          "Date": "Fri, 09 Oct 2026 04:04:04 GMT",
+          "ETag": "\"1784752640\"",
+          "Last-Modified": null
+        }
+      },
+      {
+        "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC%20IN%20%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2,40.4,-88.9,40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,OID,NAME,BASENAME,MTFCC,RTTYP&returnGeometry=true&outSR=4326&f=json&orderByFields=OBJECTID&resultOffset=2000&resultRecordCount=2000",
+        "file": "page-2000.json",
+        "startedAtUtc": "2026-10-09T04:04:05.161925+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:06.522959+00:00",
+        "status": 200,
+        "bytes": 959976,
+        "sha256": "67a811c54f6f68e383031a3cab490bc4e479ab8879bdfadba52ef25c3bd9859b",
+        "finalUrl": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC%20IN%20%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2,40.4,-88.9,40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,OID,NAME,BASENAME,MTFCC,RTTYP&returnGeometry=true&outSR=4326&f=json&orderByFields=OBJECTID&resultOffset=2000&resultRecordCount=2000",
+        "headers": {
+          "Content-Type": "application/json;charset=UTF-8",
+          "Date": "Fri, 09 Oct 2026 04:04:06 GMT",
+          "ETag": "\"1784752640\"",
+          "Last-Modified": null
+        }
+      },
+      {
+        "url": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A120%5D%3Bway%5B%22highway%22%3D%22service%22%5D%2840.4%2C-89.2%2C40.6%2C-88.9%29%3Bout%20tags%20geom%3B",
+        "file": "overpass.json",
+        "startedAtUtc": "2026-10-09T04:04:06.543202+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:09.843112+00:00",
+        "status": 200,
+        "bytes": 5596869,
+        "sha256": "f6ccd89a8c929c34e86534f87b4adcdb58126729b41e63d1bb72775eb862cd4c",
+        "finalUrl": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A120%5D%3Bway%5B%22highway%22%3D%22service%22%5D%2840.4%2C-89.2%2C40.6%2C-88.9%29%3Bout%20tags%20geom%3B",
+        "headers": {
+          "Content-Type": "application/json",
+          "Date": "Fri, 09 Oct 2026 04:04:07 GMT",
+          "ETag": null,
+          "Last-Modified": null
+        }
+      },
+      {
+        "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnCountOnly=true",
+        "file": "after-count.json",
+        "startedAtUtc": "2026-10-09T04:04:09.912911+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:10.839504+00:00",
+        "status": 200,
+        "bytes": 14,
+        "sha256": "660a863e0397de5f0cf088dc15e4ceeaca9b8588b085e81d2a831612289ab58c",
+        "finalUrl": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnCountOnly=true",
+        "headers": {
+          "Content-Type": "application/json;charset=UTF-8",
+          "Date": "Fri, 09 Oct 2026 04:04:10 GMT",
+          "ETag": "\"1784752640\"",
+          "Last-Modified": null
+        }
+      },
+      {
+        "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnIdsOnly=true",
+        "file": "after-ids.json",
+        "startedAtUtc": "2026-10-09T04:04:10.840262+00:00",
+        "finishedAtUtc": "2026-10-09T04:04:11.782396+00:00",
+        "status": 200,
+        "bytes": 28434,
+        "sha256": "811bf00abda0237a7d8a4b212dcfa0e6f25cca95f6a8b9f21d7d148f46dc85fc",
+        "finalUrl": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8/query?where=MTFCC+IN+%28%27S1400%27%2C%27S1640%27%2C%27S1710%27%2C%27S1730%27%2C%27S1780%27%2C%27S1820%27%29&geometry=-89.2%2C40.4%2C-88.9%2C40.6&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&f=json&returnIdsOnly=true",
+        "headers": {
+          "Content-Type": "application/json;charset=UTF-8",
+          "Date": "Fri, 09 Oct 2026 04:04:11 GMT",
+          "ETag": "\"1784752640\"",
+          "Last-Modified": null
+        }
+      }
+    ],
+    "offlineReauditOfCaptureSha256": "e73a17d8a9f6e58e9c66d8faab01a15303755f21b5b145ff95d691911bd632ac",
+    "extractorBlob": "3d5e9a35144e2110eb1b047b91371372e68c6620",
+    "tools": [
+      {
+        "file": "tools/fetch-web-access-road-review.py",
+        "sha256": "dc86129db79b574a8c60bb48d3ccd09d0d2563a6af632e1e2cfd2b62a5258130"
+      },
+      {
+        "file": "tools/replay-access-road-responses.ps1",
+        "sha256": "db7c89d49a9df5a9e056695c7197aa4b10ebf6e4d35d1f67ddced73a18f175f8"
+      },
+      {
+        "file": "tools/canonicalize-access-road-review.py",
+        "sha256": "b6e5da32594c8f10296de7bcd619b64ea822b9c097e35a96929d4b7596cfee5b"
+      },
+      {
+        "file": "tools/fetch-tigerweb-access-roads.ps1",
+        "sha256": "7c440f1ac16d704308a263e3b722f6d797eef5939cbaf0320303084b1a551162"
+      },
+      {
+        "file": "tools/Write-GeneratedAsset.ps1",
+        "sha256": "974a6994f25cb03a45d1f831144c506e2d643b7b679c3a88af17f468afadc8d7"
+      },
+      {
+        "file": "webApp/tools/compare-access-review.mjs",
+        "sha256": "63f630d5a5aeff77ed93e9c576ba6d5c642dfcb06fc26fce20b007252f451c61"
+      },
+      {
+        "file": "webApp/tools/lib/access-package.mjs",
+        "sha256": "6adcf52d595327fcf5f2a1089006a3fc96178f670aea8008233b651a8554bb07"
+      }
+    ],
+    "pythonVersion": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "powershellVersion": "7.5.3",
+    "workingTreeStatus": [],
+    "sourceCommit": "0642354017dedb649bb8953796064ba2e66db5f9",
+    "reviewRevisionChange": {
+      "priorSourceCommit": "216de928a2cbaec0acaaeee0b12dddf29e0ff734",
+      "priorTools": [
+        {
+          "file": "fetch-web-access-road-review.py",
+          "sha256": "74b0421a3310f1e67de65f12042da93e310e47f42f5905b687d2916a3d98fcb6"
+        },
+        {
+          "file": "replay-access-road-responses.ps1",
+          "sha256": "c3f346fdcad1e4ef443e8b1f373487689af1aa9c10ee15eb0278d6b3f43203fc"
+        },
+        {
+          "file": "canonicalize-access-road-review.py",
+          "sha256": "b6e5da32594c8f10296de7bcd619b64ea822b9c097e35a96929d4b7596cfee5b"
+        },
+        {
+          "file": "fetch-tigerweb-access-roads.ps1",
+          "sha256": "7c440f1ac16d704308a263e3b722f6d797eef5939cbaf0320303084b1a551162"
+        },
+        {
+          "file": "Write-GeneratedAsset.ps1",
+          "sha256": "974a6994f25cb03a45d1f831144c506e2d643b7b679c3a88af17f468afadc8d7"
+        }
+      ],
+      "meaning": "Fresh independent review of identical archived public responses; tool revision changes are explicit and never change source or normalized identity."
+    },
+    "normalizationTimestampUtc": "2026-10-09T04:04:11.782396+00:00",
+    "status": "captured-and-audited-not-admitted",
+    "orderedResponsesSha256": "a43a2e95d16ffde88edb1917f8900beeecccf86d40ef188812f5f70893181fb3",
+    "audit": {
+      "layerCounts": {
+        "8": 3424,
+        "osm-service": 9344
+      },
+      "osmRawCount": 10688,
+      "osmExclusions": {
+        "access-or-service": 1344
+      },
+      "osmBaseTimestamp": "2026-10-09T04:02:51Z"
+    },
+    "normalizedSha256": "f7be4a62cf5062147afff3206a5abf538ca02b083a059cf012acfe95cd82e033",
+    "finishedAtUtc": "2026-10-09T04:13:12.691631+00:00"
+  },
+  "captureManifestSha256": "7d4da21a9d91ae57a8b2b7a865763e404dcaa2fae411e5a00487b9926259ccc1",
+  "baselineComparison": {
+    "schemaVersion": 1,
+    "oldDerivedIndexSha256": "672e9d1c871121c97896e03fe1825f228a8024ebc386270eba0d8b67008536e0",
+    "oldDerivedLocalCount": 9313,
+    "freshInputSha256": "f7be4a62cf5062147afff3206a5abf538ca02b083a059cf012acfe95cd82e033",
+    "captureManifestSha256": "7d4da21a9d91ae57a8b2b7a865763e404dcaa2fae411e5a00487b9926259ccc1",
+    "sourceCommit": "0642354017dedb649bb8953796064ba2e66db5f9",
+    "tools": [
+      {
+        "file": "webApp/tools/compare-access-review.mjs",
+        "sha256": "63f630d5a5aeff77ed93e9c576ba6d5c642dfcb06fc26fce20b007252f451c61"
+      },
+      {
+        "file": "webApp/tools/lib/access-package.mjs",
+        "sha256": "6adcf52d595327fcf5f2a1089006a3fc96178f670aea8008233b651a8554bb07"
+      }
+    ],
+    "freshLocalCount": 9344,
+    "tigerBaseByteIdentical": true,
+    "tigerChanges": {
+      "addedIds": [],
+      "removedIds": [],
+      "changedIds": []
+    },
+    "addedIds": [
+      "osm:way:1563004437",
+      "osm:way:1563004438",
+      "osm:way:1563004439",
+      "osm:way:1563048135",
+      "osm:way:1563499457",
+      "osm:way:1563499458",
+      "osm:way:1563499459",
+      "osm:way:1563499460",
+      "osm:way:1563499461",
+      "osm:way:1563499462",
+      "osm:way:1563697353",
+      "osm:way:1563697354",
+      "osm:way:1563706417",
+      "osm:way:1563706418",
+      "osm:way:1563707869",
+      "osm:way:1563707870",
+      "osm:way:1563707871",
+      "osm:way:1563707872",
+      "osm:way:1563760579",
+      "osm:way:1563760580",
+      "osm:way:1563760581",
+      "osm:way:1563760582",
+      "osm:way:1563760584",
+      "osm:way:1563760585",
+      "osm:way:1563760586",
+      "osm:way:1563760587",
+      "osm:way:1563760588",
+      "osm:way:1565330732",
+      "osm:way:1565695938",
+      "osm:way:1565695939",
+      "osm:way:1565695940"
+    ],
+    "removedIds": [],
+    "changedGeometryIds": [
+      "osm:way:744541031",
+      "osm:way:751494305",
+      "osm:way:751498376",
+      "osm:way:751510781",
+      "osm:way:757232090",
+      "osm:way:757232091",
+      "osm:way:757232092",
+      "osm:way:757232093",
+      "osm:way:761610764",
+      "osm:way:761610765",
+      "osm:way:761626805",
+      "osm:way:769380558",
+      "osm:way:802810081",
+      "osm:way:1163312947",
+      "osm:way:1163312959",
+      "osm:way:1177662705",
+      "osm:way:1381391931"
+    ],
+    "changedNameOrClassIds": [
+      "osm:way:778782593"
+    ],
+    "sharedRelativeOrderPreserved": true,
+    "transform": {
+      "base": {
+        "file": "access-base.544b1add4dd6.json",
+        "sha256": "544b1add4dd62d6efce664c0f3d859ec58b06dd057c3789a2712a73748c40322",
+        "bytes": 1986321,
+        "featureCount": 3424
+      },
+      "index": {
+        "file": "access-index.aef0eb309860.json",
+        "sha256": "aef0eb30986096bcd500d562788d5754a240f83437aee8bfd9c4f35ad0e5ecb9",
+        "bytes": 80029,
+        "tileCount": 440,
+        "localFeatureCount": 9344,
+        "tileAssignments": 10354,
+        "tileBytes": 2358418
+      },
+      "cellDegrees": 0.01,
+      "windowCells": 1,
+      "radiusMeters": 600
+    },
+    "combinedAccessPartsSha256": "548dfd4fd3ffa25eb3621ab7afb838d95d799060e513472a645a3be4867e342b",
+    "limits": "Old raw source unavailable. Comparison authenticates v5 derived base/index/tile bytes and router-visible geometry/name/class/order; old access tags, source timestamps and raw-byte equivalence are unverified."
+  },
+  "validation": {
+    "offlineQualityControls": 14,
+    "repeatability": "Independent committed-tools audit preserved ordered response, timestamp, extractor and canonical input hashes; separate offline replay also reproduced identical canonical bytes.",
+    "unreviewedAdmissionControl": "Before this fresh entry, actual new input was refused by the old committed source pin.",
+    "independentReview": "/tmp/trail-road-committed-claude.txt: no confirmed correctness blockers; static only.",
+    "remaining": "Promotion requires independent real-data routing and full release verification; source review alone never authorizes publication.",
+    "executedNegativeControls": [
+      "Raw archive byte tamper refused by offline re-audit",
+      "Changed prior normalized identity refused; failed capture marked failed-review and normalized output removed",
+      "Actual admitted source bytes tamper refused",
+      "Actual deterministic transform digest tamper refused"
+    ]
+  }
+}

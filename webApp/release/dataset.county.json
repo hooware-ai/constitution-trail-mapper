@@ -19,8 +19,8 @@
   },
   "blockers": [
     "The six Proposed branch geometries (OBJECTIDs 1929, 1952, 2349, 3824, 4275, 4772) are omitted by the owner's narrow first-release scope decision; their redistribution basis is still unresolved and nothing here grants it.",
-    "The ODbL classification of a merged OpenStreetMap graph is unresolved for any PUBLIC release: this review candidate INCLUDES 4 reviewed OpenStreetMap paths, 9,313 endpoint-local OpenStreetMap service roads and 3,424 Census TIGER/Line roads, and that inclusion is not a rights determination.",
-    "The owner has not approved this source composition (254 existing trails, 4 OpenStreetMap paths, 12,737 access roads) for public release; owner-private review is not publication.",
+    "The ODbL classification of a merged OpenStreetMap graph is unresolved for any PUBLIC release: this review candidate INCLUDES 4 reviewed OpenStreetMap paths, 9,344 endpoint-local OpenStreetMap service roads and 3,424 Census TIGER/Line roads, and that inclusion is not a rights determination.",
+    "The owner has not approved this source composition (254 existing trails, 4 OpenStreetMap paths, 12,768 access roads) for public release; owner-private review is not publication.",
     "Physical iPhone Safari and Android Chrome acceptance (#41) has not been done.",
     "Hosting and basemap decisions are open (docs/web/hosting-runbook.md); sign-in and sync are deferred by decision, as the first launch is guest-first."
   ]

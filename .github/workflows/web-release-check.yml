@@ -9,6 +9,11 @@ on:
   pull_request:
     paths:
       - "webApp/**"
+      - "data/web-access-roads.manifest.json"
+      - "data/access-source-reviews/**"
+      - "tools/*access-road-review*"
+      - "tools/test_web_access_road_review.py"
+      - "tools/replay-access-road-responses.ps1"
       - "webBridge/**"
       - "sharedLogic/**"
       - "gradle/**"
@@ -20,6 +25,11 @@ on:
     branches: [main, "codex/web-app"]
     paths:
       - "webApp/**"
+      - "data/web-access-roads.manifest.json"
+      - "data/access-source-reviews/**"
+      - "tools/*access-road-review*"
+      - "tools/test_web_access_road_review.py"
+      - "tools/replay-access-road-responses.ps1"
       - "webBridge/**"
       - "sharedLogic/**"
       - "gradle/**"
@@ -75,6 +85,9 @@ jobs:
         run: npm run release:check -- --skip-install
         env:
           CI: "true"
+
+      - name: Offline fresh-road source quality controls (no source downloads)
+        run: python3 -m unittest discover -s tools -p test_web_access_road_review.py
 
       # Evidence only, from the one core build above (no second build): an unchanged copy of the manifest and per-output
       # hashes and line-ending counts, kept in the existing dist-report artifact before the negative check deletes it.
