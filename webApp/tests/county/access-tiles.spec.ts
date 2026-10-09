@@ -6,6 +6,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { accessPlaces, closureTrailEntry } from "../support/access-fixture.mjs";
 
@@ -172,6 +173,57 @@ test("Help and the map credit say where the road data came from, with no accessi
   await expect(
     help.getByRole("link", { name: /OpenStreetMap contributors \(ODbL\)/ }),
   ).toHaveAttribute("href", "https://www.openstreetmap.org/copyright");
+  const details = help
+    .locator("details")
+    .filter({ hasText: "Routing data downloads and license details" });
+  await expect(details).not.toHaveAttribute("open", "");
+  await details.locator("summary").click();
+  await expect(details).toHaveAttribute("open", "");
+  const response = await page.request.get("/data/dataset.json");
+  expect(response.ok()).toBe(true);
+  const record = await response.json();
+  for (const [name, file] of [
+    ["Data file list and source notices", "dataset.json"],
+    ["Trail geometry", record.content.file],
+    ["Base road data", record.access.base.file],
+    ["Service-road tile index", record.access.index.file],
+  ]) {
+    const link = details.getByRole("link", { name, exact: true });
+    await expect(link).toHaveAttribute("href", `/data/${file}`);
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect((await page.request.get(`/data/${file}`)).ok()).toBe(true);
+  }
+  await expect(
+    details.getByRole("link", { name: /^ODbL 1\.0/ }),
+  ).toHaveAttribute("href", "https://opendatacommons.org/licenses/odbl/1-0/");
+  await expect(
+    details.getByRole("link", { name: /^CC BY 4\.0/ }),
+  ).toHaveAttribute("href", "https://creativecommons.org/licenses/by/4.0/");
+  const index = await (
+    await page.request.get(`/data/${record.access.index.file}`)
+  ).json();
+  expect(index.tiles.length).toBeGreaterThan(0);
+  for (const tile of index.tiles) {
+    const response = await page.request.get(`/data/${tile.file}`);
+    expect(response.ok(), tile.file).toBe(true);
+    const body = await response.body();
+    expect(body.byteLength, tile.file).toBe(tile.bytes);
+    expect(createHash("sha256").update(body).digest("hex"), tile.file).toBe(
+      tile.sha256,
+    );
+  }
+  const provenance = await (await page.request.get("/provenance.json")).json();
+  const source = details.getByRole("link", {
+    name: /Extraction, normalization and graph-construction/,
+  });
+  if (provenance.source.dirty === false) {
+    await expect(source).toHaveAttribute(
+      "href",
+      `https://github.com/hooware-ai/constitution-trail-mapper/tree/${provenance.source.commit.slice(0, 12)}`,
+    );
+  } else {
+    await expect(source).toHaveCount(0);
+  }
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();

@@ -14,78 +14,47 @@ paths, 3,424 TIGER/Line roads and 9,344 OSM service roads. No proposed geometrie
 are included. PR117 merged as `ba2910041f59eb55e2684e8176b4d56a37e81909` after
 five exact-head gates and independent review; its tests/CI/docs do not alter v12.
 
-| Material                    | Existing evidence/notices                                                                                                                                                                                 | Remaining work                                                                                                                                      |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| County trails               | `dataset.json` carries McGIS credit, CC BY 4.0 link, licensed source/evidence URL, changes and disclaimer. Help and exports retain these. The official Trails item still declares CC BY 4.0 on October 9. | Preserve these notices in a complete download. Decide compatibility of the combined database, not whether the included county subset has a license. |
-| Four OSM paths              | Separate `verified-osm` layer, OSM attribution and ODbL license name/copyright link in dataset, Help and exports.                                                                                         | Include in the complete offer and state the database license treatment.                                                                             |
-| OSM service roads           | OSM credit/copyright link in Help and exports. Every normalized way is shipped in hash-indexed endpoint-local tiles.                                                                                      | An explicit versioned offer must include **all** tiles, not only those fetched for a selected trip.                                                 |
-| TIGER/Line roads            | Census identified in Help/exports; base roads shipped separately.                                                                                                                                         | Retain origin and public-domain notice in the offer.                                                                                                |
-| Optional OSM raster basemap | Linked attribution, disabled by default; privacy disclosure and no bulk/offline harvesting.                                                                                                               | Accept best-effort availability or choose a different provider later. This does not decide geometry licensing.                                      |
+## Data terms and existing distribution
 
-Primary terms: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode.en)
-requires source credit, license notice, modification disclosure and retained supplied
-notices. [Census](https://www.census.gov/newsroom/archives/2014-pr/cb14-208.html)
-identifies TIGER as public-domain geospatial data.
-[OSMF attribution guidance](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines)
-recognizes OSM credit for routing engines and applications; the existing copyright
-link is useful attribution, not evidence that share-alike/source-offer work is done.
-
-## The concrete ODbL question and smallest complete offer
+The included county subset has explicit CC BY 4.0 permission. Its source credit,
+license link and change disclosure are already in the dataset, Help and exports.
+OSM credit and the linked copyright page match the
+[OSMF attribution guidance](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines).
+[Census identifies TIGER as public-domain data](https://www.census.gov/newsroom/archives/2014-pr/cb14-208.html).
+Noncommercial use and responding to complaints do not waive these terms.
 
 [ODbL sections 4.2–4.6](https://opendatacommons.org/licenses/odbl/1-0/)
-require notices; public use of a derivative database triggers share-alike and a free
-machine-readable database or complete alterations/method offer. Application code
-is outside the database license. A repository of manifests containing only hashes
-and a route GeoJSON containing one route are not the entire modified database.
+include notices and, when derivative-database obligations apply, share-alike and
+an offer of the complete database or complete alterations/construction method.
+Application code itself is outside the database license. Attribution alone is
+therefore not a universal description of the obligations.
 
-Technical finding: county and OSM trails share the same trail graph builder, which
-snaps points within 15 metres; TIGER and OSM roads share the access graph builder,
-which snaps within eight metres. These interact to route a trip. Separate JSON
-layers do not establish an independent-collection exemption. The
-[OSMF horizontal-layer guideline](https://osmfoundation.org/wiki/Licence/Community_Guidelines/Horizontal_Map_Layers_-_Guideline)
-warns that mixing sources for the same feature type can engage share-alike.
-The JSON geometry is extractable data, unlike a raster display alone; see the
-[Produced Work guideline](https://osmfoundation.org/wiki/Licence/Community_Guidelines/Produced_Work_-_Guideline).
-Treating the combined routing dataset as derivative is the conservative proposal,
-not an accepted legal conclusion about this particular graph.
+This app already distributes all 444 normalized data files: `data/dataset.json`,
+`trails.903e43cf077a.json`, `access-base.544b1add4dd6.json`,
+`access-index.aef0eb309860.json` and all 440 indexed service-road tiles. An offline
+artifact audit verified every file hash and 9,344 unique service ways across 10,354
+tile assignments. The index lists every tile, not just those used for one trip.
+The public repository already supplies extraction, filtering, normalization,
+packaging, tiling and both graph builders with their dependencies. These are
+substantial existing evidence for the complete-data/method offer; neither a ZIP
+nor a separately named LICENSE file is inherently required.
 
-The smallest implementation preserving coverage is:
+County and OSM graph inputs interact, so separate JSON layers alone do not establish
+an independent-collection exemption. That does not establish a licensing violation
+or a need for fresh permission. OSMF's CC BY import policy concerns importing data
+into OSM; it cannot automatically impose a county waiver requirement on this app.
+No confirmed licensing violation or separate licensing hold was found by this review.
+This corrects the earlier assessment that missing data/source or a missing archive
+was a demonstrated blocker. It does not certify every possible legal classification.
 
-1. Publish one free, versioned data download with the existing `data/dataset.json`,
-   `trails.903e43cf077a.json`, `access-base.544b1add4dd6.json`,
-   `access-index.aef0eb309860.json` and all 440 indexed service-road tiles.
-   These are 444 data files already in the verified app. Audit every size/hash;
-   deduplicate tile identities to prove 9,344 ways and preserve their original
-   `ord` values. No new extract or geometry change is needed.
-2. Include a source-notice README and file manifest. Preserve county CC BY notices,
-   OSM attribution and direct ODbL URI, Census origin, source versions and filtering/
-   normalization/tile changes. Identify the accepted database license separately
-   from underlying source-content licenses. Do not rewrite county rights as solely
-   ODbL or relabel the whole application.
-3. Supply the exact graph-construction method and source revision, including
-   `TrailGraphBuilderSijko`, `AccessGraphBuilderSijko`, parsing/filtering/tiling and
-   referenced dependencies. Verify complete reconstruction; offering these methods
-   plus all additional contents is a candidate section 4.6(b) approach, not a
-   certification that a raw-input archive alone covers every graph modification.
-4. Add a discoverable **Download routing data and license notices** link under the
-   existing Data sources and licenses section. Keep it available to recipients;
-   never require payment, an email request or a selected ride. No removed cards
-   are restored. The same artifact offer must remain associated with its version.
-
-A private preparation archive verifies all 444 bytesets and the 440 tiles:
-9,344 unique service ways, 10,354 tile assignments, approximately 1.45 MB compressed.
-It is **not published or licensed as a combined database**. The archive does not
-contain personal routes, GPS traces or credentials. Exact construction-method
-packaging and an accepted database notice remain outstanding.
-
-**Legal acceptance needed:** whether this combined database can be offered under
-ODbL while preserving all county CC BY obligations, including downstream terms,
-or whether an applicable waiver/permission or alternative architecture is needed.
-[OSMF's CC BY 4.0 analysis](https://blog.openstreetmap.org/2017/03/17/use-of-cc-by-data/)
-flags compatibility concerns for imports into OSM. This app is not importing into
-OSM: that policy neither proves our combination unlawful nor supplies a waiver.
-Owner willingness to publish cannot waive another licensor's conditions. No
-rightsholder contact, paid advice, waiver acceptance or coverage removal is authorized.
+The minimal clarification adds a collapsed **Routing data downloads and license
+details** section in existing Help/about. It links the actual dataset descriptor,
+trail geometry, base roads, complete tile index, direct ODbL/CC BY terms and the
+exact build's public source revision. County content terms remain intact; the whole
+application is not relabeled ODbL. Existing map attribution stays visible. No removed
+cards, new service, coverage removal, sharing change or runtime activation is needed.
+A private 1.45 MB preparation archive remains optional evidence, not a required
+public deliverable. Public sharing still awaits the capability choice below.
 
 ## Proposed connection design: retain coverage, separate evidence from guidance
 

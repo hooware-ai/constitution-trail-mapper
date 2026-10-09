@@ -69,9 +69,11 @@ trails and four OSM paths. Fresh reviewed road input contains 3,424 TIGER/Line
 roads and **9,344 OSM service roads**, totaling **12,768** access roads; it uses
 440 hash-indexed tiles. This supersedes the v4 access counts, not its history.
 Existing Help/export notices already identify these sources. Every normalized
-geometry file is shipped, but no discoverable complete-data offer or accepted
-combined-database license treatment is declared. Separate layers alone do not
-resolve an interacting routing graph's ODbL status.
+geometry file is shipped, and the public repository supplies extraction and graph
+construction methods. These provide substantial evidence for the ODbL complete-data
+or method offer. Help links the exact build's complete inputs, source and terms.
+No confirmed licensing violation or mandatory ZIP/extra permission was established.
+Separate layers alone do not resolve an interacting graph's classification.
 
 See [exact evidence, obligations and proposed smallest implementation](public-release-readiness.md).
 That record also separates physical GPS/navigation acceptance from a possible
@@ -97,7 +99,7 @@ Before public redistribution of this reviewed subset, re-extract from the specif
 
 ## OpenStreetMap geometry and tile service are separate
 
-OSM geometry is available under ODbL, with attribution. Public use of a derivative database can trigger share-alike and an offer of the database or complete modifications in machine-readable form. Keeping county and OSM source assets separate preserves provenance but does not by itself decide whether a merged routing graph is a derivative database. Before publicly distributing or serving such a merged graph, resolve that classification and source-license compatibility and satisfy applicable ODbL obligations. These rules concern data; they do not automatically license application code under ODbL.
+OSM geometry is available under ODbL, with attribution. Public use of a derivative database can trigger share-alike and an offer of the database or complete modifications in machine-readable form. Keeping county and OSM source assets separate preserves provenance but does not by itself decide whether a merged routing graph is a derivative database. Retain the applicable notices and complete-data/method offer when distributing or serving such a graph. The current shipped inputs and public construction methods are evidence for that offer; uncertainty about classification alone is not a confirmed violation or a requirement for fresh permission. These rules concern data; they do not automatically license application code under ODbL.
 
 - OSM copyright: https://www.openstreetmap.org/copyright
 - ODbL, especially sections 4.4–4.6: https://opendatacommons.org/licenses/odbl/1-0/
