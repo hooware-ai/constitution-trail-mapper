@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "productionEnabled": false,
+  "scope": "Reviewable source registry proposal referencing existing authoritative manifests. No scheduling, service-policy or composition approval is implied. Specific reviews #1/#2 remain authoritative; proposed trails remain excluded.",
+  "sources": [
+    {
+      "sourceId": "county-trails",
+      "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/8?f=json",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "CC BY 4.0",
+      "termsUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "254 reviewed features only; operational status requires transient layers 54/16; no new routing IDs.",
+      "manifestPath": "data/web-reviewed-trails.manifest.json",
+      "reviewedOn": "2026-09-28",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history."
+    },
+    {
+      "sourceId": "county-addresses",
+      "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0?f=json",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "CC BY 4.0 stated by item; prototype only",
+      "termsUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Prototype pin is not composition or publication approval; no user address searches collected.",
+      "manifestPath": "data/web-address-index.manifest.json",
+      "reviewedOn": null,
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history."
+    },
+    {
+      "sourceId": "tiger-access-roads",
+      "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8?f=json",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "Census terms require review under #47",
+      "termsUrl": "https://www.census.gov/about/policies/open-gov/open-data.html",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Endpoint access only; not a through-route or closure-detour network.",
+      "manifestPath": "data/web-access-roads.manifest.json",
+      "reviewedOn": null,
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history."
+    },
+    {
+      "sourceId": "osm-reviewed-paths",
+      "url": "https://overpass-api.de/api/interpreter",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "ODbL 1.0",
+      "termsUrl": "https://www.openstreetmap.org/copyright",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Requires exact reviewed-way query adapter and service-policy approval; no generic GET fetch enabled.",
+      "manifestPath": "data/verified-trail-additions.manifest.json",
+      "reviewedOn": "2026-09-07",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history."
+    },
+    {
+      "sourceId": "osm-service-roads",
+      "url": "https://overpass-api.de/api/interpreter",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "ODbL 1.0",
+      "termsUrl": "https://www.openstreetmap.org/copyright",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Requires bounded approved query adapter; composition rights unresolved; endpoint access only.",
+      "manifestPath": "data/web-access-roads.manifest.json",
+      "reviewedOn": null,
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history."
+    }
+  ]
+}
