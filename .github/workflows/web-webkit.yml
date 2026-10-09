@@ -4,7 +4,7 @@ name: Web WebKit launch acceptance
 # build of the Safari engine: it is NOT iPhone Safari, a physical device, VoiceOver or a real GPS, and a green run is not
 # launch acceptance (see docs/web/launch-acceptance.md). A separate workflow from "Web release check" and "Web Firestore
 # rules", which are unchanged. No secrets, no deployment, no cloud access, no authentication; the specs run the app on its
-# synthetic fixture network against a loopback dev server.
+# synthetic fixture network against owned loopback dev and production-header artifact servers.
 
 on:
   pull_request:
@@ -81,6 +81,15 @@ jobs:
         working-directory: webApp
         timeout-minutes: 20
         run: npm run test:webkit
+        env:
+          CI: "true"
+
+      - name: Build and check cold reload on the fixture artifact
+        working-directory: webApp
+        timeout-minutes: 10
+        run: |
+          npm run build
+          npx playwright test -c playwright.webkit.dist.config.ts
         env:
           CI: "true"
 
