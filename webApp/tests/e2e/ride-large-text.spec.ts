@@ -48,9 +48,16 @@ test("large-text ride guidance and Stop remain reachable on a short phone", asyn
   await simulateDevice(page);
   await planPoint(page);
   await startButton(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+  ).toBeVisible();
   await fix(page, 40.505, -88.95);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
   await expect(page.locator(".ride-map-canvas")).toBeVisible();
+  await expect(page.locator(".ride-map-canvas")).toHaveAttribute(
+    "data-ready",
+    "true",
+  );
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "32px";
   });
