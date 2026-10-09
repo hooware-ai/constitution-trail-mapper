@@ -79,7 +79,11 @@ const result = spawnSync(
   ],
   {
     cwd: webRoot,
-    env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath },
+    env: {
+      ...process.env,
+      TRAIL_TEST_PORT: process.env.TRAIL_TEST_PORT ?? "4185",
+      PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath,
+    },
     stdio: "inherit",
   },
 );
