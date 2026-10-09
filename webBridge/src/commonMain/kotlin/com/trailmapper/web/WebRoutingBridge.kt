@@ -44,6 +44,7 @@ class WebRoutingBridge {
         val now = request["now"]?.jsonPrimitive?.long ?: Clock.System.now().toEpochMilliseconds()
         val result = when (request.string("op")) {
             "initialize" -> initialize(request, now)
+            "closureCatalog" -> compiledClosureCatalog()
             "plan" -> plan(request, now)
             "mapPoint" -> mapPoint(request, now)
             "inspect" -> describe(request.route(), now)
@@ -64,6 +65,23 @@ class WebRoutingBridge {
             put("error", error.message?.take(400) ?: "Unable to process routing request.")
             put("closures", JsonArray(emptyList()))
         }.toString()
+    }
+
+    /** Complete compiled rules, independent of current time/network; review tooling must compare every field. */
+    private fun compiledClosureCatalog(): JsonObject = buildJsonObject {
+        put("schema", "trail-mapper.compiled-closures/1")
+        put("closures", JsonArray(TrailRouteClosureSijko.closures.map { closure -> buildJsonObject {
+            put("id", closure.id); put("title", closure.title); put("guidance", closure.guidance)
+            put("noticeUrl", closure.noticeUrl); put("featureId", closure.featureId)
+            put("closedFrom", json.encodeToJsonElement(closure.closedFrom))
+            put("closedTo", json.encodeToJsonElement(closure.closedTo))
+            put("activeFromEpochMillis", closure.activeFromEpochMillis)
+            put("estimatedEndEpochMillis", closure.estimatedEndEpochMillis?.let { JsonPrimitive(it) } ?: JsonNull)
+            put("boundsProjected", closure.boundsProjected); put("isCrossing", closure.isCrossing)
+            put("closedPath", json.encodeToJsonElement(closure.closedPath))
+            put("sourceLine", json.encodeToJsonElement(closure.sourceLine))
+            put("mappingNote", closure.mappingNote); put("checkedOn", closure.checkedOn)
+        } }))
     }
 
     private fun initialize(request: JsonObject, now: Long): JsonObject {

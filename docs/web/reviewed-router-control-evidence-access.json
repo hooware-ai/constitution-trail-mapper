@@ -1,0 +1,768 @@
+{
+  "schema": "trail-mapper.router-admission/1",
+  "reviewSha256": "f3bb0c7f8db9d0d1472f1efb2f7fa35c7fd919c3e5ebe1699ce6bd0abaf3605f",
+  "dataset": {
+    "id": "synthetic-county",
+    "version": "2026-01-01.7070d4965d97",
+    "recordSha256": "17781235182d66af7779b1907f197bfe02ff98ad1e2c99428de25cfe1da70287",
+    "contentSha256": "f1fece7251595eaa5846687eeffe58c56460064316e05769924af18b2f5e94d6"
+  },
+  "core": {
+    "inputsSha256": "15276977a264d07af95159441a1900600c309e3d565c839f470d7a8c1b1a3c68",
+    "outputsSha256": "1cde99138397af7aeedb3ae5e873c1f650dad360ae411a60e101a676edb753ea"
+  },
+  "catalogSha256": "332d0aeea068361ca0fb212eab344a9521e89391d39280ad3d63ce43ae79a6a8",
+  "accessFiles": [
+    {
+      "file": "access-base.6096cfb07fda.json",
+      "bytes": 145
+    },
+    {
+      "file": "access-index.5f7422b9d9cf.json",
+      "bytes": 1225
+    },
+    {
+      "file": "access-tile.4049_-8900.c6bf10232672.json",
+      "bytes": 182
+    },
+    {
+      "file": "access-tile.4049_-8899.c6bf10232672.json",
+      "bytes": 182
+    },
+    {
+      "file": "access-tile.4050_-8900.c6bf10232672.json",
+      "bytes": 182
+    },
+    {
+      "file": "access-tile.4050_-8899.c6bf10232672.json",
+      "bytes": 182
+    }
+  ],
+  "cases": [
+    {
+      "id": "point",
+      "category": "point",
+      "request": {
+        "op": "plan",
+        "start": {
+          "latitude": 40.5,
+          "longitude": -88.99
+        },
+        "destination": {
+          "latitude": 40.52,
+          "longitude": -88.95
+        },
+        "proposed": false,
+        "now": 1789862400000
+      },
+      "assertions": [
+        {
+          "path": [
+            "canNavigate"
+          ],
+          "equals": true
+        }
+      ],
+      "responseSha256": "9fe2a1bb98bac8595e76e1badcd1c1a14a87889427c012c974b7f553f4e79622",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "16:9003",
+        "54:9001",
+        "54:9002"
+      ]
+    },
+    {
+      "id": "loop",
+      "category": "loop",
+      "request": {
+        "op": "plan",
+        "start": {
+          "latitude": 40.5,
+          "longitude": -88.99
+        },
+        "miles": 3,
+        "proposed": false,
+        "now": 1789862400000
+      },
+      "assertions": [
+        {
+          "path": [
+            "route",
+            "kind"
+          ],
+          "equals": "ExerciseLoop"
+        }
+      ],
+      "responseSha256": "add551eba5e586c8c82dd9e2569fec6e3a1ccda35cca991686ecbf8cf85adf99",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "54:9001"
+      ]
+    },
+    {
+      "id": "detached",
+      "category": "disconnected",
+      "request": {
+        "op": "plan",
+        "start": {
+          "latitude": 40.5,
+          "longitude": -88.99
+        },
+        "destination": {
+          "latitude": 40.55,
+          "longitude": -88.89
+        },
+        "proposed": false,
+        "now": 1789862400000
+      },
+      "assertions": [
+        {
+          "path": [
+            "canNavigate"
+          ],
+          "equals": false
+        }
+      ],
+      "responseSha256": "15b6d2f7456919da5ed0652f5807008f42d1283c0719062d462dd28a1842c400",
+      "canNavigate": false,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": []
+    },
+    {
+      "id": "access",
+      "category": "unverified-access",
+      "request": {
+        "op": "plan",
+        "start": {
+          "latitude": 40.49753,
+          "longitude": -89
+        },
+        "destination": {
+          "latitude": 40.52,
+          "longitude": -88.95
+        },
+        "proposed": false,
+        "now": 1789862400000
+      },
+      "assertions": [
+        {
+          "path": [
+            "canNavigate"
+          ],
+          "equals": false
+        }
+      ],
+      "responseSha256": "a1b7413aff0a81bb5d7c23021b1dacb2e5d342c032e04bf16e3377a1a6143e1d",
+      "canNavigate": false,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "16:9003",
+        "54:9001",
+        "54:9002"
+      ]
+    },
+    {
+      "id": "preclosure",
+      "category": "point",
+      "request": {
+        "op": "plan",
+        "start": {
+          "latitude": 40.5065,
+          "longitude": -88.984202
+        },
+        "destination": {
+          "latitude": 40.5105,
+          "longitude": -88.984155
+        },
+        "proposed": false,
+        "now": 1789862400000
+      },
+      "assertions": [
+        {
+          "path": [
+            "canNavigate"
+          ],
+          "equals": true
+        }
+      ],
+      "responseSha256": "da65685c708d3389372db99f7ab5ccdd61fdc10a28e18c03b999d2c767014b32",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "54:1305",
+        "54:9100",
+        "54:9101"
+      ]
+    },
+    {
+      "id": "closure-after-estimate",
+      "category": "closure",
+      "request": {
+        "op": "inspect",
+        "now": 1822348800000,
+        "route": {
+          "edges": [
+            {
+              "id": 10,
+              "fromNodeId": 11,
+              "toNodeId": 8,
+              "distanceMeters": 128.54151274936424,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "54:9100",
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [
+                {
+                  "type": "Trail",
+                  "points": [
+                    {
+                      "latitude": 40.5065,
+                      "longitude": -88.984202
+                    },
+                    {
+                      "latitude": 40.507656,
+                      "longitude": -88.984202
+                    }
+                  ],
+                  "isRouted": true,
+                  "routeRoles": [
+                    "TrailBranches"
+                  ],
+                  "displayStyle": "Route66",
+                  "name": "Synthetic closure approach"
+                }
+              ],
+              "connectorOfEdgeId": null
+            },
+            {
+              "id": 7,
+              "fromNodeId": 8,
+              "toNodeId": 9,
+              "distanceMeters": 152.05560148920222,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "54:1305",
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [
+                {
+                  "type": "Trail",
+                  "points": [
+                    {
+                      "latitude": 40.507656,
+                      "longitude": -88.984202
+                    },
+                    {
+                      "latitude": 40.509023,
+                      "longitude": -88.984155
+                    }
+                  ],
+                  "isRouted": true,
+                  "routeRoles": [
+                    "TrailBranches"
+                  ],
+                  "displayStyle": "Route66",
+                  "name": "Synthetic compiled closure interval"
+                }
+              ],
+              "connectorOfEdgeId": null
+            },
+            {
+              "id": 11,
+              "fromNodeId": 9,
+              "toNodeId": 12,
+              "distanceMeters": 164.23513350507073,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "54:9101",
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [
+                {
+                  "type": "Trail",
+                  "points": [
+                    {
+                      "latitude": 40.509023,
+                      "longitude": -88.984155
+                    },
+                    {
+                      "latitude": 40.5105,
+                      "longitude": -88.984155
+                    }
+                  ],
+                  "isRouted": true,
+                  "routeRoles": [
+                    "TrailBranches"
+                  ],
+                  "displayStyle": "Route66",
+                  "name": "Synthetic closure exit"
+                }
+              ],
+              "connectorOfEdgeId": null
+            }
+          ],
+          "segments": [
+            {
+              "type": "Trail",
+              "points": [
+                {
+                  "latitude": 40.5065,
+                  "longitude": -88.984202
+                },
+                {
+                  "latitude": 40.507656,
+                  "longitude": -88.984202
+                }
+              ],
+              "isRouted": true,
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "displayStyle": "Route66",
+              "name": "Synthetic closure approach"
+            },
+            {
+              "type": "Trail",
+              "points": [
+                {
+                  "latitude": 40.507656,
+                  "longitude": -88.984202
+                },
+                {
+                  "latitude": 40.509023,
+                  "longitude": -88.984155
+                }
+              ],
+              "isRouted": true,
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "displayStyle": "Route66",
+              "name": "Synthetic compiled closure interval"
+            },
+            {
+              "type": "Trail",
+              "points": [
+                {
+                  "latitude": 40.509023,
+                  "longitude": -88.984155
+                },
+                {
+                  "latitude": 40.5105,
+                  "longitude": -88.984155
+                }
+              ],
+              "isRouted": true,
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "displayStyle": "Route66",
+              "name": "Synthetic closure exit"
+            }
+          ],
+          "totalDistanceMeters": 444.8322477436372,
+          "ordinaryAccessDistanceMeters": 0,
+          "sharedRoadwayDistanceMeters": 0,
+          "totalCost": 444.8322477436372,
+          "kind": "Navigation",
+          "requestedDistanceMeters": null,
+          "traversalEdges": [
+            {
+              "key": "54:9100#405065000,-889842020;405076560,-889842020",
+              "distanceMeters": 128.54151274936424,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [],
+              "geometryMeters": 128.54151274936424
+            },
+            {
+              "key": "54:1305#405076560,-889842020;405090230,-889841550",
+              "distanceMeters": 152.05560148920222,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [],
+              "geometryMeters": 152.05560148920222
+            },
+            {
+              "key": "54:9101#405090230,-889841550;405105000,-889841550",
+              "distanceMeters": 164.23513350507073,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [],
+              "geometryMeters": 164.23513350507073
+            }
+          ],
+          "routeLayers": {
+            "trailBranches": true,
+            "parkConnectors": true,
+            "sharedRoadways": true,
+            "proposedTrails": false
+          }
+        }
+      },
+      "assertions": [
+        {
+          "path": [
+            "canNavigate"
+          ],
+          "equals": false
+        },
+        {
+          "path": [
+            "closures",
+            "0",
+            "id"
+          ],
+          "equals": "uptown-underpass-detour-2026-09-21"
+        }
+      ],
+      "responseSha256": "20d6bbf69e2f0fde0fa825b6d040bd1cd13f4227735c71c87bcfac0246cef6c2",
+      "canNavigate": false,
+      "blockingClosureIds": [
+        "uptown-underpass-detour-2026-09-21"
+      ],
+      "sourceFeatureIds": [
+        "54:1305",
+        "54:9100",
+        "54:9101"
+      ]
+    },
+    {
+      "id": "saved-current",
+      "category": "saved-route",
+      "request": {
+        "op": "inspect",
+        "now": 1822348800000,
+        "route": {
+          "edges": [
+            {
+              "id": 9,
+              "fromNodeId": 11,
+              "toNodeId": 0,
+              "distanceMeters": 0,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "54:9001",
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [],
+              "connectorOfEdgeId": null
+            },
+            {
+              "id": 0,
+              "fromNodeId": 0,
+              "toNodeId": 1,
+              "distanceMeters": 1691.0680434775065,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "54:9001",
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [
+                {
+                  "type": "Trail",
+                  "points": [
+                    {
+                      "latitude": 40.5,
+                      "longitude": -88.99
+                    },
+                    {
+                      "latitude": 40.5,
+                      "longitude": -88.97
+                    }
+                  ],
+                  "isRouted": true,
+                  "routeRoles": [
+                    "TrailBranches"
+                  ],
+                  "displayStyle": "Route66",
+                  "name": "Synthetic west trail"
+                }
+              ],
+              "connectorOfEdgeId": null
+            },
+            {
+              "id": 1,
+              "fromNodeId": 1,
+              "toNodeId": 2,
+              "distanceMeters": 2223.9016046710058,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "54:9002",
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [
+                {
+                  "type": "Trail",
+                  "points": [
+                    {
+                      "latitude": 40.5,
+                      "longitude": -88.97
+                    },
+                    {
+                      "latitude": 40.52,
+                      "longitude": -88.97
+                    }
+                  ],
+                  "isRouted": true,
+                  "routeRoles": [
+                    "TrailBranches"
+                  ],
+                  "displayStyle": "Route66",
+                  "name": "Synthetic north trail"
+                }
+              ],
+              "connectorOfEdgeId": null
+            },
+            {
+              "id": 2,
+              "fromNodeId": 2,
+              "toNodeId": 3,
+              "distanceMeters": 1690.563781665481,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "16:9003",
+              "routeRoles": [
+                "ParkConnectors"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [
+                {
+                  "type": "Trail",
+                  "points": [
+                    {
+                      "latitude": 40.52,
+                      "longitude": -88.97
+                    },
+                    {
+                      "latitude": 40.52,
+                      "longitude": -88.95
+                    }
+                  ],
+                  "isRouted": true,
+                  "routeRoles": [
+                    "ParkConnectors"
+                  ],
+                  "displayStyle": "ParkTrailConnectors",
+                  "name": "Synthetic east connector"
+                }
+              ],
+              "connectorOfEdgeId": null
+            },
+            {
+              "id": 12,
+              "fromNodeId": 3,
+              "toNodeId": 12,
+              "distanceMeters": 0,
+              "ordinaryAccessDistanceMeters": 0,
+              "accessRoadClass": null,
+              "sourceFeatureId": "16:9003",
+              "routeRoles": [
+                "ParkConnectors"
+              ],
+              "facilityType": "SeparatedTrail",
+              "comfortLevel": "AllAgesAndAbilities",
+              "status": "Existing",
+              "routeSegments": [],
+              "connectorOfEdgeId": null
+            }
+          ],
+          "segments": [
+            {
+              "type": "Trail",
+              "points": [
+                {
+                  "latitude": 40.5,
+                  "longitude": -88.99
+                },
+                {
+                  "latitude": 40.5,
+                  "longitude": -88.97
+                }
+              ],
+              "isRouted": true,
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "displayStyle": "Route66",
+              "name": "Synthetic west trail"
+            },
+            {
+              "type": "Trail",
+              "points": [
+                {
+                  "latitude": 40.5,
+                  "longitude": -88.97
+                },
+                {
+                  "latitude": 40.52,
+                  "longitude": -88.97
+                }
+              ],
+              "isRouted": true,
+              "routeRoles": [
+                "TrailBranches"
+              ],
+              "displayStyle": "Route66",
+              "name": "Synthetic north trail"
+            },
+            {
+              "type": "Trail",
+              "points": [
+                {
+                  "latitude": 40.52,
+                  "longitude": -88.97
+                },
+                {
+                  "latitude": 40.52,
+                  "longitude": -88.95
+                }
+              ],
+              "isRouted": true,
+              "routeRoles": [
+                "ParkConnectors"
+              ],
+              "displayStyle": "ParkTrailConnectors",
+              "name": "Synthetic east connector"
+            }
+          ],
+          "totalDistanceMeters": 5605.533429813993,
+          "ordinaryAccessDistanceMeters": 0,
+          "sharedRoadwayDistanceMeters": 0,
+          "totalCost": 5605.533429813993,
+          "kind": "Navigation",
+          "requestedDistanceMeters": null,
+          "traversalEdges": [
+            {
+              "key": "54:9001#unknown",
+              "distanceMeters": 0,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [],
+              "geometryMeters": 0
+            },
+            {
+              "key": "54:9001#405000000,-889700000;405000000,-889900000",
+              "distanceMeters": 1691.0680434775065,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [
+                "405000000,-889700000"
+              ],
+              "geometryMeters": 1691.0680434775065
+            },
+            {
+              "key": "54:9002#405000000,-889700000;405200000,-889700000",
+              "distanceMeters": 2223.9016046710058,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [],
+              "geometryMeters": 2223.9016046710058
+            },
+            {
+              "key": "16:9003#405200000,-889500000;405200000,-889700000",
+              "distanceMeters": 1690.563781665481,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [],
+              "geometryMeters": 1690.563781665481
+            },
+            {
+              "key": "16:9003#unknown",
+              "distanceMeters": 0,
+              "ordinaryAccessDistanceMeters": 0,
+              "junctionCoordinates": [],
+              "geometryMeters": 0
+            }
+          ],
+          "routeLayers": {
+            "trailBranches": true,
+            "parkConnectors": true,
+            "sharedRoadways": true,
+            "proposedTrails": false
+          }
+        }
+      },
+      "assertions": [
+        {
+          "path": [
+            "network",
+            "status"
+          ],
+          "equals": "current"
+        },
+        {
+          "path": [
+            "canNavigate"
+          ],
+          "equals": true
+        }
+      ],
+      "responseSha256": "e761bbce84c0de2a7323c6a2086fb06ff882f927a0bc322001df1970e0fe2eed",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "16:9003",
+        "54:9001",
+        "54:9002"
+      ]
+    },
+    {
+      "id": "mapped-service-access",
+      "category": "point",
+      "request": {
+        "op": "plan",
+        "start": {
+          "latitude": 40.4975,
+          "longitude": -89
+        },
+        "destination": {
+          "latitude": 40.5,
+          "longitude": -88.99
+        },
+        "proposed": false,
+        "now": 1789862400000
+      },
+      "assertions": [
+        {
+          "path": [
+            "canNavigate"
+          ],
+          "equals": true
+        }
+      ],
+      "responseSha256": "b55d9402b02fd0ff0baa30ad5ba56739e20d36ba1cf131dd859b7ca7beb1586f",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "54:9001"
+      ]
+    }
+  ],
+  "approved": false,
+  "blockers": [
+    "Owner release approval and existing composition/provider/device gates remain required"
+  ]
+}
