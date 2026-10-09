@@ -3,7 +3,7 @@ import { browserPortRange } from "./tools/lib/browser-port.mjs";
 import { checkDistExpectations } from "./tools/lib/dist-expectations.mjs";
 // Smoke tests against the BUILT artifact served with the production header set (not the Vite dev server).
 const port = browserPortRange(process.env.TRAIL_TEST_PORT ?? 4174, 1);
-// Validate the port independently of whether an artifact has been built yet; both preflights run before startup.
+// Port and local artifact mode checks run before startup; served identity is checked afterward.
 checkDistExpectations();
 export default defineConfig({
   globalSetup: "./tests/support/check-dist-server.ts",

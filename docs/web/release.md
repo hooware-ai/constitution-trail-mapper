@@ -82,11 +82,13 @@ Real data, physical iPhone/Android browsers, hosting or a public launch: #47 and
 
 ## Browser port preflight
 
-Built-artifact browser runs compare the server's `/provenance.json` bytes with the selected local artifact before browser tests. This also applies to an explicit `TRAIL_REUSE_SERVER=1`: a valid older artifact cannot stand in for the artifact being checked. Matching owned/reused servers still work; stale, missing, failed or redirected provenance refuses. The check honors `TRAIL_DIST_DIR`. It verifies server identity, while `audit:dist` and the smoke suites retain content/hash/public-approval checks.
-
 `TRAIL_TEST_PORT` must be a decimal integer from 1 through 65535 and an HTTP port browsers allow. Playwright configurations, Vite and the artifact preview and synthetic county servers reject invalid or Fetch-blocked ports before starting a server (for example 4190). The county configuration validates its complete range from base through base + 5, so a valid base beside a blocked port also refuses. Defaults and explicit safe selections are unchanged. Direct preview server `--port` values use the same validation.
 
 Automatic release allocation skips blocked candidates and probes every required port while holding the successful binds, then releases the probes before the owned servers start. The county allocation checks all six ports, including its last variant. There is still a bind race between probing and starting; strict-port/no-reuse servers fail visibly on a competing listener rather than switching to another checkout. This does not disable browser restrictions or certify a physical device. Port policy: [Fetch Standard, port blocking](https://fetch.spec.whatwg.org/#port-blocking), checked 2026-10-09.
+
+## Served artifact identity preflight
+
+Built-artifact browser runs compare the server's `/provenance.json` bytes with the selected local artifact before browser tests. This also applies to an explicit `TRAIL_REUSE_SERVER=1`: a valid older artifact cannot stand in for the artifact being checked. Matching owned/reused servers still work; stale, missing, failed or redirected provenance refuses. The check honors `TRAIL_DIST_DIR`. It verifies server identity, while `audit:dist` and the smoke suites retain content/hash/public-approval checks.
 
 ## Built-artifact mode preflight
 
