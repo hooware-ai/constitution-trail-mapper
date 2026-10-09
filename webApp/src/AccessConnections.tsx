@@ -1,9 +1,6 @@
 import type { AccessGap } from "./types";
 import { connectionsToCheck, gapDistance } from "./gapDistance";
-
-// Temporary presentation choice requested by the owner. Restore this flag to show the cards again.
-// Route validation and map uncertainty stay independent of this notification surface.
-export const CONNECTION_CHECK_NOTICES_ENABLED = false;
+import { CONNECTION_CHECK_NOTICES_ENABLED } from "./previewPresentation";
 
 export function AccessConnections({
   gaps: allGaps,

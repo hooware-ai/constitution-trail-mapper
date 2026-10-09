@@ -54,13 +54,13 @@ test("default build: no test banner, the estimated connection blocks Start", asy
   await expect(start(page)).toBeDisabled();
 });
 
-test("private test mode: the route warning says estimated, the connection is still mapped, and Start works", async ({
+test("private test mode: preview cards are hidden, foreground limits remain, and the same estimated connection can Start", async ({
   page,
 }) => {
   test.skip(!testMode, "runs in the private test-mode build only");
   await planFromLocation(page, 40.489);
   await expect(page.locator(".test-mode-banner")).toHaveCount(0);
-  // Nothing is relabelled as confirmed: the same measured, unverified connection is listed and drawn.
+  // Nothing is relabelled as confirmed: the same measured, unverified connection is drawn.
   await expect(
     page.locator('.map-wrap[data-estimated-connections="1"]'),
   ).toHaveCount(1);
@@ -74,10 +74,44 @@ test("private test mode: the route warning says estimated, the connection is sti
     page.getByText(
       /PRIVATE TEST MODE: this route includes 1 estimated connection/,
     ),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(
-    page.getByText(/Verify the actual connection before riding/).first(),
-  ).toBeVisible();
+    page.getByText(/Private test mode: this route can start only because/),
+  ).toHaveCount(0);
+  await expect(page.locator("#foreground-note")).toContainText(
+    "Keep this page open and visible while you ride",
+  );
+  await expect(page.locator("#foreground-note")).toContainText(
+    "There is no background tracking or offline navigation",
+  );
+  await expect(page.locator(".closure-status")).toBeVisible();
+  // Removing preview cards must not erase the router's uncertainty from exported data.
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share route" });
+  await dialog
+    .getByRole("checkbox", { name: /Include exact start and destination/ })
+    .check();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog
+      .getByRole("button", { name: "Download full route GeoJSON", exact: true })
+      .click(),
+  ]);
+  const { readFile } = await import("node:fs/promises");
+  const exported = JSON.parse(await readFile((await download.path())!, "utf8"));
+  expect(
+    exported.routeContext.warnings.some((warning: string) =>
+      warning.startsWith("PRIVATE TEST MODE:"),
+    ),
+  ).toBe(true);
+  const gaps = exported.features.filter(
+    (feature: any) => feature.properties.status === "unverified-connection",
+  );
+  expect(gaps).toHaveLength(1);
+  expect(gaps[0].properties.verified).toBe(false);
+  await page
+    .getByRole("button", { name: "Close Share route", exact: true })
+    .click();
   await expect(start(page)).toBeEnabled();
   await start(page).click();
   await expect(
@@ -90,7 +124,7 @@ test("private test mode: the route warning says estimated, the connection is sti
   );
 });
 
-test("private test mode: a recalculated route with the same estimated connection can also start, and is still labelled", async ({
+test("private test mode: recalculation keeps the same estimated connection and Start policy without preview cards", async ({
   page,
 }) => {
   test.skip(!testMode, "runs in the private test-mode build only");
@@ -105,6 +139,10 @@ test("private test mode: a recalculated route with the same estimated connection
     page.getByText(
       /PRIVATE TEST MODE: this route includes 1 estimated connection/,
     ),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(/Private test mode: this route can start only because/),
+  ).toHaveCount(0);
+  await expect(page.locator("#foreground-note")).toBeVisible();
   await expect(start(page)).toBeEnabled();
 });

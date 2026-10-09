@@ -89,6 +89,19 @@ jobs:
       - name: Offline fresh-road source quality controls (no source downloads)
         run: python3 -m unittest discover -s tools -p test_web_access_road_review.py
 
+      - name: Private-mode preview controls (synthetic data only)
+        working-directory: webApp
+        run: |
+          npx playwright test tests/e2e/estimated-test-mode.spec.ts --grep 'private test mode:' --retries=0 --reporter=line,json
+          node -e 'const r = JSON.parse(require("node:fs").readFileSync("dist-report/private-preview-controls.json")); if (r.stats.expected !== 4 || r.stats.skipped !== 0 || r.stats.unexpected !== 0 || r.stats.flaky !== 0) throw new Error("Expected four passed private-preview controls without skips or retries");'
+          npm run audit:dist
+        env:
+          CI: "true"
+          TRAIL_DATASET: fixture
+          TRAIL_CHANNEL: review
+          TRAIL_ASSUME_ESTIMATED_CONNECTIONS: "1"
+          PLAYWRIGHT_JSON_OUTPUT_FILE: dist-report/private-preview-controls.json
+
       # Evidence only, from the one core build above (no second build): an unchanged copy of the manifest and per-output
       # hashes and line-ending counts, kept in the existing dist-report artifact before the negative check deletes it.
       - name: Record core hash evidence (no second build)
