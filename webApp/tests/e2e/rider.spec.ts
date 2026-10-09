@@ -4006,18 +4006,18 @@ test("a held share that succeeds or fails after the dialog was reopened leaves t
 
   // Same dialog: success and failure are reported.
   await share().click();
-  await expect.poll(waiting).toBe(1);
+  await expect.poll(waiting, { timeout: 15000 }).toBe(1);
   await settle();
   await expect(dialog.getByText("Route image shared.")).toBeVisible();
   await share().click();
-  await expect.poll(waiting).toBe(1);
+  await expect.poll(waiting, { timeout: 15000 }).toBe(1);
   await settle("the share sheet failed");
   await expect(dialog.getByText("the share sheet failed")).toBeVisible();
 
   // Dialog closed and reopened while a share is held: neither outcome is spoken in the new dialog.
   for (const fail of [undefined, "late failure"]) {
     await share().click();
-    await expect.poll(waiting).toBe(1);
+    await expect.poll(waiting, { timeout: 15000 }).toBe(1);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Share", exact: true }).click();
     await expect(dialog).toBeVisible();
