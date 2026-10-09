@@ -1,0 +1,104 @@
+name: Web refresh regressions
+
+# Offline self-authored fixtures only. No schedule, source execution, deployment or credentials.
+on:
+  pull_request:
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "shared/**"
+      - "data/**"
+      - "tools/**"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "kotlin-js-store/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-refresh-regressions.yml"
+  push:
+    branches: [main]
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "shared/**"
+      - "data/**"
+      - "tools/**"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "kotlin-js-store/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-refresh-regressions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-refresh-regressions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime-controls:
+    name: Runtime controls (${{ matrix.browser }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      TRAIL_RUNTIME_EXPECT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: webApp/package-lock.json
+      - name: Reproduce genuine current-producer fixture and refuse changed producer pins
+        run: python3 webApp/tests/support/verify-detector-admission-fixture.py
+      - name: Point Gradle at the preinstalled Android SDK
+        run: echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+      - name: Locked install and selected browser dependencies
+        working-directory: webApp
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Build and verify this selected source's Kotlin core
+        working-directory: webApp
+        run: npm run build:core
+      - name: Genuine transition, admission, immutable artifact and offline binding controls
+        working-directory: webApp
+        run: node --test tests/unit/refresh-chain.test.mjs
+      - name: All sixteen existing runtime controls on exact selected source/core
+        working-directory: webApp
+        timeout-minutes: 15
+        run: node tools/run-runtime-controls.mjs runtime-${{ matrix.browser }}
+        env:
+          CI: "true"
+      - name: Retain source/core identity and complete runtime reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-controls-${{ matrix.browser }}
+          path: |
+            webApp/dist-report/runtime-controls/
+            webApp/test-results/
+          retention-days: 14
+          if-no-files-found: warn
