@@ -31,6 +31,8 @@ const WILLOW_END = Date.parse("2026-10-19T22:00:00Z");
 const CAMEL_START = Date.parse("2026-10-05T13:00:00Z");
 const CAMEL_END = Date.parse("2026-10-06T22:00:00Z");
 const RAAB_START = Date.parse("2026-10-03T11:00:00Z");
+const VIRGINIA_ROAD_START = Date.parse("2026-10-07T12:00:00Z");
+const VIRGINIA_ROAD_REVIEW = Date.parse("2026-10-23T22:00:00Z");
 const HAMILTON_END = Date.parse("2026-10-31T23:00:00Z");
 const WILLOW_ID = "willow-trail-crossing-2026-10-05";
 const CAMEL_ID = "camelback-virginia-trail-crossing-2026-10-05";
@@ -831,6 +833,36 @@ test(
 );
 
 // ---- The other notices -------------------------------------------------------------------------------------------
+
+test(
+  "Virginia water-main road restriction has its own dated guide notice and adds no trail barrier",
+  { skip },
+  async () => {
+    const before = await engine(willow(), VIRGINIA_ROAD_START - 1);
+    const at = await engine(willow(), VIRGINIA_ROAD_START);
+    const afterEstimate = await engine(willow(), VIRGINIA_ROAD_REVIEW);
+    const id = "virginia-water-main-road-2026-10-07";
+    assert.match(statusAt(before.init, id), /^Scheduled road restriction/);
+    assert.match(statusAt(at.init, id), /^Road restricted since October 7/);
+    assert.equal(statusAt(afterEstimate.init, id), "Recheck needed");
+    const notice = at.init.updates.find((u: any) => u.id === id);
+    assert.match(notice.details, /local traffic only/);
+    assert.match(
+      notice.details,
+      /does not establish that the trail is closed or reopened/,
+    );
+    assert.equal(
+      notice.source.url,
+      "https://www.normalil.gov/m/newsflash/Home/Detail/3360",
+    );
+    assert.equal(
+      statusAt(at.init, "camelback-trail-closure"),
+      "Recheck needed",
+    );
+    assert.deepEqual(at.init.closures, before.init.closures);
+    assert.ok(at.init.closures.every((c: any) => c.id !== id));
+  },
+);
 
 test(
   "Raab paving and the older Collegiate estimate are guide notices only: scheduled, then under way, then recheck; never a barrier",

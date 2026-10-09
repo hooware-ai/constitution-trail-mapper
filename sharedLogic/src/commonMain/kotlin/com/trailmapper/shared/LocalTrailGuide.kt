@@ -29,7 +29,7 @@ data class LocalTrailGuideEntry(
 
 object LocalTrailGuide {
     const val reviewedOn = "September 7, 2026"
-    const val updatedOn = "October 2, 2026"
+    const val updatedOn = "October 9, 2026"
     const val freshnessMessage = "Reviewed $reviewedOn, with selected entries updated $updatedOn. " +
         "This guide is a saved update, not live conditions. " +
         "Check official notices and signs before riding. Estimated completion dates do not confirm reopening."
@@ -79,6 +79,22 @@ object LocalTrailGuide {
             effectiveAtEpochMillis = epoch("2026-10-05T13:00:00Z"),
             effectiveStatus = "Closed at Virginia Avenue since October 5 · estimated through October 6; reopening not confirmed",
             reviewAfterEpochMillis = epoch("2026-10-06T22:00:00Z"),
+        ),
+        LocalTrailGuideEntry(
+            "virginia-water-main-road-2026-10-07", LocalTrailGuideCategory.Conditions,
+            "Virginia Avenue road access: Linden to Broadway",
+            "Posted October 5: Virginia Avenue between Linden Street and Broadway closes for water main installation " +
+                "from 7 a.m. CDT on Wednesday, October 7. Virginia Avenue access is maintained for local traffic only; " +
+                "Linden Street has one lane open in each direction. Completion is estimated by 5 p.m. CDT on Friday, " +
+                "October 23, weather permitting; that estimate does not confirm reopening. This is a road restriction, " +
+                "separate from the Camelback Bridge trail-crossing notice. It does not establish that the trail is " +
+                "closed or reopened, and Trail Mapper does not mark a trail barrier from it. Check posted signs and " +
+                "the Town's current notice before using the road connection.",
+            "Scheduled road restriction · begins October 7, 7 a.m.",
+            TrailResourceLink("Normal Virginia Avenue road notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3360"),
+            effectiveAtEpochMillis = epoch("2026-10-07T12:00:00Z"),
+            effectiveStatus = "Road restricted since October 7 · local traffic only; October 23 end estimated",
+            reviewAfterEpochMillis = epoch("2026-10-23T22:00:00Z"),
         ),
         LocalTrailGuideEntry(
             "hershey-work", LocalTrailGuideCategory.Conditions, "Hershey: Lamon Drive to GE Road",

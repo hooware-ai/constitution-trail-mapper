@@ -148,6 +148,25 @@ test("the county build loads its packaged data and says what it is, with no fixt
   await page.getByRole("button", { name: "Close Choose start" }).click();
   await page.getByRole("button", { name: "Trail Mapper home" }).click();
   await page.getByRole("button", { name: "Updates", exact: true }).click();
+  const virginiaRoadNotice = page
+    .locator(".updates-list article")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Virginia Avenue road access: Linden to Broadway",
+      }),
+    });
+  await expect(virginiaRoadNotice).toContainText("local traffic only");
+  await expect(virginiaRoadNotice).toContainText(
+    "does not establish that the trail is closed or reopened",
+  );
+  await expect(
+    virginiaRoadNotice.getByRole("link", {
+      name: "Normal Virginia Avenue road notice",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "https://www.normalil.gov/m/newsflash/Home/Detail/3360",
+  );
   const data = page.getByRole("region", { name: "Trail data" });
   await expect(data).toContainText("CC BY 4.0");
   await expect(data).toContainText("Changes made:");

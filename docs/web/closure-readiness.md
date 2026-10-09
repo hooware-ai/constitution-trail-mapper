@@ -115,6 +115,13 @@ Separately recorded native limitation (not observed on a device, not part of web
 - The Data section's service-road sentence now names every position that triggers tile requests, and its count says "existing trail features, plus N proposed segments" instead of printing the combined total as existing.
 - Tests: fixture, no-access county and access county Help, with stubbed OpenStreetMap requests and the real request URLs asserted.
 
+## October 9 owner-private Updates refresh: Virginia Avenue road access
+
+- [Normal notice 3360](https://www.normalil.gov/m/newsflash/Home/Detail/3360), posted October 5, schedules the Virginia Avenue **road** closure between Linden Street and Broadway from October 7 at 7 a.m. CDT through an estimated October 23 at 5 p.m. CDT. The Town says local traffic access remains on Virginia and Linden keeps one lane open in each direction. The estimate is not reopening confirmation.
+- The guide now gives this road restriction its own dated Updates entry and official link. It does not add a trail barrier or change Start, saved-route inspection or closure geometry. The separate [Camelback notice 3353](https://www.normalil.gov/m/newsflash/Home/Detail/3353) explicitly closed the trail at its crossing; its October 6 estimate alone does not establish reopening. No later official reopening confirmation was found in this October 9 notice check.
+- [Normal notice 3362](https://www.normalil.gov/m/newsflash/Home/Detail/3362) described an October 7 East Beaufort event road closure until approximately 10 p.m. It gives no trail closure and is not inserted as a continuing condition on October 9. The previously described Uptown trail detour uses Beaufort between Broadway and Uptown Circle; no detour change is inferred from the event notice.
+- The shared guide catalog is used by native clients too; the release below is limited to the existing owner-private web beta. No dataset, provider, public-access or rights flag changes accompany the notice.
+
 ## Open items (nothing here approves publication)
 
 1. **Willow bounds are an approximate projection** of the official line, not barricade observations; the section is labeled approximate everywhere it is shown. Exact barricade limits from the Town would replace them.
