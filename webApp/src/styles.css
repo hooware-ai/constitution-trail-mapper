@@ -1764,6 +1764,9 @@ dialog::backdrop {
   min-height: 0;
   overflow-y: auto;
 }
+.navigation-beta-note {
+  margin: 6px 0 0;
+}
 .ride-safety {
   margin: 0 0 8px;
   font-weight: 750;

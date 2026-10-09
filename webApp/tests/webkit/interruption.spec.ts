@@ -243,3 +243,28 @@ test("[sim-device] navigation never claims background tracking, alerts or record
   );
   await expect(body).not.toContainText(/we('ll| will) (alert|notify|record)/i);
 });
+
+test("[sim-device] navigation note is readable only while turn-by-turn guidance is active", async ({
+  page,
+}) => {
+  const note = page
+    .getByRole("note")
+    .filter({ hasText: "Navigation is in beta and may experience issues." });
+  await ride(page);
+  await expect(note).toHaveCount(0);
+  await fix(page, 40.51, -88.95);
+  await expect(note).toBeVisible();
+  await expect(note).toBeInViewport();
+  await setVisible(page, false);
+  await expect(heading(page, "Navigation paused")).toBeVisible();
+  await expect(note).toHaveCount(0);
+  await setVisible(page, true);
+  await expect(note).toHaveCount(0);
+  await fix(page, 40.51, -88.95);
+  await expect(note).toBeVisible();
+  await page
+    .getByRole("button", { name: "Stop navigation", exact: true })
+    .click();
+  await expect(heading(page, "Route preview")).toBeVisible();
+  await expect(note).toHaveCount(0);
+});

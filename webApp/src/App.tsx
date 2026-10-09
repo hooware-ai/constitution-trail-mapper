@@ -2770,6 +2770,11 @@ export function App({ refresh }: AppProps = {}) {
                       Directions
                     </button>
                   </div>
+                  {nav.phase === "navigating" && (
+                    <p className="caption navigation-beta-note" role="note">
+                      Navigation is in beta and may experience issues.
+                    </p>
+                  )}
                 </div>
                 <div className="ride-actions">
                   <details className="ride-details">
