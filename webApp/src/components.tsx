@@ -25,12 +25,15 @@ export function Modal({
   children,
   onClose,
   notice,
+  noticeInChildren = false,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   /** Feedback for the action just taken; the page behind a modal dialog is inert, so it must live here. */
   notice?: DialogNotice | null;
+  /** Long forms may place their unique live regions beside the relevant action/recovery control. */
+  noticeInChildren?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     close = useRef(onClose),
@@ -88,19 +91,23 @@ export function Modal({
           ×
         </button>
       </div>
-      {/* Both regions always exist so a message added later is announced. */}
-      <div
-        role="alert"
-        className={notice?.kind === "error" ? "warning" : undefined}
-      >
-        {notice?.kind === "error" ? notice.message : null}
-      </div>
-      <div
-        role="status"
-        className={notice?.kind === "success" ? "success-note" : undefined}
-      >
-        {notice?.kind === "success" ? notice.message : null}
-      </div>
+      {/* Both regions always exist so a message added later is announced, unless the form owns their placement. */}
+      {!noticeInChildren && (
+        <>
+          <div
+            role="alert"
+            className={notice?.kind === "error" ? "warning" : undefined}
+          >
+            {notice?.kind === "error" ? notice.message : null}
+          </div>
+          <div
+            role="status"
+            className={notice?.kind === "success" ? "success-note" : undefined}
+          >
+            {notice?.kind === "success" ? notice.message : null}
+          </div>
+        </>
+      )}
       {children}
     </dialog>
   );
