@@ -86,6 +86,10 @@ Real data, physical iPhone/Android browsers, hosting or a public launch: #47 and
 
 Automatic release allocation skips blocked candidates and probes every required port while holding the successful binds, then releases the probes before the owned servers start. The county allocation checks all six ports, including its last variant. There is still a bind race between probing and starting; strict-port/no-reuse servers fail visibly on a competing listener rather than switching to another checkout. This does not disable browser restrictions or certify a physical device. Port policy: [Fetch Standard, port blocking](https://fetch.spec.whatwg.org/#port-blocking), checked 2026-10-09.
 
+## Served artifact identity preflight
+
+Built-artifact browser runs compare the server's `/provenance.json` bytes with the selected local artifact before browser tests. This also applies to an explicit `TRAIL_REUSE_SERVER=1`: a valid older artifact cannot stand in for the artifact being checked. Matching owned/reused servers still work; stale, missing, failed or redirected provenance refuses. The check honors `TRAIL_DIST_DIR`. It verifies server identity, while `audit:dist` and the smoke suites retain content/hash/public-approval checks.
+
 ## Built-artifact mode preflight
 
 The built-artifact Playwright configuration also checks `dist/provenance.json` (or the same `TRAIL_DIST_DIR` override selected by the artifact server) before starting its server or browser. Test expectations must match its dataset kind and estimated-connection flag. The default is fixture/strict; county requires `TRAIL_EXPECT_DATASET=county`, and an owner-private artifact additionally requires `TRAIL_ASSUME_ESTIMATED_CONNECTIONS=1`. A mismatch, unknown flag, or missing/malformed mode evidence fails immediately with the artifact's expected flags. Rebuild if a different artifact mode was intended. This checks test selection only; `audit:dist` still verifies artifact hashes and public-release eligibility, and matching private-mode tests do not authorize a public release.
