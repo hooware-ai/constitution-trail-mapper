@@ -881,7 +881,7 @@ test(
       /normalil\.gov\/m\/newsflash\/Home\/Detail\/3357$/,
     );
     const on = await engine(willow(), RAAB_START);
-    assert.match(statusAt(on.init, "trail-paving-raab"), /^Paving reported/);
+    assert.match(statusAt(on.init, "trail-paving-raab"), /^Paving scheduled from October 3/);
     const old = on.init.updates.find(
       (u: any) => u.id === "collegiate-repaving",
     );

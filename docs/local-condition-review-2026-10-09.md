@@ -29,3 +29,7 @@ The October Haunted Trail event notice encountered during searching describes a 
 ## Verification
 
 Regression coverage checks overdue warning persistence, the exact next-review instant for refreshed unresolved notices, and saved Uptown advisory wording. Existing shared-core advisory, closure, gate, timed-closure and real-data tests are required before integration. Test outcome and exact commit are recorded in the draft PR; no native UI feature or routing geometry changed.
+
+## Independent review corrections
+
+The October 9 review follow-up restores the source's conditional Phoenix detour sequencing in both guide and route advisory: after the initial phase reopens. Current initial-phase status and endpoints remain unverified. Pre-start Hershey status stays scheduled; after the scheduled start it states only that the start instant was reached. Collegiate remains expected work during September 28–October 2, not an already-passed estimate. Raab describes scheduled paving, not observed progress. The September 28 indexed Hershey subsection names north of Lamon through Jumer; it is a narrower named section and cannot establish progress throughout the guide's Lamon-to-GE corridor. Full newer notice retrieval remains blocked. Added controls exercise pre-start and in-window statuses plus conditional sequencing; no closure geometry or gates changed.

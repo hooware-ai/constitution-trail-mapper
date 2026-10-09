@@ -21,6 +21,25 @@ class LocalTrailGuideReviewTest {
     }
 
     @Test
+    fun scheduledWorkStatusesDoNotClaimProgressOrAnElapsedEstimateEarly() {
+        val entries = LocalTrailGuide.entries().associateBy { it.id }
+        val hershey = entries.getValue("hershey-work")
+        val hersheyStart = epoch("2026-09-08T05:00:00Z")
+        assertTrue(hershey.statusAt(hersheyStart - 1).startsWith("Scheduled ·"))
+        assertEquals("Scheduled start reached · current completion unverified", hershey.statusAt(hersheyStart))
+        val collegiate = entries.getValue("collegiate-repaving")
+        val collegiateStart = epoch("2026-09-28T05:00:00Z")
+        assertTrue(collegiate.statusAt(collegiateStart - 1).startsWith("Scheduled"))
+        for (at in listOf(collegiateStart, epoch("2026-10-02T22:00:00Z"))) {
+            assertEquals("Work expected · targeted closures through October 2 estimate", collegiate.statusAt(at))
+        }
+        val raab = entries.getValue("trail-paving-raab")
+        val raabStart = epoch("2026-10-03T11:00:00Z")
+        assertTrue(raab.statusAt(raabStart - 1).startsWith("Scheduled"))
+        assertEquals("Paving scheduled from October 3 · current trail access unverified", raab.statusAt(raabStart))
+    }
+
+    @Test
     fun refreshedUnresolvedNoticesHaveExplicitNextReviewBoundary() {
         for (id in listOf("storm-cleanup", "uptown-detour")) {
             val entry = LocalTrailGuide.entries().single { it.id == id }
@@ -32,6 +51,7 @@ class LocalTrailGuideReviewTest {
         val uptown = LocalTrailGuide.entries().single { it.id == "uptown-detour" }
         assertTrue(uptown.details.contains("current status, exact endpoints and reopening"))
         assertTrue(uptown.details.contains("That phase is not mapped"))
+        assertTrue(uptown.details.contains("Per the notice, after that initial phase reopens, a signed construction detour"))
         assertTrue(uptown.details.contains("mapped Phoenix-to-Uptown section"))
     }
 }

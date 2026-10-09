@@ -289,7 +289,7 @@ class WebRoutingBridgeTest {
         assertTrue(status("camelback-trail-closure", 1_791_205_200_000L).startsWith("Closed at Virginia Avenue since October 5"))
         assertEquals("Recheck needed", status("camelback-trail-closure", 1_791_324_000_001L))
         assertTrue(status("trail-paving-raab", 1_791_025_200_000L - 1).startsWith("Scheduled"))
-        assertTrue(status("trail-paving-raab", 1_791_025_200_000L).startsWith("Paving reported"))
+        assertTrue(status("trail-paving-raab", 1_791_025_200_000L).startsWith("Paving scheduled from October 3"))
         assertEquals("Recheck needed", status("hamilton-rhodes", 1_793_487_600_001L))
     }
 

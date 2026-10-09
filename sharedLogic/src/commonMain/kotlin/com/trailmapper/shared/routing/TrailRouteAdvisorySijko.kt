@@ -508,7 +508,8 @@ object TrailRouteAdvisorySijko {
             id = UptownAdvisoryId,
             title = "Uptown trail detour advisory",
             message = "This route follows Constitution Trail through the Uptown Underpass construction zone. " +
-                "The Town of Normal's September 14, 2026 notice detours the trail from September 21: west on " +
+                "The Town of Normal's September 14, 2026 notice describes an initial closure from September 21. " +
+                "Per the notice, after that initial phase reopens, the signed construction detour goes west on " +
                 "Phoenix Avenue to Broadway Avenue, north on Broadway to the north sidewalk of Beaufort Street, " +
                 "then east on Beaufort to Uptown Circle and the trailhead north of it. On Uptown sidewalks, " +
                 "dismount and walk your bike; in the street, follow traffic up Beaufort and around Uptown Circle. " +

@@ -102,11 +102,12 @@ object LocalTrailGuide {
             "hershey-work", LocalTrailGuideCategory.Conditions, "Hershey: Lamon Drive to GE Road",
             "The September 4 city notice scheduled road, curb, drainage and sidewalk work from September 8, 2026, " +
                 "with the street open to traffic. The indexed September 28 city update reports work had begun north " +
-                "of Lamon through Jumer; its full page could not be retrieved on October 9. Current completion and " +
+                "of Lamon through Jumer, a narrower named road section; it does not verify progress along the full " +
+                "Lamon-to-GE corridor. Its full page could not be retrieved on October 9. Current completion and " +
                 "travel impacts remain unverified. Check the current City notice and signs.",
-            "Work reported · current completion unverified",
+            "Scheduled · September 8, 2026",
             TrailResourceLink("City September 28 resurfacing update", "https://www.bloomingtonil.gov/Home/Components/News/News/10979/1394"),
-            effectiveAtEpochMillis = epoch("2026-09-08T05:00:00Z"), effectiveStatus = "Work reported · current completion unverified",
+            effectiveAtEpochMillis = epoch("2026-09-08T05:00:00Z"), effectiveStatus = "Scheduled · September 8, 2026",
             reviewAfterEpochMillis = epoch("2026-10-01T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
@@ -123,7 +124,8 @@ object LocalTrailGuide {
             "uptown-detour", LocalTrailGuideCategory.Conditions, "Uptown Normal: Underpass construction detour",
             "Beginning September 21, 2026, the Town announced a closure north of Vernon Avenue while a detour " +
                 "sidewalk is built. Reviewed October 9: the initial closure's current status, exact endpoints and reopening " +
-                "remain unverified. That phase is not mapped in Trail Mapper. The separate construction detour leaves the trail at " +
+                "remain unverified. That phase is not mapped in Trail Mapper. Per the notice, after that initial phase " +
+                "reopens, a signed construction detour leaves the trail at " +
                 "Phoenix Avenue: west on Phoenix to Broadway, north on Broadway to the north sidewalk of Beaufort Street, " +
                 "and east on Beaufort to Uptown Circle, rejoining at the trailhead north of Uptown Circle. On Uptown " +
                 "sidewalks, dismount and walk your bike; in the street, follow traffic up Beaufort and around Uptown Circle. " +
@@ -145,12 +147,12 @@ object LocalTrailGuide {
             "Scheduled · from September 28, 2026",
             TrailResourceLink("Normal repaving notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3345"),
             effectiveAtEpochMillis = epoch("2026-09-28T05:00:00Z"),
-            effectiveStatus = "October 2 estimate passed · completion unverified",
+            effectiveStatus = "Work expected · targeted closures through October 2 estimate",
             reviewAfterEpochMillis = epoch("2026-10-03T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
             "trail-paving-raab", LocalTrailGuideCategory.Conditions, "Constitution Trail paving: Raab Road",
-            "Posted October 2: paving work on Constitution Trail begins Saturday, October 3 and needs temporary trail " +
+            "Posted October 2: paving work on Constitution Trail was scheduled from Saturday, October 3, needing temporary trail " +
                 "and lane closures on Raab Road. The eastbound lane near the ISU Horticulture Center and Cornbelters " +
                 "Stadium closes from 6 a.m. October 3; the westbound lane from near Cornbelters Stadium to Millennium " +
                 "Boulevard closes 6 a.m.–4 p.m. on Monday, October 5 and Tuesday, October 6. Those are road-lane " +
@@ -160,7 +162,7 @@ object LocalTrailGuide {
             "Scheduled · paving begins October 3, 2026",
             TrailResourceLink("Normal paving notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3357"),
             effectiveAtEpochMillis = epoch("2026-10-03T11:00:00Z"),
-            effectiveStatus = "Paving reported · current trail access unverified",
+            effectiveStatus = "Paving scheduled from October 3 · current trail access unverified",
             reviewAfterEpochMillis = epoch("2026-10-07T05:00:00Z"),
         ),
         LocalTrailGuideEntry(

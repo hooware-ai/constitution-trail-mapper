@@ -778,7 +778,7 @@ test("Trail updates lists the October notices with official links that open safe
     now >= at("2026-10-07T05:00:00Z")
       ? "Recheck needed"
       : now >= at("2026-10-03T11:00:00Z")
-        ? "Paving reported · current trail access unverified"
+        ? "Paving scheduled from October 3 · current trail access unverified"
         : "Scheduled · paving begins October 3, 2026",
   );
   // Raab says what it does not know, and marks no trail barrier.
