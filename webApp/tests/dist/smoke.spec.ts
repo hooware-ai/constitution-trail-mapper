@@ -6,6 +6,10 @@ import { createHash } from "node:crypto";
 
 // A county artifact has different places and provenance; its own checks are in county-smoke.spec.ts.
 const county = process.env.TRAIL_EXPECT_DATASET === "county";
+// County graph initialization includes the real access base and can exceed the
+// fixture's five-second budget. Match the existing county smoke readiness limit;
+// still wait on actual planner/error UI and retain every header/asset assertion.
+const bootTimeout = county ? 30_000 : 5_000;
 async function collect(page: Page) {
   const responses: Response[] = [];
   const consoleErrors: string[] = [];
@@ -49,9 +53,9 @@ test("a fresh load serves the app with the production headers and no failing or 
 }) => {
   const seen = await collect(page);
   const document = await page.goto("/");
-  await expect(
-    page.getByRole("button", { name: /Go somewhere/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Go somewhere/ })).toBeVisible({
+    timeout: bootTimeout,
+  });
   if (county) {
     await expect(page.locator(".review-banner")).toHaveCount(0);
   } else {
@@ -88,9 +92,9 @@ test("bundled assets are hashed, immutable and served with correct module types"
 }) => {
   const seen = await collect(page);
   await page.goto("/");
-  await expect(
-    page.getByRole("button", { name: /Go somewhere/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Go somewhere/ })).toBeVisible({
+    timeout: bootTimeout,
+  });
   const assets = seen.responses.filter((r) =>
     new URL(r.url()).pathname.startsWith("/assets/"),
   );
@@ -196,12 +200,12 @@ test("a blocked worker asset gives a recoverable error and Retry recovers", asyn
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Trails could not load" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: bootTimeout });
   block = false;
   await page.getByRole("button", { name: "Retry loading" }).click();
-  await expect(
-    page.getByRole("button", { name: /Go somewhere/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Go somewhere/ })).toBeVisible({
+    timeout: bootTimeout,
+  });
 });
 test("an unknown asset is a real 404 while an unknown page falls back to the app shell", async ({
   page,
@@ -216,9 +220,9 @@ test("an unknown asset is a real 404 while an unknown page falls back to the app
   expect(shell.status()).toBe(200);
   expect(await shell.text()).toContain('<div id="root">');
   await page.goto("/some/deep/link");
-  await expect(
-    page.getByRole("button", { name: /Go somewhere/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Go somewhere/ })).toBeVisible({
+    timeout: bootTimeout,
+  });
 });
 test("provenance identifies this artifact and states it is fixture-only and not publishable", async ({
   request,
