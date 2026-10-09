@@ -8,7 +8,7 @@ from release. This is admission preparation, not a production release mechanism.
 
 ## Detection interface
 
-Based on PR109 head `62832b321a81e926e76fd1419c2b2b4f91aa3a07` and its
+Based on PR109 head `1c56268ec60a9f58498f4c01aa9574b844c4dffc` and its
 `docs/web/source-candidate-contract.md`. Keep the entire detection envelope under
 `candidate.detection.observation`. Put the sorted exact union of its added, removed
 and changed source record IDs under `candidate.detection.sourceRecordIds`. Routing
@@ -17,6 +17,25 @@ IDs are separate reviewer-owned mapping decisions. Policy `detectionSources` pin
 identity and parsed record hashes must reproduce. Removed notices cannot authorize
 reopening. Raw/minimized authoritative evidence must be independently retained;
 the detector's hash-only index does not establish authority or semantic truth.
+
+For the additive provenance contract, preserve `provenanceSha256`,
+`identity.componentHashes` and `identity.sourceTimes` without normalizing or
+replacing them. Admission verifies the digest of the complete immutable candidate
+excluding `provenanceSha256`, as well as its identity and record hashes. Copy the
+current detector result's `status`, `staleEvidence`, `parentCandidateId` and
+`runDiff` under `candidate.detection.transition`. This transition is separately
+bound by the reviewer's complete candidate digest. Only a nonstale `candidate`
+result can supply it. `sourceRecordIds` must cover the exact current `runDiff`,
+not the stored candidate's first-observation `diff`. In repeated-content runs,
+the immutable first retrieval/diff stays intact and is never presented as today's
+change; current removals still cannot authorize reopening.
+
+Pin `requireProvenance:true` on reviewer-owned `policy.detectionSources` entries
+using the latest detector format; this rejects stripped provenance/transition
+fields. Legacy schema-1 inputs remain supported only when that policy does not
+require the additive format. A candidate carrying provenance always requires a
+current transition, regardless of the policy's legacy setting.
+
 
 Synthetic tests may use `policy.syntheticFixture:true` without detection. This is
 never production approval. No production source policy or review owner is invented.

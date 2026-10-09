@@ -487,3 +487,117 @@ test("offline CLI produces a reproducible pinned artifact and preserves input pa
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+function additiveDetection() {
+  const records = { "notice-1": sha256(Buffer.from("retained-record")) };
+  const identity = {
+    sourceId: "official-notices",
+    sourceUrl: "https://example.test/notice",
+    registrySha256: sha256(Buffer.from("registry")),
+    contentSha256: sha256(Buffer.from("aggregate")),
+    parsedSha256: canonicalSha256(records),
+    parserVersion: "adapter/2",
+    sourceSchemaVersion: "notice/1",
+    componentHashes: { notice: sha256(Buffer.from("raw notice")) },
+    sourceTimes: { notice: { publishedAtUtc: "2026-01-01T00:00:00Z" } },
+  };
+  const observation = {
+    schemaVersion: 1,
+    candidateId: canonicalSha256(identity),
+    identity,
+    sourceId: identity.sourceId,
+    retrievedAtUtc: "2026-01-02T00:00:00Z",
+    sourcePublishedAtUtc: "2026-01-01T00:00:00Z",
+    reviewedOn: "2026-01-01",
+    manifestPath: "notice.manifest.json",
+    parentCandidateId: null,
+    records,
+    diff: { added: ["notice-1"], removed: [], changed: [] },
+    requiresReview: true,
+  };
+  observation.provenanceSha256 = canonicalSha256(observation);
+  const transition = {
+    status: "candidate",
+    staleEvidence: false,
+    parentCandidateId: sha256(Buffer.from("intervening observation")),
+    runDiff: { added: [], removed: [], changed: ["notice-1"] },
+  };
+  const source = {
+    sourceId: identity.sourceId,
+    url: identity.sourceUrl,
+    registrySha256: identity.registrySha256,
+    parserVersion: identity.parserVersion,
+    sourceSchemaVersion: identity.sourceSchemaVersion,
+    requireProvenance: true,
+  };
+  return {
+    detection: { observation, transition, sourceRecordIds: ["notice-1"] },
+    source,
+  };
+}
+test("latest #105 additive provenance and component/source times bind the current transition separately", async () => {
+  const args = await fixture();
+  delete args.policy.syntheticFixture;
+  const { detection, source } = additiveDetection();
+  args.policy.detectionSources = [source];
+  update(args, (c) => {
+    c.detection = detection;
+  });
+  const report = reviewRefresh(args);
+  assert.deepEqual(report.reviews[0].candidate.detection, detection);
+  update(args, (c) => {
+    delete c.detection.transition;
+  });
+  assert.throws(() => reviewRefresh(args), /current detection runDiff/);
+});
+test("repeated content uses current runDiff, and does not replay the immutable first diff", async () => {
+  const args = await fixture();
+  const { detection, source } = additiveDetection();
+  args.policy.detectionSources = [source];
+  detection.transition.runDiff = {
+    added: [],
+    removed: ["notice-2"],
+    changed: [],
+  };
+  detection.sourceRecordIds = ["notice-2"];
+  update(args, (c) => {
+    c.kind = "information";
+    c.routingEffect = "none";
+    c.detection = detection;
+  });
+  assert.equal(reviewRefresh(args).reviews[0].decision.decision, "accept");
+  update(args, (c) => {
+    c.detection.sourceRecordIds = ["notice-1"];
+  });
+  assert.throws(() => reviewRefresh(args), /current runDiff/);
+  update(args, (c) => {
+    c.detection.sourceRecordIds = ["notice-2"];
+    c.kind = "reopening";
+    c.authoritativeDecision = "reopened";
+  });
+  assert.throws(() => reviewRefresh(args), /disappearance/);
+});
+test("provenance tampering, stale run results and missing latest-contract provenance fail closed", async () => {
+  const args = await fixture();
+  const { detection, source } = additiveDetection();
+  args.policy.detectionSources = [source];
+  update(args, (c) => {
+    c.detection = detection;
+    c.detection.observation.retrievedAtUtc = "2026-01-04T00:00:00Z";
+  });
+  assert.throws(() => reviewRefresh(args), /provenance hash mismatch/);
+  update(args, (c) => {
+    c.detection = additiveDetection().detection;
+    c.detection.transition.staleEvidence = true;
+  });
+  assert.throws(() => reviewRefresh(args), /stale/);
+  update(args, (c) => {
+    c.detection = additiveDetection().detection;
+    delete c.detection.observation.provenanceSha256;
+    delete c.detection.observation.identity.componentHashes;
+    c.detection.observation.candidateId = canonicalSha256(
+      c.detection.observation.identity,
+    );
+  });
+  assert.throws(() => reviewRefresh(args), /contract requires provenance/);
+});

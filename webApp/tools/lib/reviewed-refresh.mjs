@@ -121,20 +121,57 @@ export function verifyDetection(candidate, policy) {
     d.sourceId !== d.identity?.sourceId
   )
     fail("incompatible detection envelope");
+  const hasProvenance = Object.hasOwn(d, "provenanceSha256");
+  if (hasProvenance) {
+    digest(d.provenanceSha256, "detection provenance");
+    const { provenanceSha256, ...provenance } = d;
+    if (canonicalSha256(provenance) !== provenanceSha256)
+      fail("detection provenance hash mismatch");
+  }
+  if (d.identity?.componentHashes !== undefined) {
+    if (
+      !hasProvenance ||
+      !d.identity.componentHashes ||
+      typeof d.identity.componentHashes !== "object" ||
+      Array.isArray(d.identity.componentHashes) ||
+      Object.entries(d.identity.componentHashes).some(
+        ([name, h]) => !name || !/^[a-f0-9]{64}$/.test(h),
+      )
+    )
+      fail("invalid detection component provenance");
+  }
+  const transition = detection.transition;
+  if (hasProvenance && !transition)
+    fail("current detection runDiff/parent transition required");
+  if (
+    transition &&
+    (transition.status !== "candidate" ||
+      transition.staleEvidence !== false ||
+      !Object.hasOwn(transition, "parentCandidateId"))
+  )
+    fail("failed, stale or incomplete current detection transition");
+  if (
+    transition?.parentCandidateId !== undefined &&
+    transition.parentCandidateId !== null
+  )
+    digest(transition.parentCandidateId, "current transition parent");
   digest(d.candidateId, "detection candidate ID");
   if (canonicalSha256(d.identity) !== d.candidateId)
     fail("detection identity hash mismatch");
-  if (
-    !policy.detectionSources?.some(
-      (source) =>
-        source.sourceId === d.sourceId &&
-        source.registrySha256 === d.identity.registrySha256 &&
-        source.url === d.identity.sourceUrl &&
-        source.parserVersion === d.identity.parserVersion &&
-        source.sourceSchemaVersion === d.identity.sourceSchemaVersion,
-    )
-  )
+  const approvedSource = policy.detectionSources?.find(
+    (source) =>
+      source.sourceId === d.sourceId &&
+      source.registrySha256 === d.identity.registrySha256 &&
+      source.url === d.identity.sourceUrl &&
+      source.parserVersion === d.identity.parserVersion &&
+      source.sourceSchemaVersion === d.identity.sourceSchemaVersion,
+  );
+  if (!approvedSource)
     fail("unapproved or incompatible detection registry/parser");
+  if (approvedSource.requireProvenance === true && !hasProvenance)
+    fail(
+      "approved detection contract requires provenance and current transition",
+    );
   for (const key of ["registrySha256", "contentSha256", "parsedSha256"])
     digest(d.identity[key], key);
   if (
@@ -152,37 +189,38 @@ export function verifyDetection(candidate, policy) {
   if (d.sourcePublishedAtUtc !== null) instant(d.sourcePublishedAtUtc);
   if (d.parentCandidateId !== null)
     digest(d.parentCandidateId, "parent detection candidate");
-  if (
-    !d.diff ||
-    Object.keys(d.diff).sort().join(",") !== "added,changed,removed"
-  )
-    fail("invalid detection diff");
-  const all = [];
-  for (const kind of ["added", "changed", "removed"]) {
-    const ids = d.diff[kind];
-    if (
-      !Array.isArray(ids) ||
-      ids.some((id) => typeof id !== "string" || !id) ||
-      !same(ids, [...new Set(ids)].sort())
-    )
-      fail("invalid detection diff IDs");
-    if (
-      ids.some((id) =>
-        kind === "removed"
-          ? Object.hasOwn(d.records, id)
-          : !Object.hasOwn(d.records, id),
+  const checkedDiff = (diff) => {
+    if (!diff || Object.keys(diff).sort().join(",") !== "added,changed,removed")
+      fail("invalid detection diff");
+    const all = [];
+    for (const kind of ["added", "changed", "removed"]) {
+      const ids = diff[kind];
+      if (
+        !Array.isArray(ids) ||
+        ids.some((id) => typeof id !== "string" || !id) ||
+        !same(ids, [...new Set(ids)].sort())
       )
-    )
-      fail("detection diff disagrees with record index");
-    all.push(...ids);
-  }
-  if (
-    new Set(all).size !== all.length ||
-    !Array.isArray(sourceRecordIds) ||
-    !same(sourceRecordIds, [...all].sort())
-  )
-    fail("review must cover exact detection diff IDs");
-  if (candidate.kind === "reopening" && d.diff.removed.length)
+        fail("invalid detection diff IDs");
+      if (
+        ids.some((id) =>
+          kind === "removed"
+            ? Object.hasOwn(d.records, id)
+            : !Object.hasOwn(d.records, id),
+        )
+      )
+        fail("detection diff disagrees with record index");
+      all.push(...ids);
+    }
+    if (new Set(all).size !== all.length)
+      fail("overlapping detection diff IDs");
+    return all.sort();
+  };
+  checkedDiff(d.diff); // Stored immutable first-observation provenance is verified, never repurposed as today's transition.
+  const currentDiff = transition ? transition.runDiff : d.diff;
+  const affected = checkedDiff(currentDiff);
+  if (!Array.isArray(sourceRecordIds) || !same(sourceRecordIds, affected))
+    fail("review must cover exact detection diff IDs for current runDiff");
+  if (candidate.kind === "reopening" && currentDiff.removed.length)
     fail("notice disappearance cannot authorize reopening");
 }
 
