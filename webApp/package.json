@@ -8,7 +8,7 @@
     "build": "node tools/verify-core.mjs && tsc --noEmit && vite build && node tools/write-provenance.mjs && node tools/audit-dist.mjs",
     "preview": "node tools/serve-dist.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/unit/*.test.ts",
+    "test": "tsx --test tests/unit/*.test.ts tests/unit/*.test.mjs",
     "test:e2e": "playwright test",
     "test:trip:fast": "npm run build:core && tsx --test tests/unit/bridge-closures.test.ts && playwright test -c playwright.replay.config.ts",
     "test:trip:deep": "npm run test:trip:fast && npm run release:check -- --skip-install && npm run test:webkit",
