@@ -49,6 +49,7 @@ class LocalTrailGuideReviewTest {
             assertEquals("Recheck needed", entry.statusAt(deadline))
         }
         val uptown = LocalTrailGuide.entries().single { it.id == "uptown-detour" }
+        assertEquals("Phoenix–Uptown restriction · initial Vernon status unverified", uptown.statusAt(epoch("2026-10-09T12:00:00Z")))
         assertTrue(uptown.details.contains("current status, exact endpoints and reopening"))
         assertTrue(uptown.details.contains("That phase is not mapped"))
         assertTrue(uptown.details.contains("Per the notice, after that initial phase reopens, a signed construction detour"))
