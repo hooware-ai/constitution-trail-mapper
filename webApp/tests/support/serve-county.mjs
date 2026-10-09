@@ -16,7 +16,8 @@
 // Review and public builds use separate work and output directories so both can run at once.
 //
 // Output goes to webApp/dist-county-review or dist-county-public (ignored); the real dist/ is never touched.
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { listenDistServer } from "../../tools/lib/dist-server.mjs";
 import { browserPort } from "../../tools/lib/browser-port.mjs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -32,8 +33,9 @@ import { makeProposed } from "./proposed-fixture.mjs";
 
 // Reject the selected HTTP port before generating packages or launching a build.
 const portArg = process.argv.indexOf("--port");
+let port;
 try {
-  browserPort(
+  port = browserPort(
     portArg > 0
       ? process.argv[portArg + 1]
       : (process.env.TRAIL_TEST_PORT ?? 4173),
@@ -61,6 +63,30 @@ const work = join(webRoot, "generated", `synthetic-${variant}`);
 const county = join(work, "county");
 const distDir = join(webRoot, `dist-county-${variant}`);
 const windows = process.platform === "win32";
+
+// Own the actual HTTP listener before preparation; readiness stays 503 until this build is complete.
+// Build-only callers still generate artifacts without opening a port.
+let ready = false;
+if (!process.argv.includes("--build-only")) {
+  try {
+    const server = await listenDistServer({
+      port,
+      directory: distDir,
+      isReady: () => ready,
+    });
+    server.on("error", (error) => {
+      console.error(
+        `serve-county listener failed on 127.0.0.1:${port}: ${error.message}`,
+      );
+      process.exit(1);
+    });
+  } catch (error) {
+    console.error(
+      `serve-county could not listen on 127.0.0.1:${port}: ${error.message}`,
+    );
+    process.exit(1);
+  }
+}
 
 await rm(work, { recursive: true, force: true });
 await mkdir(work, { recursive: true });
@@ -120,20 +146,28 @@ const env = {
   ...(withAccess ? { TRAIL_ACCESS_MANIFEST: files.accessManifest } : {}),
 };
 // The modules read these variables when first imported, so package in a child with the same environment.
-const run = (label, args) => {
+const run = async (label, args) => {
   // Only npx needs a shell on Windows; running node directly keeps paths with spaces intact.
-  const result = spawnSync(args[0], args.slice(1), {
+  const child = spawn(args[0], args.slice(1), {
     cwd: webRoot,
     stdio: "inherit",
     shell: windows && args[0] !== "node",
     env,
   });
-  if (result.status !== 0) {
+  // Keep the owned listener responsive with 503 while preparation runs.
+  const status = await new Promise((resolve) => {
+    child.once("error", (error) => {
+      console.error(`serve-county: ${label}: ${error.message}`);
+      resolve(1);
+    });
+    child.once("close", (code) => resolve(code ?? 1));
+  });
+  if (status !== 0) {
     console.error(`serve-county: ${label} failed`);
-    process.exit(result.status ?? 1);
+    process.exit(status);
   }
 };
-run("package", [
+await run("package", [
   "node",
   "tools/package-dataset.mjs",
   "--input",
@@ -144,12 +178,12 @@ run("package", [
   ...(withAccess ? ["--access-roads", files.accessInput] : []),
   ...(withProposed ? ["--proposed-trails", files.proposedInput] : []),
 ]);
-run("build", ["npx", "vite", "build"]);
-run("provenance", ["node", "tools/write-provenance.mjs"]);
+await run("build", ["npx", "vite", "build"]);
+await run("provenance", ["node", "tools/write-provenance.mjs"]);
 
 if (process.argv.includes("--build-only")) {
   console.log(`Built ${distDir}`);
   process.exit(0);
 }
-process.env.TRAIL_DIST_DIR = distDir;
-await import("../../tools/serve-dist.mjs");
+ready = true;
+console.log(`Serving county artifact on http://127.0.0.1:${port}`);
