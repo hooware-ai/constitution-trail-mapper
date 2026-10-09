@@ -111,8 +111,8 @@ test("the dialog is keyboard-operable: focus goes in, Escape closes it and retur
   page,
 }) => {
   await page.goto("/");
-  await helpButton(page).focus();
-  await page.keyboard.press("Enter");
+  // Focus and send the key in one browser action, before startup's heading-focus frame can intervene.
+  await helpButton(page).press("Enter");
   const dialog = helpDialog(page);
   await expect(dialog).toBeVisible();
   const inside = await page.evaluate(() =>
