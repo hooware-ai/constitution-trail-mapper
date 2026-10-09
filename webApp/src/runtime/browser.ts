@@ -1,5 +1,10 @@
 import { DatasetError } from "../dataset";
-import type { RefreshManifest } from "./manifest";
+import {
+  assertSafeSuccessor,
+  canonical,
+  parseRefreshManifest,
+  type RefreshManifest,
+} from "./manifest";
 import type { RuntimeFreshness } from "./freshness";
 
 export const REFRESH_CACHE_KEY = "trail-mapper.refresh-hint/1";
@@ -69,7 +74,12 @@ export function bindRefreshLifecycle<T>(
     else runtime.invalidate();
   };
   const storage = (event: StorageEvent) => {
-    if (event.key === REFRESH_CACHE_KEY || event.key === null) check("tab");
+    if (
+      event.key === REFRESH_CACHE_KEY ||
+      event.key === SAFETY_FLOOR_KEY ||
+      event.key === null
+    )
+      check("tab");
   };
   const online = () => {
     runtime.setOffline(false);
@@ -92,4 +102,52 @@ export function bindRefreshLifecycle<T>(
     win.removeEventListener("pageshow", pageshow);
     doc.removeEventListener("visibilitychange", visibility);
   };
+}
+
+/** Metadata only: persisted history can reject releases, never load or approve routing data. */
+export const SAFETY_FLOOR_KEY = "trail-mapper.refresh-safety-floor/1";
+export async function readSafetyFloor(): Promise<RefreshManifest | null> {
+  try {
+    const saved = localStorage.getItem(SAFETY_FLOOR_KEY);
+    if (saved === null) return null;
+    const envelope = JSON.parse(saved);
+    if (envelope.schema !== "trail-mapper.refresh-safety-floor/1")
+      throw new Error();
+    return parseRefreshManifest(envelope.manifest);
+  } catch {
+    throw new DatasetError(
+      "data-unavailable",
+      "Saved safety history could not be read. Keep accepted data and retry before Start.",
+    );
+  }
+}
+export async function commitSafetyFloor(
+  manifest: RefreshManifest,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!navigator.locks)
+    throw new DatasetError(
+      "data-unavailable",
+      "This browser cannot safely coordinate release history across tabs. Keep accepted data and use a supported browser before Start.",
+    );
+  await navigator.locks.request(SAFETY_FLOOR_KEY, { signal }, async () => {
+    const previous = await readSafetyFloor();
+    if (previous) assertSafeSuccessor(previous, manifest);
+    try {
+      const serialized = JSON.stringify({
+        schema: "trail-mapper.refresh-safety-floor/1",
+        manifest,
+      });
+      // Avoid ping-pong storage events for unchanged metadata.
+      if (!previous || canonical(previous) !== canonical(manifest))
+        localStorage.setItem(SAFETY_FLOOR_KEY, serialized);
+      const saved = await readSafetyFloor();
+      if (!saved || canonical(saved) !== canonical(manifest)) throw new Error();
+    } catch {
+      throw new DatasetError(
+        "data-unavailable",
+        "Safety history could not be saved. Accepted data is retained. Keep this page open and retry before Start.",
+      );
+    }
+  });
 }

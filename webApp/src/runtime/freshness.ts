@@ -29,6 +29,12 @@ export interface RefreshDependencies<T> {
   ): Promise<PreparedData<T>>;
   /** Optional convenience cache. Never authority for Start; failures are visible but do not undo valid memory data. */
   saveManifest?(manifest: RefreshManifest): void;
+  /** Reject-only history: never supplies routing bytes or authorizes Start. */
+  readSafetyFloor?(): Promise<RefreshManifest | null>;
+  commitSafetyFloor?(
+    manifest: RefreshManifest,
+    signal: AbortSignal,
+  ): Promise<void>;
   now?(): number;
 }
 export interface FreshnessState {
@@ -48,6 +54,7 @@ export interface FreshnessState {
 /** Owns validated, separately prepared data; host reads accepted.value in one synchronous adoption step. */
 export class RuntimeFreshness<T> {
   private current: PreparedData<T> | null;
+  private safetyFloor: RefreshManifest | null = null;
   private staged: PreparedData<T> | null = null;
   private running: Promise<boolean> | null = null;
   private abort: AbortController | null = null;
@@ -136,13 +143,24 @@ export class RuntimeFreshness<T> {
               "data-unavailable",
               "You are offline. Accepted data is retained. Reconnect and check again before starting.",
             );
+          const storedFloor = await this.deps.readSafetyFloor?.();
+          if (storedFloor) {
+            const floor = parseRefreshManifest(storedFloor, this.now());
+            if (this.safetyFloor && floor.sequence < this.safetyFloor.sequence)
+              assertSafeSuccessor(floor, this.safetyFloor);
+            else {
+              if (this.safetyFloor)
+                assertSafeSuccessor(this.safetyFloor, floor);
+              this.safetyFloor = floor;
+            }
+          }
           const manifest = parseRefreshManifest(
             await this.deps.readManifest(abort.signal),
             this.now(),
           );
-          if (this.current)
-            assertSafeSuccessor(this.current.manifest, manifest);
-          if (this.staged) assertSafeSuccessor(this.staged.manifest, manifest);
+          const baseline =
+            this.safetyFloor ?? this.staged?.manifest ?? this.current?.manifest;
+          if (baseline) assertSafeSuccessor(baseline, manifest);
           if (
             !this.current ||
             canonical(this.current.manifest) !== canonical(manifest)
@@ -155,10 +173,16 @@ export class RuntimeFreshness<T> {
               );
           }
           if (this.disposed || abort.signal.aborted) return false;
+          // Advance the in-memory rejection floor even if durable storage fails.
+          this.safetyFloor = manifest;
+          await this.deps.commitSafetyFloor?.(manifest, abort.signal);
+          if (this.disposed || abort.signal.aborted) return false;
           // Invalidated checks cannot authorize Start. Valid bytes may still be staged/adopted safely.
           this.state.requiresCheck = revision !== this.revision;
           this.state.successfulCheckAt = this.now();
-          this.state.error = null;
+          this.state.error = this.state.requiresCheck
+            ? "The page or another tab changed during this check. Check again before Start; accepted data is retained."
+            : null;
           this.state.consecutiveFailures = 0;
           if (candidate) {
             if (this.state.activeRide) {

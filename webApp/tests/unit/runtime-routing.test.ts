@@ -32,7 +32,7 @@ async function fixture() {
     label: "Synthetic",
     dataset: identityOf(manifest.dataset),
     datasetRecord: manifest.dataset,
-    closures: [closure],
+    closures: [{ ...closure }],
   };
   const calls: Record<string, unknown>[] = [];
   let disposed = 0,
@@ -40,7 +40,9 @@ async function fixture() {
   const client = {
     call: async (r: Record<string, unknown>) => {
       calls.push(r);
-      return network;
+      return r.op === "closureCatalog"
+        ? { schema: "trail-mapper.compiled-closures/1", closures: [closure] }
+        : network;
     },
     pinDataset: (r: unknown) => (pinned = r),
     dispose: () => disposed++,
@@ -68,20 +70,19 @@ test("candidate boots a separate pinned worker with upfront refresh validation a
   assert.equal(data.value.client, s.client);
   assert.deepEqual(s.calls, [
     { op: "boot", pinned: s.manifest.dataset, validateRefresh: true },
+    { op: "closureCatalog" },
   ]);
   assert.deepEqual(s.pinned, s.manifest.dataset);
   assert.equal(s.disposed, 0);
   data.dispose();
   assert.equal(s.disposed, 1);
 });
-test("mismatched identities/records, wrong build, missing/changed closures dispose only candidate", async () => {
+test("mismatched identities/records and wrong builds dispose only candidate", async () => {
   for (const change of [
     (n: Network) => (n.mode = "fixture"),
     (n: Network) => (n.dataset = { ...n.dataset!, version: "other" }),
     (n: Network) =>
       (n.datasetRecord = { ...n.datasetRecord!, label: "changed" }),
-    (n: Network) => (n.closures = []),
-    (n: Network) => (n.closures[0].message = "wrong"),
   ]) {
     const s = await fixture();
     change(s.network);
@@ -243,4 +244,52 @@ test("Start adapter rechecks stale saved identity and closures even if a worker 
   assert.equal(starts, 1);
   assert.equal(requests.length, 3);
   assert.deepEqual(requests[0].route, { saved: true });
+});
+
+test("complete compiled pins include rules absent from active display; missing, duplicate or changed catalog is refused", async () => {
+  const s = await fixture();
+  s.network.closures = [];
+  const accepted = await prepareRefreshRouting(
+    s.manifest,
+    new AbortController().signal,
+    () => s.client,
+  );
+  assert.equal(accepted.value.network.closures.length, 0);
+  accepted.dispose();
+  for (const catalog of [
+    null,
+    { schema: "future/2", closures: [] },
+    { schema: "trail-mapper.compiled-closures/1", closures: [] },
+    {
+      schema: "trail-mapper.compiled-closures/1",
+      closures: [{ id: "known" }, { id: "known" }],
+    },
+  ]) {
+    const f = await fixture();
+    const boot = f.client.call.bind(f.client);
+    f.client.call = async (request) =>
+      request.op === "closureCatalog" ? (catalog as any) : boot(request);
+    await assert.rejects(
+      prepareRefreshRouting(
+        f.manifest,
+        new AbortController().signal,
+        () => f.client,
+      ),
+    );
+    assert.equal(f.disposed, 1);
+  }
+  const old = await fixture();
+  const boot = old.client.call.bind(old.client);
+  old.client.call = async (request) => {
+    if (request.op === "closureCatalog") throw Error("Unknown operation");
+    return boot(request);
+  };
+  await assert.rejects(
+    prepareRefreshRouting(
+      old.manifest,
+      new AbortController().signal,
+      () => old.client,
+    ),
+    /complete compiled closure catalog/,
+  );
 });

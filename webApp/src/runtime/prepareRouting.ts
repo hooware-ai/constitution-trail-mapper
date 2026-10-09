@@ -41,13 +41,39 @@ export async function prepareRefreshRouting(
         "data-incompatible",
         "The prepared router does not match the reviewed release. Keep accepted data.",
       );
-    if (!Array.isArray(network.closures))
+    // Display closures depend on the current clock. Only the independent complete compiled catalog is authoritative.
+    let catalog: {
+      schema?: string;
+      closures?: Array<Record<string, unknown> & { id: string }>;
+    };
+    try {
+      catalog = await client.call({ op: "closureCatalog" });
+    } catch {
+      throw new DatasetError(
+        "data-incompatible",
+        "This app cannot verify the complete compiled closure catalog. Reload after the reviewed app update; accepted data is retained.",
+      );
+    }
+    if (
+      !catalog ||
+      catalog.schema !== "trail-mapper.compiled-closures/1" ||
+      !Array.isArray(catalog.closures) ||
+      !catalog.closures.every(
+        (closure) =>
+          !!closure &&
+          typeof closure === "object" &&
+          typeof closure.id === "string" &&
+          closure.id.length > 0,
+      ) ||
+      new Set(catalog.closures.map((closure) => closure.id)).size !==
+        catalog.closures.length
+    )
       throw new DatasetError(
         "data-corrupt",
-        "The prepared closure catalog is missing.",
+        "The complete compiled closure catalog is missing or invalid.",
       );
     const actual = await Promise.all(
-      network.closures.map(async (closure) => ({
+      catalog.closures.map(async (closure) => ({
         id: closure.id,
         contentSha256: await sha256Hex(
           new TextEncoder().encode(canonical(closure)).buffer as ArrayBuffer,

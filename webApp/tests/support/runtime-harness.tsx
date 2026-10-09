@@ -1,3 +1,4 @@
+import { readSafetyFloor, commitSafetyFloor } from "../../src/runtime/browser";
 // Synthetic browser fixture only. Production App wiring belongs to the integration owner.
 import { createRoot } from "react-dom/client";
 import { RuntimeFreshness } from "../../src/runtime/freshness";
@@ -12,6 +13,8 @@ let quotaFailure = false,
   starts = 0,
   inspected = 0;
 const runtime = new RuntimeFreshness<number>({
+  readSafetyFloor,
+  commitSafetyFloor,
   readManifest: (signal) =>
     fetchRefreshManifest("/runtime-test/manifest", signal),
   prepare: async (manifest, signal) => {

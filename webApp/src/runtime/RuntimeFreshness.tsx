@@ -5,11 +5,13 @@ import type { RuntimeFreshness } from "./freshness";
 export function RuntimeFreshnessStatus<T>({
   runtime,
   appBuild,
+  compact = false,
 }: {
   runtime: RuntimeFreshness<T>;
   appBuild: string;
+  compact?: boolean;
 }) {
-  const [, render] = useState(0);
+  const [renderVersion, render] = useState(0);
   useEffect(() => runtime.subscribe(() => render((n) => n + 1)), [runtime]);
   const state = runtime.snapshot;
   const manifest = runtime.accepted?.manifest;
@@ -31,7 +33,7 @@ export function RuntimeFreshnessStatus<T>({
       Math.min(Math.min(...deadlines) - now, 2147483647),
     );
     return () => clearTimeout(timer);
-  }, [manifest, staleKey]);
+  }, [manifest, staleKey, renderVersion]);
   const status = state.offline
     ? "Offline — accepted data retained"
     : state.error
@@ -41,17 +43,8 @@ export function RuntimeFreshnessStatus<T>({
         : state.requiresCheck
           ? "Check required before Start"
           : "Reviewed data checked";
-  return (
-    <section aria-labelledby="runtime-freshness-heading">
-      <h2 id="runtime-freshness-heading">Map freshness</h2>
-      <p role="status" aria-live="polite" aria-atomic="true">
-        {state.checking ? "Checking reviewed data…" : status}
-        {state.pendingSequence !== null
-          ? " A reviewed update is waiting. Your active ride has not changed; stop safely and review the route before starting again."
-          : ""}
-      </p>
-      {state.error && <p role="alert">{state.error}</p>}
-      {state.cacheError && <p role="alert">{state.cacheError}</p>}
+  const metadata = (
+    <>
       <dl>
         <dt>App build</dt>
         <dd>{appBuild}</dd>
@@ -97,6 +90,27 @@ export function RuntimeFreshnessStatus<T>({
         and when you check manually. Live conditions remain unverified. Follow
         posted closures and signs.
       </p>
+    </>
+  );
+  return (
+    <section aria-labelledby="runtime-freshness-heading">
+      <h2 id="runtime-freshness-heading">Map freshness</h2>
+      <p role="status" aria-live="polite" aria-atomic="true">
+        {state.checking ? "Checking reviewed data…" : status}
+        {state.pendingSequence !== null
+          ? " A reviewed update is waiting. Your active ride has not changed; stop safely and review the route before starting again."
+          : ""}
+      </p>
+      {state.error && <p role="alert">{state.error}</p>}
+      {state.cacheError && <p role="alert">{state.cacheError}</p>}
+      {compact ? (
+        <details>
+          <summary>Data dates and review</summary>
+          {metadata}
+        </details>
+      ) : (
+        metadata
+      )}
       <button
         type="button"
         disabled={state.checking}

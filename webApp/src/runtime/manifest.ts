@@ -18,6 +18,10 @@ export interface ClosurePin {
 }
 export interface ReopeningEvidence {
   id: string;
+  fromSequence: number;
+  toSequence: number;
+  fromContentSha256: string;
+  toContentSha256: string | null;
   evidenceUrl: string;
   reviewedBy: string;
   reviewedAtUtc: string;
@@ -29,7 +33,7 @@ export interface RefreshManifest {
   releasedAtUtc: string;
   dataset: DatasetRecord;
   sources: SourceFreshness[];
-  /** Complete catalog of known closures, including retained unresolved notices. */
+  /** Complete compiled catalog of known closures, including future/inactive rules and retained unresolved notices. */
   closures: ClosurePin[];
   reopenings: ReopeningEvidence[];
 }
@@ -107,13 +111,20 @@ export function parseRefreshManifest(
       (r: unknown) =>
         object(r) &&
         nonempty(r.id) &&
+        Number.isSafeInteger(r.fromSequence) &&
+        r.fromSequence >= 1 &&
+        Number.isSafeInteger(r.toSequence) &&
+        r.toSequence > r.fromSequence &&
+        r.toSequence <= raw.sequence &&
+        hash(r.fromContentSha256) &&
+        (r.toContentSha256 === null || hash(r.toContentSha256)) &&
         typeof r.evidenceUrl === "string" &&
         /^https:\/\/[^\s]+$/.test(r.evidenceUrl) &&
         nonempty(r.reviewedBy) &&
         utcTime(r.reviewedAtUtc) &&
         Date.parse(r.reviewedAtUtc) <= now,
     ) ||
-    !uniqueIds(raw.reopenings)
+    new Set(raw.reopenings.map(canonical)).size !== raw.reopenings.length
   )
     return corrupt("The reopening review evidence is invalid.");
   // Detach from caller-owned objects, including source policy and approval fields.
@@ -133,6 +144,10 @@ export function assertSafeSuccessor(
   previous: RefreshManifest,
   next: RefreshManifest,
 ): void {
+  if (next.dataset.id !== previous.dataset.id)
+    return corrupt(
+      "The release belongs to another dataset. Keep the accepted data.",
+    );
   if (next.sequence < previous.sequence)
     return corrupt(
       "An older release was returned. Keep the accepted data and retry.",
@@ -148,15 +163,28 @@ export function assertSafeSuccessor(
   for (const c of previous.closures) {
     if (closures.get(c.id) === c.contentSha256) continue;
     // A changed geometry/message can reduce exclusion just as disappearance can. Both need explicit review.
-    const evidence = next.reopenings.find((r) => r.id === c.id);
+    const evidence = next.reopenings.find(
+      (r) =>
+        r.id === c.id &&
+        r.fromSequence === previous.sequence &&
+        r.toSequence === next.sequence &&
+        r.fromContentSha256 === c.contentSha256 &&
+        r.toContentSha256 === (closures.get(c.id) ?? null),
+    );
     if (
       !evidence ||
-      Date.parse(evidence.reviewedAtUtc) < Date.parse(previous.releasedAtUtc)
+      Date.parse(evidence.reviewedAtUtc) < Date.parse(previous.releasedAtUtc) ||
+      Date.parse(evidence.reviewedAtUtc) > Date.parse(next.releasedAtUtc)
     )
       return corrupt(
         `Known closure ${c.id} changed without a current authoritative reopening review. Keep the accepted closure.`,
       );
   }
+  for (const evidence of previous.reopenings)
+    if (!next.reopenings.some((r) => canonical(r) === canonical(evidence)))
+      return corrupt(
+        "Reviewed closure transition history disappeared. Keep the accepted data.",
+      );
   for (const source of previous.sources)
     if (!next.sources.some((s) => s.id === source.id))
       return corrupt(

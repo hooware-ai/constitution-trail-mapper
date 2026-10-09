@@ -1,3 +1,4 @@
+import { readSafetyFloor, commitSafetyFloor } from "../../src/runtime/browser";
 import { createRoot } from "react-dom/client";
 import { RuntimeFreshness } from "../../src/runtime/freshness";
 import { fetchRefreshManifest } from "../../src/runtime/browser";
@@ -8,6 +9,8 @@ import {
 import { RuntimeFreshnessStatus } from "../../src/runtime/RuntimeFreshness";
 import type { RouteResult } from "../../src/types";
 const runtime = new RuntimeFreshness({
+  readSafetyFloor,
+  commitSafetyFloor,
   readManifest: (signal) =>
     fetchRefreshManifest("/runtime-test/manifest", signal),
   prepare: prepareRefreshRouting,

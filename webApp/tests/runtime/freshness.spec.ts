@@ -220,3 +220,67 @@ test("repeated interrupted checks and disposal do not resurrect data; reopened t
   expect(await api(other, "start()")).toBe(true);
   expect(await api(other, "counts().inspected")).toBe(1);
 });
+test("reload and new tab retain rejection floor; failed storage blocks Start and recovers", async ({
+  page,
+  context,
+}) => {
+  const s = await serve(context);
+  await open(page);
+  s.next({ ...s.fixture.manifest, sequence: 2 });
+  expect(await api(page, "check()")).toBe(true);
+  s.next(s.fixture.manifest);
+  await page.reload();
+  await expect
+    .poll(() => api(page, "state().checking"), { timeout: 20000 })
+    .toBe(false);
+  await expect(page.getByRole("alert")).toContainText("older release");
+  expect(await api(page, "accepted()")).toBeNull();
+  const other = await context.newPage();
+  await other.clock.install({ time: REFRESH_NOW });
+  await other.goto("/tests/support/runtime-harness.html");
+  await expect(other.getByRole("alert")).toContainText("older release");
+  s.next({ ...s.fixture.manifest, sequence: 3, closures: [] });
+  expect(await api(page, "check()")).toBe(false);
+  await expect(page.getByRole("alert")).toContainText("closure");
+  s.next({ ...s.fixture.manifest, sequence: 3 });
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Object.assign(window, {
+      restoreStorage: () => (Storage.prototype.setItem = original),
+    });
+    Storage.prototype.setItem = function (key, value) {
+      if (key.includes("safety-floor")) throw Error("quota");
+      return original.call(this, key, value);
+    };
+  });
+  expect(await api(page, "start()")).toBe(false);
+  expect(await api(page, "accepted()")).toBeNull();
+  await expect(page.getByRole("alert")).toContainText("could not be saved");
+  await page.evaluate(() => (window as any).restoreStorage());
+  expect(await api(page, "start()")).toBe(true);
+  expect(await api(page, "accepted().sequence")).toBe(3);
+});
+test("long horizon freshness timer rearms beyond browser timeout limit", async ({
+  page,
+  context,
+}) => {
+  const s = await serve(context);
+  s.next({
+    ...s.fixture.manifest,
+    sources: s.fixture.manifest.sources.map((source) => ({
+      ...source,
+      staleAfterMs: 60 * 86400000,
+    })),
+  });
+  await open(page);
+  expect(await api(page, "check()")).toBe(true);
+  await expect(page.getByRole("status")).toContainText("Reviewed data checked");
+  await page.clock.fastForward(23 * 86400000);
+  await page.clock.fastForward(2 * 86400000);
+  await expect(page.getByRole("status")).toContainText("Reviewed data checked");
+  await page.clock.fastForward(20 * 86400000);
+  await page.clock.fastForward(16 * 86400000);
+  await expect(page.getByRole("status")).toContainText(
+    "Source evidence is stale",
+  );
+});

@@ -106,9 +106,14 @@ test("closure removal/change, source disappearance, rollback and sequence equivo
     ...m,
     sequence: 2,
     closures: [],
+    releasedAtUtc: "2026-10-09T12:00:00Z",
     reopenings: [
       {
         id: m.closures[0].id,
+        fromSequence: m.sequence,
+        toSequence: 2,
+        fromContentSha256: m.closures[0].contentSha256,
+        toContentSha256: null,
         evidenceUrl: "https://example.test/authority",
         reviewedBy: "Reviewer",
         reviewedAtUtc: "2026-10-09T11:45:00Z",
@@ -346,4 +351,105 @@ test("storage hint has only release identity, no data authority or rider history
       version: "runtime-1",
     }),
   );
+});
+
+test("durable rejection history survives reload, staging and failed storage without adopting cached data", async () => {
+  const { manifest: first } = await refreshFixture();
+  let next = { ...first, sequence: 2 };
+  let floor: RefreshManifest | null = null;
+  let failWrite = false;
+  const create = () =>
+    new RuntimeFreshness<number>({
+      now: () => REFRESH_NOW,
+      readManifest: async () => next,
+      readSafetyFloor: async () => floor,
+      commitSafetyFloor: async (m) => {
+        if (failWrite) throw Error("Safety history could not be saved");
+        floor = m;
+      },
+      prepare: async (m) => ({ manifest: m, value: m.sequence, dispose() {} }),
+    });
+  const firstTab = create();
+  assert.equal(await firstTab.check("launch"), true);
+  const reload = create();
+  assert.equal(reload.accepted, null);
+  next = first;
+  assert.equal(await reload.check("launch"), false);
+  assert.equal(reload.accepted, null);
+  next = { ...first, sequence: 3, closures: [] };
+  assert.equal(await reload.check("manual"), false);
+  next = { ...first, sequence: 3 };
+  failWrite = true;
+  assert.equal(await reload.check("manual"), false);
+  assert.equal(reload.accepted, null);
+  next = { ...first, sequence: 2 };
+  assert.equal(await reload.check("manual"), false);
+  next = { ...first, sequence: 3 };
+  failWrite = false;
+  assert.equal(await reload.check("manual"), true);
+  reload.setActiveRide(true);
+  next = { ...first, sequence: 4 };
+  await reload.check("manual");
+  assert.equal((reload.accepted as PreparedData<number> | null)?.value, 3);
+  assert.equal((floor as RefreshManifest | null)?.sequence, 4);
+  const otherTab = create();
+  next = { ...first, sequence: 3 };
+  assert.equal(await otherTab.check("launch"), false);
+  assert.equal(otherTab.accepted, null);
+});
+test("review evidence binds exact prior hash, sequences, target and retained history", async () => {
+  const { manifest: m } = await refreshFixture();
+  const evidence = {
+    id: m.closures[0].id,
+    fromSequence: 1,
+    toSequence: 2,
+    fromContentSha256: m.closures[0].contentSha256,
+    toContentSha256: null,
+    evidenceUrl: "https://example.test/review",
+    reviewedBy: "Reviewer",
+    reviewedAtUtc: m.releasedAtUtc,
+  };
+  const reopened = { ...m, sequence: 2, closures: [], reopenings: [evidence] };
+  assert.doesNotThrow(() => assertSafeSuccessor(m, reopened));
+  for (const patch of [
+    { fromSequence: 0 },
+    { toSequence: 3 },
+    { fromContentSha256: "b".repeat(64) },
+    { toContentSha256: "b".repeat(64) },
+  ])
+    assert.throws(() =>
+      assertSafeSuccessor(m, {
+        ...reopened,
+        reopenings: [{ ...evidence, ...patch }],
+      }),
+    );
+  const reclosed = { ...m, sequence: 3, reopenings: [evidence] };
+  assert.doesNotThrow(() => assertSafeSuccessor(reopened, reclosed));
+  assert.throws(() =>
+    assertSafeSuccessor(reclosed, { ...reopened, sequence: 4 }),
+  );
+  assert.throws(() =>
+    assertSafeSuccessor(reopened, { ...reclosed, reopenings: [] }),
+  );
+});
+test("in-flight lifecycle invalidation visibly requires a later check", async () => {
+  const { manifest } = await refreshFixture();
+  let interrupted = true;
+  const runtime = new RuntimeFreshness<number>({
+    now: () => REFRESH_NOW,
+    readManifest: async () => {
+      if (interrupted) {
+        interrupted = false;
+        runtime.invalidate();
+      }
+      return manifest;
+    },
+    prepare: async (m) => ({ manifest: m, value: 1, dispose() {} }),
+  });
+  assert.equal(await runtime.check("launch"), false);
+  assert.equal(runtime.snapshot.requiresCheck, true);
+  assert.match(runtime.snapshot.error!, /changed during this check/);
+  assert.equal(runtime.snapshot.successfulCheckAt, REFRESH_NOW);
+  assert.equal(await runtime.check("manual"), true);
+  assert.equal(runtime.snapshot.error, null);
 });

@@ -32,7 +32,11 @@ test("real isolated workers retain active routing on partial/closure-mismatch fa
     ),
   );
   expect(initialized.ok).toBe(true);
-  manifest.closures = initialized.closures.map((c: any) => ({
+  const catalog = JSON.parse(
+    core.dispatch(JSON.stringify({ op: "closureCatalog" })),
+  );
+  expect(catalog.schema).toBe("trail-mapper.compiled-closures/1");
+  manifest.closures = catalog.closures.map((c: any) => ({
     id: c.id,
     contentSha256: createHash("sha256").update(canonical(c)).digest("hex"),
   }));
