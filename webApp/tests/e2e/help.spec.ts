@@ -801,3 +801,165 @@ test("Trail updates lists the October notices with official links that open safe
     "an estimate does not confirm reopening",
   );
 });
+
+for (const kind of ["report", "feedback"] as const) {
+  for (const outcome of ["success", "failure"] as const) {
+    test(`${kind} copy ${outcome} is visible at large text without losing keyboard recovery`, async ({
+      page,
+    }) => {
+      await page.addInitScript((reject) => {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: () =>
+              reject
+                ? Promise.reject(new Error("Controlled clipboard denial"))
+                : Promise.resolve(),
+          },
+        });
+      }, outcome === "failure");
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page.goto("/");
+      // CSSOM font preference emulation works with production style-src self; do not inject a blocked inline sheet.
+      await page.evaluate(() =>
+        document.documentElement.style.setProperty(
+          "font-size",
+          "200%",
+          "important",
+        ),
+      );
+      expect(
+        await page.evaluate(
+          () => getComputedStyle(document.documentElement).fontSize,
+        ),
+      ).toBe("32px");
+      await helpButton(page).press("Enter");
+      await helpDialog(page)
+        .getByRole("button", {
+          name:
+            kind === "feedback"
+              ? "Write ride feedback"
+              : "Write a problem report",
+        })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: kind === "feedback" ? "Ride feedback" : "Report a problem",
+        exact: true,
+      });
+      const text = dialog.getByRole("textbox", {
+        name: kind === "feedback" ? "Feedback text" : "Report text",
+      });
+      expect(
+        await text.evaluate((element) =>
+          parseFloat(getComputedStyle(element).fontSize),
+        ),
+      ).toBeGreaterThanOrEqual(32);
+      const sample =
+        (await text.inputValue()) + "\nSynthetic verification only.";
+      await text.fill(sample);
+      const copy = dialog.getByRole("button", {
+        name: kind === "feedback" ? "Copy feedback" : "Copy report",
+        exact: true,
+      });
+      await copy.focus();
+      await copy.press("Enter");
+      const notice = dialog.getByRole(
+        outcome === "failure" ? "alert" : "status",
+      );
+      await expect(notice).toContainText(
+        outcome === "failure" ? "The text is selected" : "copied",
+      );
+      await expect(notice).toBeInViewport({ ratio: 0.99 });
+      await expect(dialog.getByRole("alert")).toHaveCount(1);
+      await expect(dialog.getByRole("status")).toHaveCount(1);
+      if (outcome === "failure") {
+        await expect(text).toBeFocused();
+        await expect(text).toBeInViewport();
+        expect(
+          await text.evaluate((element: HTMLTextAreaElement) => [
+            element.selectionStart,
+            element.selectionEnd,
+          ]),
+        ).toEqual([0, sample.length]);
+      } else {
+        await expect(copy).toBeFocused();
+        await expect(copy).toBeInViewport({ ratio: 0.99 });
+      }
+      await expect(text).toHaveValue(sample);
+      await page.keyboard.press("Escape");
+      await expect(helpButton(page)).toBeFocused();
+    });
+  }
+}
+
+for (const kind of ["report", "feedback"] as const) {
+  test(`${kind} editing clears copy feedback and drops a pending result for older text`, async ({
+    page,
+  }) => {
+    await controllableClipboard(page);
+    await page.goto("/");
+    await helpButton(page).click();
+    await helpDialog(page)
+      .getByRole("button", {
+        name:
+          kind === "feedback"
+            ? "Write ride feedback"
+            : "Write a problem report",
+      })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: kind === "feedback" ? "Ride feedback" : "Report a problem",
+      exact: true,
+    });
+    const text = dialog.getByRole("textbox", {
+      name: kind === "feedback" ? "Feedback text" : "Report text",
+    });
+    const copy = dialog.getByRole("button", {
+      name: kind === "feedback" ? "Copy feedback" : "Copy report",
+      exact: true,
+    });
+    await copy.click();
+    await expect.poll(() => pendingCopies(page)).toBe(1);
+    await settle(page, 0, "resolve");
+    await expect(dialog.getByRole("status")).toContainText("copied");
+    await text.fill("Revised synthetic text, not yet copied.");
+    await expect(dialog.getByRole("status")).toHaveText("");
+    await copy.click();
+    await expect.poll(() => pendingCopies(page)).toBe(2);
+    await dialog.getByRole("checkbox").check();
+    await settle(page, 1, "resolve");
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(dialog.getByRole("status")).toHaveText("");
+    await expect(dialog.getByRole("alert")).toHaveText("");
+    await expect(text).toHaveValue(/Revised synthetic text, not yet copied/);
+    await expect(text).toHaveValue(/Browser and screen:/);
+    await copy.click();
+    await expect.poll(() => pendingCopies(page)).toBe(3);
+    await text.fill(
+      "Latest synthetic text; older failures must not select it.",
+    );
+    await settle(page, 2, "reject");
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(dialog.getByRole("alert")).toHaveText("");
+    expect(
+      await text.evaluate(
+        (element: HTMLTextAreaElement) =>
+          element.selectionEnd - element.selectionStart,
+      ),
+    ).toBe(0);
+    await copy.click();
+    await expect.poll(() => pendingCopies(page)).toBe(4);
+    await settle(page, 3, "resolve");
+    await expect(dialog.getByRole("status")).toContainText("copied");
+  });
+}

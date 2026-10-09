@@ -69,6 +69,11 @@ export function HelpDialog({
     setNotice(null);
     setView(next);
   }
+  function clearNotice(owner: number) {
+    if (owner !== session.current) return;
+    cancelAnimationFrame(frame.current);
+    setNotice(null);
+  }
   // Switching views moves focus to the new view's heading so keyboard and screen-reader users land on it.
   useEffect(() => {
     if (first.current) {
@@ -87,6 +92,7 @@ export function HelpDialog({
             : "Report a problem"
       }
       notice={notice}
+      noticeInChildren={view !== "help"}
       onClose={onClose}
     >
       {view === "help" ? (
@@ -373,11 +379,13 @@ export function HelpDialog({
         <ReportView
           key={view}
           kind={view === "feedback" ? "feedback" : "problem"}
+          notice={notice}
           network={network}
           build={build}
           heading={heading}
           owner={session.current}
           announce={announce}
+          clearNotice={clearNotice}
           back={() => switchView("help")}
         />
       )}
@@ -387,20 +395,24 @@ export function HelpDialog({
 
 function ReportView({
   kind,
+  notice,
   network,
   build,
   heading,
   owner,
   announce,
+  clearNotice,
   back,
 }: {
   kind: "problem" | "feedback";
+  notice: DialogNotice | null;
   network: Network | null;
   build: BuildInfo;
   heading: React.RefObject<HTMLHeadingElement | null>;
   /** The Help session this report belongs to; feedback for any other session is dropped. */
   owner: number;
   announce: (notice: DialogNotice, owner: number) => void;
+  clearNotice: (owner: number) => void;
   back: () => void;
 }) {
   const feedback = kind === "feedback";
@@ -409,11 +421,26 @@ function ReportView({
   );
   const [browser, setBrowser] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
+  const copyError = useRef<HTMLDivElement>(null);
+  const copyResult = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (notice?.kind === "error") {
+      // Show recovery beside the selected text; keep its focus and selection intact.
+      copyError.current?.scrollIntoView({ block: "start" });
+    } else if (notice?.kind === "success") {
+      // Keep the result and focused Copy control visible together, without moving focus.
+      copyResult.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [notice]);
   const details = `${navigator.userAgent} · window ${window.innerWidth}×${window.innerHeight}`;
   // A copy result only counts while this report is still on screen and only for the latest attempt: a slow clipboard
   // promise from an earlier attempt, or from a report the rider left, must not speak for the one in front of them.
   const alive = useRef(true);
   const attempts = useRef(0);
+  function edited() {
+    attempts.current++;
+    clearNotice(owner);
+  }
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -437,12 +464,13 @@ function ReportView({
       );
     } catch {
       if (!current()) return;
+      area.current?.focus();
       area.current?.select();
       announce(
         {
           kind: "error",
           message:
-            "Your browser did not allow copying. The text is selected: copy it yourself.",
+            "Browser did not allow copying. The text is selected. Copy manually.",
         },
         owner,
       );
@@ -459,13 +487,23 @@ function ReportView({
         edit or delete any of it. Do not add your location, routes, saved place
         names or personal details.
       </p>
+      <div
+        ref={copyError}
+        role="alert"
+        className={notice?.kind === "error" ? "warning" : undefined}
+      >
+        {notice?.kind === "error" ? notice.message : null}
+      </div>
       <label className="field">
         {feedback ? "Feedback text" : "Report text"}
         <textarea
           ref={area}
           rows={14}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            edited();
+            setText(event.target.value);
+          }}
         />
       </label>
       <label className="checkbox">
@@ -473,6 +511,7 @@ function ReportView({
           type="checkbox"
           checked={browser}
           onChange={(event) => {
+            edited();
             setBrowser(event.target.checked);
             setText((value) =>
               withBrowserDetails(value, event.target.checked, details),
@@ -486,10 +525,20 @@ function ReportView({
           </small>
         </span>
       </label>
+      <div ref={copyResult}>
+        <div
+          role="status"
+          className={notice?.kind === "success" ? "success-note" : undefined}
+        >
+          {notice?.kind === "success" ? notice.message : null}
+        </div>
+        <div className="actions">
+          <button className="primary" onClick={() => void copy()}>
+            {feedback ? "Copy feedback" : "Copy report"}
+          </button>
+        </div>
+      </div>
       <div className="actions">
-        <button className="primary" onClick={() => void copy()}>
-          {feedback ? "Copy feedback" : "Copy report"}
-        </button>
         <a
           className="button-link"
           href={REPORT_URL}
