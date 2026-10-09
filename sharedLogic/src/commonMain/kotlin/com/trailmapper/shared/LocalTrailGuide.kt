@@ -107,7 +107,7 @@ object LocalTrailGuide {
                 "travel impacts remain unverified. Check the current City notice and signs.",
             "Scheduled · September 8, 2026",
             TrailResourceLink("City September 28 resurfacing update", "https://www.bloomingtonil.gov/Home/Components/News/News/10979/1394"),
-            effectiveAtEpochMillis = epoch("2026-09-08T05:00:00Z"), effectiveStatus = "Scheduled · September 8, 2026",
+            effectiveAtEpochMillis = epoch("2026-09-08T05:00:00Z"), effectiveStatus = "Scheduled start reached · current completion unverified",
             reviewAfterEpochMillis = epoch("2026-10-01T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
