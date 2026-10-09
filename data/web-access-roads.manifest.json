@@ -4,15 +4,15 @@
   "id": "mclean-access-roads",
   "testOnly": false,
   "scope": "SOURCE REVIEW IDENTITY ONLY. This pins which extract bytes the web packager may admit for ordinary-road access. It is not a rights review, not an owner approval of any dataset composition, and not a publication approval. A matching hash proves which file was reviewed, nothing more.",
-  "sourceInputSha256": "23a9719dd45297352cef641014697ca0b263184af9fdace48573b0d6ba264d07",
+  "sourceInputSha256": "f7be4a62cf5062147afff3206a5abf538ca02b083a059cf012acfe95cd82e033",
   "sourceInput": {
     "job": "Trail Mapper normalized ordinary endpoint access roads",
-    "generatedAtUtc": "2026-09-27T14:38:56.0914803Z",
-    "generatedAtMeaning": "When the native extractor ran. It is not when TIGER or OpenStreetMap last changed any way.",
-    "file": "data/generated/mclean-access-roads.normalized.json (private, ignored by Git, never committed)",
+    "generatedAtUtc": "2026-10-09T04:04:11.7823960Z",
+    "generatedAtMeaning": "Completion of the captured original public responses. Frozen during offline extraction; not a per-way source edit time. Canonical web-review serialization sorts object keys and preserves array/feature/path order.",
+    "file": "data/generated/access-review-20261009T041256Z/mclean-access-roads.normalized.json (ignored, never committed)",
     "layerCounts": {
       "8": 3424,
-      "osm-service": 9313
+      "osm-service": 9344
     },
     "layerOrder": [
       "8 (TIGERweb Local Roads, ordered by OBJECTID)",
@@ -25,36 +25,135 @@
       "openStreetMapOverpass": "https://overpass-api.de/api/interpreter",
       "openStreetMap": "https://www.openstreetmap.org/copyright"
     },
-    "boundingBoxWgs84": [-89.2, 40.4, -88.9, 40.6],
+    "boundingBoxWgs84": [
+      -89.2,
+      40.4,
+      -88.9,
+      40.6
+    ],
     "filters": {
-      "includedMtfcc": ["S1400", "S1640", "S1710", "S1730", "S1780", "S1820"],
-      "includedOsmHighways": ["service"],
+      "includedMtfcc": [
+        "S1400",
+        "S1640",
+        "S1710",
+        "S1730",
+        "S1780",
+        "S1820"
+      ],
+      "includedOsmHighways": [
+        "service"
+      ],
       "osmExclusions": "Ways marked access=no or access=private without a bicycle allowance, bicycle=no or bicycle=private, or service=drive-through or emergency_access; ways with fewer than two points."
     },
     "queries": {
       "tigerweb": "{layer}/query?where=MTFCC IN (included classes)&geometry=<bbox>&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,OID,NAME,BASENAME,MTFCC,RTTYP&returnGeometry=true&outSR=4326&f=json&orderByFields=OBJECTID&resultOffset=<n>&resultRecordCount=<page>",
       "overpass": "[out:json][timeout:120];way[\"highway\"=\"service\"](<south>,<west>,<north>,<east>);out tags geom;"
     },
-    "extractor": "tools/fetch-tigerweb-access-roads.ps1 in the native repository (git blob 3d5e9a35144e2110eb1b047b91371372e68c6620 at this review)",
-    "perWayTimestamps": "UNKNOWN. The extract carries no per-way source timestamps or OpenStreetMap way versions; only the extractor's run time above. Historical per-way change dates cannot be recovered from this file and are not stated here."
+    "extractor": "Unchanged tools/fetch-tigerweb-access-roads.ps1 (git blob 3d5e9a35144e2110eb1b047b91371372e68c6620), offline replay plus canonical web serialization at committed review-tools revision 0642354017dedb649bb8953796064ba2e66db5f9",
+    "perWayTimestamps": "UNKNOWN. No per-way source timestamps or OSM way versions are present. osmDatabaseTimestamp identifies the Overpass database snapshot, not a per-way edit time.",
+    "osmDatabaseTimestamp": "2026-10-09T04:02:51Z"
   },
   "expectedTransform": {
-    "derivedFrom": "tools/lib/access-package.mjs buildAccessParts applied to the SHA-verified source input above (deterministic: same input bytes, same output bytes)",
+    "derivedFrom": "webApp/tools/lib/access-package.mjs buildAccessParts applied to the SHA-verified canonical web review input; tool SHA recorded in review evidence.",
     "scope": "Pins the normalized base roads and the tile index. The index lists every service-road tile by SHA-256, so it pins every service road's identity, geometry and extract order. This is a source-review digest of a deterministic transform; it is not an approval. If the normalization algorithm is changed on purpose these digests must be re-derived and re-reviewed.",
     "baseSha256": "544b1add4dd62d6efce664c0f3d859ec58b06dd057c3789a2712a73748c40322",
-    "indexSha256": "672e9d1c871121c97896e03fe1825f228a8024ebc386270eba0d8b67008536e0",
+    "indexSha256": "aef0eb30986096bcd500d562788d5754a240f83437aee8bfd9c4f35ad0e5ecb9",
     "tileCount": 440,
-    "tileAssignments": 10323,
-    "localFeatureCount": 9313,
-    "baseFeatureCount": 3424
+    "tileAssignments": 10354,
+    "localFeatureCount": 9344,
+    "baseFeatureCount": 3424,
+    "combinedAccessPartsSha256": "548dfd4fd3ffa25eb3621ab7afb838d95d799060e513472a645a3be4867e342b",
+    "combinedHashOrder": "Concatenated base bytes, index bytes, then tile bytes in deterministic index cell order."
   },
   "nativeBaseline": {
-    "statement": "This is the access extract the native app ships. The architect independently matched the same SHA-256 to the built-local APK asset on 2026-10-02 (3424 TIGER roads, 9313 OpenStreetMap service roads).",
+    "statement": "Historical native/APK baseline applies ONLY to sourceReviewHistory native-20260927-original (23a9719d\u2026). The fresh web source is a different version. Native source/assets/history are unchanged; fresh native raw/tag equivalence is not claimed.",
     "nativeDocumentation": "docs/routing-data-plan.md (native repository) records the 2026-09-27 refresh that produced it."
   },
   "futureSources": "A re-run extractor, a refreshed extract, or any file with a different SHA-256 is a different source. It needs a fresh entry here, with its own review identity, before the packager will admit it. Editing this hash to match a new file without that review defeats the pin and is a review failure.",
   "rights": {
     "status": "unresolved",
     "note": "TIGER/Line is U.S. Census Bureau public-domain data. OpenStreetMap service roads are ODbL; whether a merged routing graph is a derivative database is unresolved (docs/web/data-rights.md). Nothing in this manifest grants or implies a right to publish."
-  }
+  },
+  "sourceReviewHistory": [
+    {
+      "sourceInputSha256": "23a9719dd45297352cef641014697ca0b263184af9fdace48573b0d6ba264d07",
+      "sourceInput": {
+        "job": "Trail Mapper normalized ordinary endpoint access roads",
+        "generatedAtUtc": "2026-09-27T14:38:56.0914803Z",
+        "generatedAtMeaning": "When the native extractor ran. It is not when TIGER or OpenStreetMap last changed any way.",
+        "file": "data/generated/mclean-access-roads.normalized.json (private, ignored by Git, never committed)",
+        "layerCounts": {
+          "8": 3424,
+          "osm-service": 9313
+        },
+        "layerOrder": [
+          "8 (TIGERweb Local Roads, ordered by OBJECTID)",
+          "osm-service (OpenStreetMap highway=service, in the order the Overpass response listed the ways)"
+        ],
+        "sources": {
+          "tigerLineAllRoads": "https://catalog.data.gov/dataset/tiger-line-shapefile-current-county-mclean-county-il-all-roads",
+          "tigerwebTransportationService": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer",
+          "tigerwebLayer": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8",
+          "openStreetMapOverpass": "https://overpass-api.de/api/interpreter",
+          "openStreetMap": "https://www.openstreetmap.org/copyright"
+        },
+        "boundingBoxWgs84": [
+          -89.2,
+          40.4,
+          -88.9,
+          40.6
+        ],
+        "filters": {
+          "includedMtfcc": [
+            "S1400",
+            "S1640",
+            "S1710",
+            "S1730",
+            "S1780",
+            "S1820"
+          ],
+          "includedOsmHighways": [
+            "service"
+          ],
+          "osmExclusions": "Ways marked access=no or access=private without a bicycle allowance, bicycle=no or bicycle=private, or service=drive-through or emergency_access; ways with fewer than two points."
+        },
+        "queries": {
+          "tigerweb": "{layer}/query?where=MTFCC IN (included classes)&geometry=<bbox>&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,OID,NAME,BASENAME,MTFCC,RTTYP&returnGeometry=true&outSR=4326&f=json&orderByFields=OBJECTID&resultOffset=<n>&resultRecordCount=<page>",
+          "overpass": "[out:json][timeout:120];way[\"highway\"=\"service\"](<south>,<west>,<north>,<east>);out tags geom;"
+        },
+        "extractor": "tools/fetch-tigerweb-access-roads.ps1 in the native repository (git blob 3d5e9a35144e2110eb1b047b91371372e68c6620 at this review)",
+        "perWayTimestamps": "UNKNOWN. The extract carries no per-way source timestamps or OpenStreetMap way versions; only the extractor's run time above. Historical per-way change dates cannot be recovered from this file and are not stated here."
+      },
+      "expectedTransform": {
+        "derivedFrom": "tools/lib/access-package.mjs buildAccessParts applied to the SHA-verified source input above (deterministic: same input bytes, same output bytes)",
+        "scope": "Pins the normalized base roads and the tile index. The index lists every service-road tile by SHA-256, so it pins every service road's identity, geometry and extract order. This is a source-review digest of a deterministic transform; it is not an approval. If the normalization algorithm is changed on purpose these digests must be re-derived and re-reviewed.",
+        "baseSha256": "544b1add4dd62d6efce664c0f3d859ec58b06dd057c3789a2712a73748c40322",
+        "indexSha256": "672e9d1c871121c97896e03fe1825f228a8024ebc386270eba0d8b67008536e0",
+        "tileCount": 440,
+        "tileAssignments": 10323,
+        "localFeatureCount": 9313,
+        "baseFeatureCount": 3424
+      },
+      "nativeBaseline": {
+        "statement": "This is the access extract the native app ships. The architect independently matched the same SHA-256 to the built-local APK asset on 2026-10-02 (3424 TIGER roads, 9313 OpenStreetMap service roads).",
+        "nativeDocumentation": "docs/routing-data-plan.md (native repository) records the 2026-09-27 refresh that produced it."
+      },
+      "reviewId": "native-20260927-original",
+      "status": "historical-reviewed-identity-retained",
+      "availability": "Old raw source remains unavailable; not reconstructed, repinned or claimed equivalent."
+    }
+  ],
+  "freshSourceReviews": [
+    {
+      "reviewId": "web-20261009-original-public-rebuild",
+      "ownerAuthorization": "Jesse explicitly authorized a fresh public-source rebuild and validation in cloud on 2026-10-09 at03:43UTC; this is not recovery of the old restricted raw file.",
+      "reviewedBy": "Codex source-quality review with bounded independent connected Claude subscription review",
+      "independentReview": "Committed review tools 0642354: no confirmed correctness blockers; static review only, distinct from executed validation.",
+      "evidence": "data/access-source-reviews/20261009-public-rebuild.json",
+      "sourceInputSha256": "f7be4a62cf5062147afff3206a5abf538ca02b083a059cf012acfe95cd82e033",
+      "orderedResponsesSha256": "a43a2e95d16ffde88edb1917f8900beeecccf86d40ef188812f5f70893181fb3",
+      "scope": "Fresh source identity and deterministic transform review only. Endpoint routing purpose, attribution, composition approval and publication/rights guards remain intact.",
+      "baselineLimit": "Old raw source unavailable. Comparison authenticates v5 derived base/index/tile bytes and router-visible geometry/name/class/order; old access tags, source timestamps and raw-byte equivalence are unverified."
+    }
+  ]
 }

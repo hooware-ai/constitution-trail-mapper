@@ -23,3 +23,14 @@ After review, the committed source manifest must retain the earlier source ident
 Overpass response order is intentionally preserved, rather than assumed sorted or changed. A response's `osm3s.timestamp_osm_base` identifies its database snapshot; it is not a per-way edit timestamp. TIGER before/after IDs prove selection membership, not that every feature was unchanged during the capture interval. No atomic cross-source snapshot is claimed.
 
 The original exclusion policy admits some conditional/restricted tags such as `access=customers`, `destination` or `permit`; it does not establish public access rights. This review preserves that policy and endpoint-only 600 m routing purpose. ODbL/combined-database questions and public redistribution approval remain unresolved. Fixture and mobile-emulation tests cannot establish physical GPS or field access acceptance.
+
+## Production routing verification
+
+After packaging the reviewed county trails, four reviewed OSM trail additions and the fresh access source:
+
+```sh
+cd webApp
+npx tsx tools/verify-access-review-routing.mts <fresh-input> <v5-dist-data-directory> <report.json>
+```
+
+This uses the real shared Kotlin router and production hash-verifying `AccessLoader`/`AccessSession`. Every tested response must equal the complete fresh-source control. County/OSM endpoint plans and the three-mile loop must produce routes; fresh cold sessions revalidate those routes and three saved routes planned on verified v5 derived roads. Willow closure activation, its still-active state beyond the estimated end, resumed-ride refusal and recalculation are compared. The reviewed loop's actual estimated gap must block ordinary navigation; an endpoint outside coverage must yield no route. These narrow cases do not establish all-route equivalence or field acceptance.

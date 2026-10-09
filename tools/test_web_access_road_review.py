@@ -1,7 +1,11 @@
 """Negative controls for fresh extraction quality checks (no network)."""
 import copy
 import importlib.util
+import json
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 SPEC = importlib.util.spec_from_file_location("access_review", Path(__file__).with_name("fetch-web-access-road-review.py"))
@@ -78,6 +82,18 @@ class RoadReviewTests(unittest.TestCase):
         normalized["sources"]["includedOsmHighways"] = ["residential"]
         with self.assertRaisesRegex(ValueError, "metadata changed"):
             audit(tiger, osm, normalized)
+
+    def test_canonical_serialization_preserves_arrays(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first, second = Path(directory) / "first.json", Path(directory) / "second.json"
+            first.write_text('{"z":1,"features":[{"id":2,"path":[[3,4],[1,2]]},{"id":1}],"a":2}')
+            second.write_text('{"a":2,"features":[{"path":[[3,4],[1,2]],"id":2},{"id":1}],"z":1}')
+            script = Path(__file__).with_name("canonicalize-access-road-review.py")
+            for path in (first, second):
+                subprocess.run([sys.executable, str(script), str(path)], check=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(json.loads(first.read_text())["features"],
+                             [{"id": 2, "path": [[3, 4], [1, 2]]}, {"id": 1}])
 
     def test_layer_order(self):
         tiger, osm, normalized = self.source()
