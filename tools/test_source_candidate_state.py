@@ -5,7 +5,7 @@ import multiprocessing
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from source_candidate_state import run_serialized, load_transition
 from source_candidates import digest
@@ -36,6 +36,42 @@ def crash_worker(store):
 
 
 class StateTests(unittest.TestCase):
+    def test_store_setup_errors_return_failure_without_source_work(self):
+        for error in (PermissionError('private path detail'), OSError('disk detail')):
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as store:
+                run(store)
+                before = {str(p): p.read_bytes() for p in Path(store).rglob('*') if p.is_file()}
+                transport, observer = Mock(), Mock()
+                with patch('source_candidate_state.durable_directory', side_effect=error):
+                    result = run(store, now=180, transport=transport, observer=observer)
+                self.assertEqual(result, {
+                    'schemaVersion': 1, 'sourceId': SOURCE['sourceId'], 'status': 'failed',
+                    'staleEvidence': True, 'candidate': None,
+                    'retrievedAtUtc': '2026-10-09T00:00:00Z',
+                    'acceptedSnapshotId': 'accepted-never-replaced',
+                    'failureType': type(error).__name__,
+                })
+                transport.assert_not_called()
+                observer.assert_not_called()
+                after = {str(p): p.read_bytes() for p in Path(store).rglob('*') if p.is_file()}
+                self.assertEqual(before, after)
+
+    def test_store_under_regular_file_returns_failure_without_fetch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory) / 'not-a-directory'
+            parent.write_bytes(b'keep existing file')
+            transport, observer = Mock(), Mock()
+            result = run(parent / 'store', transport=transport, observer=observer)
+            self.assertEqual(result['status'], 'failed')
+            self.assertEqual(result['failureType'], 'NotADirectoryError')
+            self.assertTrue(result['staleEvidence'])
+            self.assertIsNone(result['candidate'])
+            self.assertNotIn('observation', result)
+            self.assertNotIn('transition', result)
+            transport.assert_not_called()
+            observer.assert_not_called()
+            self.assertEqual(parent.read_bytes(), b'keep existing file')
+
     def test_candidate_directory_sync_failure_cannot_create_successful_reference(self):
         from source_candidates import fsync_directory
         synced = []

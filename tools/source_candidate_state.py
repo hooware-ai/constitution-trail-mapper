@@ -144,14 +144,14 @@ def run_serialized(source, *, store, now_seconds, retrieved_at_utc, accepted=Non
     if (type(now_seconds) not in (int, float) or not math.isfinite(now_seconds)
             or now_seconds < 0):
         raise ValueError('Invalid attempt clock')
-    root = Path(store)
-    durable_directory(root)
-    key = digest(source['sourceId'])
-    state_path, lock_path = root / (key + '.state.json'), root / (key + '.lock')
     failure = dict(schemaVersion=1, sourceId=source['sourceId'], status='failed',
                    staleEvidence=True, candidate=None, retrievedAtUtc=retrieved_at_utc,
                    acceptedSnapshotId=(accepted or {}).get('candidateId'))
     try:
+        root = Path(store)
+        durable_directory(root)
+        key = digest(source['sourceId'])
+        state_path, lock_path = root / (key + '.state.json'), root / (key + '.lock')
         with source_lock(lock_path), source_lock(root / 'retention.lock'):
             exists = state_path.exists()
             state = json.loads(state_path.read_bytes()) if exists else {
