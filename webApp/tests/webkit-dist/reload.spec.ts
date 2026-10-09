@@ -35,6 +35,13 @@ test("[sim-device] reload before initial map-worker responses restores the ride 
     await simulateDevice(page);
     await planPoint(page);
     await startButton(page).click();
+    await expect(
+      page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
+    ).toBeVisible();
+    // Device events are delivered only after the app has subscribed; clicking Start can precede that effect.
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__device.watching()))
+      .toBe(1);
     await fix(page, 40.51, -88.95);
     await expect(page.locator(".guidance.navigating")).toBeVisible();
     await expect(page.locator(".ride-map-canvas")).toBeVisible();
@@ -54,6 +61,9 @@ test("[sim-device] reload before initial map-worker responses restores the ride 
       page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".guidance.navigating")).not.toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__device.watching()))
+      .toBe(1);
     await fix(page, 40.502, -88.95);
     await expect(page.locator(".guidance.navigating")).toBeVisible();
     await expect(page.locator(".ride-map-canvas")).toHaveAttribute(
