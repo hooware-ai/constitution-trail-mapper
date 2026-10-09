@@ -77,6 +77,9 @@ jobs:
       - name: Point Gradle at the runner's Android SDK
         run: echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
 
+      - name: Verify offline source candidates and durable rate controls
+        run: python3 -m unittest discover -s tools -p 'test_source*.py' -v
+
       - name: Install locked dependencies and Chromium
         working-directory: webApp
         run: |

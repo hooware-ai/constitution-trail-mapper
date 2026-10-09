@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 1,
+  "productionEnabled": false,
+  "scope": "Reviewable source registry proposal referencing existing authoritative manifests. No scheduling, service-policy or composition approval is implied. Specific reviews #1/#2 remain authoritative; proposed trails remain excluded.",
+  "sources": [
+    {
+      "sourceId": "county-trails",
+      "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/8?f=json",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "CC BY 4.0",
+      "termsUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 60,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 32,
+        "maxFeatures": 20000,
+        "batchSize": 1000,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "254 reviewed features only; operational status requires transient layers 54/16; no new routing IDs.",
+      "manifestPath": "data/web-reviewed-trails.manifest.json",
+      "reviewedOn": "2026-09-28",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history.",
+      "adapter": "county-trails",
+      "costQuota": "No paid service or credential configured. Proposed request/byte budgets only; source rate tolerance is unapproved."
+    },
+    {
+      "sourceId": "county-addresses",
+      "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0?f=json",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "CC BY 4.0 stated by item; prototype only",
+      "termsUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 120,
+        "maxBytes": 67108864,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 64,
+        "maxFeatures": 100000,
+        "batchSize": 2000,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Prototype pin is not composition or publication approval; no user address searches collected.",
+      "manifestPath": "data/web-address-index.manifest.json",
+      "reviewedOn": null,
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history.",
+      "adapter": "county-addresses",
+      "costQuota": "No paid service or credential configured. Proposed request/byte budgets only; source rate tolerance is unapproved."
+    },
+    {
+      "sourceId": "tiger-access-roads",
+      "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation/MapServer/8?f=json",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "Census terms require review under #47",
+      "termsUrl": "https://www.census.gov/about/policies/open-gov/open-data.html",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 60,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 32,
+        "maxFeatures": 20000,
+        "batchSize": 1000,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Endpoint access only; not a through-route or closure-detour network.",
+      "manifestPath": "data/web-access-roads.manifest.json",
+      "reviewedOn": null,
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history.",
+      "adapter": "tiger-access-roads",
+      "costQuota": "No paid service or credential configured. Proposed request/byte budgets only; source rate tolerance is unapproved."
+    },
+    {
+      "sourceId": "osm-reviewed-paths",
+      "url": "https://api.openstreetmap.org/api/0.6/way/",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "ODbL 1.0",
+      "termsUrl": "https://www.openstreetmap.org/copyright",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 60,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 32,
+        "maxFeatures": 20000,
+        "batchSize": 1000,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Only manifest-reviewed way IDs through the established OSM full-way API; hash-only candidates; service-policy approval still required.",
+      "manifestPath": "data/verified-trail-additions.manifest.json",
+      "reviewedOn": "2026-09-07",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history.",
+      "adapter": "osm-reviewed-paths",
+      "costQuota": "No paid service or credential configured. Proposed request/byte budgets only; source rate tolerance is unapproved."
+    },
+    {
+      "sourceId": "osm-service-roads",
+      "url": "https://overpass-api.de/api/interpreter",
+      "geographicScope": "McLean County, Illinois; scope pinned by referenced manifest",
+      "license": "ODbL 1.0",
+      "termsUrl": "https://www.openstreetmap.org/copyright",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 60,
+        "maxBytes": 33554432,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 32,
+        "maxFeatures": 20000,
+        "batchSize": 1000,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending #47",
+      "limitations": "Fixed existing McLean bounding-box query, hash-only candidates; no raw retention or admission; service-policy and composition approvals unresolved.",
+      "manifestPath": "data/web-access-roads.manifest.json",
+      "reviewedOn": null,
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Store hashes and stable public IDs only; do not persist raw response, geometry, personal attributes or user location/history.",
+      "adapter": "osm-service-roads",
+      "costQuota": "No paid service or credential configured. Proposed request/byte budgets only; source rate tolerance is unapproved."
+    },
+    {
+      "sourceId": "notice-hershey-initial",
+      "url": "https://www.bloomingtonil.gov/Home/Components/News/News/10939/1394",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.bloomingtonil.gov/Home/Components/News/News/10939/1394",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "Initial notice text retrieved; current completion unverified.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "hershey-initial",
+      "noticeKeywords": [
+        "Hershey"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-hershey-update",
+      "url": "https://www.bloomingtonil.gov/Home/Components/News/News/10979/1394",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.bloomingtonil.gov/Home/Components/News/News/10979/1394",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "Full newer page returned 403; indexed text does not prove completion.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "hershey-update",
+      "noticeKeywords": [
+        "Hershey"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-collegiate-repaving",
+      "url": "https://www.normalil.gov/m/newsflash/Home/Detail/3345",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.normalil.gov/m/newsflash/Home/Detail/3345",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "October 9 retrieval failed 404/403; October 2 estimate is not completion.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "collegiate-repaving",
+      "noticeKeywords": [
+        "Collegiate",
+        "Fairview"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-camelback",
+      "url": "https://www.normalil.gov/CivicAlerts.aspx?AID=3353",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.normalil.gov/CivicAlerts.aspx?AID=3353",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "Mixed October 9 retrieval results; October 6 estimate is not reopening.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "camelback",
+      "noticeKeywords": [
+        "Camelback"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-raab-paving",
+      "url": "https://www.normalil.gov/CivicAlerts.aspx?AID=3357",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.normalil.gov/CivicAlerts.aspx?AID=3357",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "October 9 full retrieval failed 404/403; road lane dates do not establish trail access.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "raab-paving",
+      "noticeKeywords": [
+        "Raab"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-normal-storm",
+      "url": "https://www.normalil.gov/m/newsflash/Archive/Item/3319?arcId=6477",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.normalil.gov/m/newsflash/Archive/Item/3319?arcId=6477",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "Historical intermittent closures; no later explicit all-clear established.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "normal-storm",
+      "noticeKeywords": [
+        "storm",
+        "tree"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-linden-bridge-bid",
+      "url": "https://www.normalil.gov/bids.aspx?bidID=541",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.normalil.gov/bids.aspx?bidID=541",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "Closed procurement status is not trail access; no closure schedule verified.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "linden-bridge-bid",
+      "noticeKeywords": [
+        "Linden"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-uptown-initial",
+      "url": "https://www.normalil.gov/m/newsflash/Home/Detail/3337",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://www.normalil.gov/m/newsflash/Home/Detail/3337",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "Initial-phase current status and precise endpoints unresolved; retain Phoenix exclusion.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "uptown-initial",
+      "noticeKeywords": [
+        "Parkinson",
+        "Vernon"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-uptown-detour-update",
+      "url": "https://engage.zencity.io/normal-il/en-US/projects/the-underpass/updates/construction-closes-parkinson-street-parking-lot-creates-constitution-trail-detour",
+      "geographicScope": "Bloomington/Normal, Illinois; named official notice only",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://engage.zencity.io/normal-il/en-US/projects/the-underpass/updates/construction-closes-parkinson-street-parking-lot-creates-constitution-trail-detour",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 1,
+        "batchSize": 1,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "No displayed publication date; corroborates long-term detour, not initial-phase reopening.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-09",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only source notice ID and hashes persist; no page text, user location/history or arbitrary attributes.",
+      "adapter": "official-notice",
+      "noticeId": "uptown-detour-update",
+      "noticeKeywords": [
+        "Parkinson",
+        "Constitution"
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md"
+    },
+    {
+      "sourceId": "notice-city-gis-road-closures",
+      "url": "https://services3.arcgis.com/ZntpsilxOye7y1YF/arcgis/rest/services/RoadClosures_public_7e10ca6b3d3a4e6fa88caf9918ade300/FeatureServer/1/query?objectIds=841%2C916%2C919%2C922%2C923&outFields=*&outSR=4326&f=json",
+      "geographicScope": "Only reviewed City GIS objects 841,916,919,922,923; not a general closure feed",
+      "license": "No redistribution grant inferred; hash-only review evidence",
+      "termsUrl": "https://services3.arcgis.com/ZntpsilxOye7y1YF/arcgis/rest/services/RoadClosures_public_7e10ca6b3d3a4e6fa88caf9918ade300/FeatureServer/1/query?objectIds=841%2C916%2C919%2C922%2C923&outFields=*&outSR=4326&f=json",
+      "expectedUpdateCadence": "Not published; review required before scheduling",
+      "fetchLimits": {
+        "timeoutSeconds": 15,
+        "maxBytes": 2097152,
+        "minIntervalSeconds": 86400,
+        "maxRequestsPerRun": 1,
+        "maxFeatures": 5,
+        "batchSize": 5,
+        "minRequestIntervalSeconds": 1
+      },
+      "reviewOwner": "Repository owner; assignment pending",
+      "limitations": "Broad road corridors are informational unless separately mapped and admitted; estimates and disappeared objects never imply reopening.",
+      "manifestPath": "data/web-notice-sources.manifest.json",
+      "reviewedOn": "2026-10-03",
+      "executionApproved": false,
+      "approvalDependencies": [
+        47,
+        48
+      ],
+      "evidencePolicy": "Only public object IDs and hashes persist; no raw geometry, source text or user history.",
+      "adapter": "arcgis-notice",
+      "noticeObjectIds": [
+        841,
+        916,
+        919,
+        922,
+        923
+      ],
+      "costQuota": "No paid service or credential; proposed one-request cap only.",
+      "reviewEvidenceUrl": "docs/web/closure-readiness.md"
+    }
+  ],
+  "retentionLimits": {
+    "maxSnapshots": 256,
+    "maxTransitions": 1024,
+    "maxBytes": 67108864
+  },
+  "retentionPolicy": "Shared local artifact-store caps, enforced by run_serialized under a shared lock. Stop stale at capacity; do not prune accepted/history evidence automatically. Pass these caps explicitly when configuring the offline runner. Production cadence/retention/rollover policy still requires review."
+}
