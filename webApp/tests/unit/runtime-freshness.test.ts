@@ -8,6 +8,7 @@ import {
   assertSafeSuccessor,
   canonical,
   parseRefreshManifest,
+  parseSafetyHistory,
   staleSources,
   type RefreshManifest,
 } from "../../src/runtime/manifest";
@@ -452,4 +453,86 @@ test("in-flight lifecycle invalidation visibly requires a later check", async ()
   assert.equal(runtime.snapshot.successfulCheckAt, REFRESH_NOW);
   assert.equal(await runtime.check("manual"), true);
   assert.equal(runtime.snapshot.error, null);
+});
+
+test("clock rollback preserves structurally valid history but never admits future evidence", async () => {
+  const { manifest } = await refreshFixture();
+  const floor = { ...manifest, sequence: 2 };
+  let now = REFRESH_NOW - 86400000;
+  let next = manifest;
+  let reads = 0,
+    prepares = 0;
+  assert.equal(parseSafetyHistory(floor).sequence, 2);
+  assert.throws(() =>
+    parseSafetyHistory({ ...floor, releasedAtUtc: "unreadable" }),
+  );
+  assert.throws(() => parseRefreshManifest(floor, now), /device.*clock/);
+  const runtime = new RuntimeFreshness<number>({
+    now: () => now,
+    readSafetyFloor: async () => floor,
+    readManifest: async () => {
+      reads++;
+      return next;
+    },
+    prepare: async (m) => {
+      prepares++;
+      return { manifest: m, value: m.sequence, dispose() {} };
+    },
+  });
+  assert.equal(await runtime.check("launch"), false);
+  assert.match(runtime.snapshot.error!, /device.*clock/);
+  assert.equal(reads, 0);
+  assert.equal(prepares, 0);
+  assert.equal(runtime.accepted, null);
+  now = REFRESH_NOW;
+  assert.equal(await runtime.check("manual"), false);
+  assert.match(runtime.snapshot.error!, /older release/);
+  next = { ...floor, sequence: 3, closures: [] };
+  assert.equal(await runtime.check("manual"), false);
+  assert.match(runtime.snapshot.error!, /Known closure/);
+  next = floor;
+  assert.equal(await runtime.check("manual"), true);
+  assert.equal(prepares, 1);
+  now = REFRESH_NOW - 86400000;
+  assert.equal(
+    await runtime.start(
+      {},
+      async () => ({ canNavigate: true }),
+      () => assert.fail("Start under wrong clock"),
+    ),
+    false,
+  );
+  assert.equal((runtime.accepted as PreparedData<number> | null)?.value, 2);
+  now = REFRESH_NOW;
+  assert.equal(await runtime.check("manual"), true);
+});
+test("history read recovery never reduces the higher in-memory rejection floor", async () => {
+  const { manifest } = await refreshFixture();
+  let stored = { ...manifest, sequence: 3 };
+  let next = stored;
+  let damaged = false;
+  const runtime = new RuntimeFreshness<number>({
+    now: () => REFRESH_NOW,
+    readSafetyFloor: async () => {
+      if (damaged) throw Error("Saved safety history is damaged");
+      return stored;
+    },
+    readManifest: async () => next,
+    prepare: async (m) => ({ manifest: m, value: m.sequence, dispose() {} }),
+  });
+  assert.equal(await runtime.check("launch"), true);
+  damaged = true;
+  assert.equal(await runtime.check("manual"), false);
+  assert.equal(runtime.accepted?.value, 3);
+  damaged = false;
+  stored = manifest;
+  next = manifest;
+  assert.equal(await runtime.check("manual"), false);
+  assert.match(runtime.snapshot.error!, /older release/);
+  next = { ...manifest, sequence: 3, closures: [] };
+  assert.equal(await runtime.check("manual"), false);
+  assert.match(runtime.snapshot.error!, /same release sequence/);
+  next = { ...manifest, sequence: 3 };
+  assert.equal(await runtime.check("manual"), true);
+  assert.equal(runtime.accepted?.value, 3);
 });

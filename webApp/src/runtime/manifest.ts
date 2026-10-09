@@ -53,11 +53,8 @@ const corrupt = (message: string): never => {
   throw new DatasetError("data-corrupt", message);
 };
 
-/** Refresh admission is stricter than private review boot: unapproved candidates are never runtime replacements. */
-export function parseRefreshManifest(
-  raw: unknown,
-  now = Date.now(),
-): RefreshManifest {
+/** Structural metadata validation only. This never authorizes routing or Start. */
+export function parseSafetyHistory(raw: unknown): RefreshManifest {
   if (!object(raw))
     return corrupt("The refresh description is unreadable. Retry the check.");
   if (raw.schema !== "trail-mapper.refresh/1")
@@ -68,8 +65,7 @@ export function parseRefreshManifest(
   if (
     !Number.isSafeInteger(raw.sequence) ||
     raw.sequence < 1 ||
-    !utcTime(raw.releasedAtUtc) ||
-    Date.parse(raw.releasedAtUtc) > now
+    !utcTime(raw.releasedAtUtc)
   )
     return corrupt("The refresh release identity is invalid.");
   parseDatasetRecord(raw.dataset, "public");
@@ -89,10 +85,7 @@ export function parseRefreshManifest(
         utcTime(s.checkedAtUtc) &&
         utcTime(s.reviewedAtUtc) &&
         Number.isSafeInteger(s.staleAfterMs) &&
-        s.staleAfterMs > 0 &&
-        Date.parse(s.checkedAtUtc) <= now &&
-        Date.parse(s.reviewedAtUtc) <= now &&
-        (s.publishedAtUtc === null || Date.parse(s.publishedAtUtc) <= now),
+        s.staleAfterMs > 0,
     ) ||
     !uniqueIds(raw.sources)
   )
@@ -121,14 +114,43 @@ export function parseRefreshManifest(
         typeof r.evidenceUrl === "string" &&
         /^https:\/\/[^\s]+$/.test(r.evidenceUrl) &&
         nonempty(r.reviewedBy) &&
-        utcTime(r.reviewedAtUtc) &&
-        Date.parse(r.reviewedAtUtc) <= now,
+        utcTime(r.reviewedAtUtc),
     ) ||
     new Set(raw.reopenings.map(canonical)).size !== raw.reopenings.length
   )
     return corrupt("The reopening review evidence is invalid.");
   // Detach from caller-owned objects, including source policy and approval fields.
   return structuredClone(raw) as RefreshManifest;
+}
+
+/** Clock disagreement cannot erase an already retained rejection floor. */
+export function assertManifestClock(
+  manifest: RefreshManifest,
+  now: number,
+): void {
+  const times = [
+    manifest.releasedAtUtc,
+    ...manifest.sources.flatMap((source) => [
+      source.checkedAtUtc,
+      source.reviewedAtUtc,
+      ...(source.publishedAtUtc ? [source.publishedAtUtc] : []),
+    ]),
+    ...manifest.reopenings.map((review) => review.reviewedAtUtc),
+  ];
+  if (!Number.isFinite(now) || times.some((time) => Date.parse(time) > now))
+    throw new DatasetError(
+      "data-unavailable",
+      "Release or source evidence is later than this device's clock. Check the device date and time, then check data again. Accepted data and safety history are retained; Start remains blocked.",
+    );
+}
+/** Newly fetched releases require both structural validation and valid device time. */
+export function parseRefreshManifest(
+  raw: unknown,
+  now = Date.now(),
+): RefreshManifest {
+  const manifest = parseSafetyHistory(raw);
+  assertManifestClock(manifest, now);
+  return manifest;
 }
 
 export function canonical(value: unknown): string {

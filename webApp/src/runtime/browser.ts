@@ -2,7 +2,7 @@ import { DatasetError } from "../dataset";
 import {
   assertSafeSuccessor,
   canonical,
-  parseRefreshManifest,
+  parseSafetyHistory,
   type RefreshManifest,
 } from "./manifest";
 import type { RuntimeFreshness } from "./freshness";
@@ -107,17 +107,25 @@ export function bindRefreshLifecycle<T>(
 /** Metadata only: persisted history can reject releases, never load or approve routing data. */
 export const SAFETY_FLOOR_KEY = "trail-mapper.refresh-safety-floor/1";
 export async function readSafetyFloor(): Promise<RefreshManifest | null> {
+  let saved: string | null;
   try {
-    const saved = localStorage.getItem(SAFETY_FLOOR_KEY);
-    if (saved === null) return null;
-    const envelope = JSON.parse(saved);
-    if (envelope.schema !== "trail-mapper.refresh-safety-floor/1")
-      throw new Error();
-    return parseRefreshManifest(envelope.manifest);
+    saved = localStorage.getItem(SAFETY_FLOOR_KEY);
   } catch {
     throw new DatasetError(
       "data-unavailable",
-      "Saved safety history could not be read. Keep accepted data and retry before Start.",
+      "Browser storage access is unavailable. Keep this page open, restore storage access, then check data again before Start. Accepted data is retained.",
+    );
+  }
+  if (saved === null) return null;
+  try {
+    const envelope = JSON.parse(saved);
+    if (envelope.schema !== "trail-mapper.refresh-safety-floor/1")
+      throw new Error();
+    return parseSafetyHistory(envelope.manifest);
+  } catch {
+    throw new DatasetError(
+      "data-corrupt",
+      "Saved safety history is damaged. Keep this page open. Start remains blocked until the map maintainer restores intact reviewed safety history; then check data again. Accepted data is retained.",
     );
   }
 }

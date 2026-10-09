@@ -58,6 +58,20 @@ The floor advances after validation, including staged active-ride updates, befor
 adoption. Failed durable writes block Start and preserve accepted data; the tab
 retains its newer in-memory rejection floor until a successful retry.
 
+Saved history uses structural/schema/hash/timestamp validation without comparing
+its dates to the current clock. The rejection floor is retained before a separate
+clock check; a rolled-back clock produces an actionable date/time message and
+blocks fresh admission/Start, rather than reporting valid history as corrupt.
+Correcting time does not authorize rollback, closure loss or cached routing data.
+Damaged JSON and unavailable browser storage have distinct recovery messages.
+Neither clears, resets or overwrites an unreadable floor: restore storage access
+or have the map maintainer restore intact reviewed history, then perform a fresh
+network/data check. A lower restored copy cannot reduce a live tab's higher floor.
+For a reopened tab with unrecoverable history, authoritative reviewed recovery
+and retained sequences/transitions remain required before activation; clearing
+site data is not a recovery authorization. No reset button or history bypass is
+provided.
+
 Web Locks serializes compare-and-write across tabs; storage is reread inside the
 lock and verified afterward. Unavailable locks, corrupt/unreadable storage or quota
 failure fails visibly. Clearing site storage erases this local protection; an
@@ -99,8 +113,14 @@ endpoint, existing source/provider/package/release gates, #108 integration and
 No merge, deployment, notifications, production monitoring, new credentials,
 paid service or permissions are enabled by this draft.
 
-Latest validation: **636 web unit tests passed, zero failed/skipped**, including
-22 focused runtime controls; **26 runtime browser controls passed, zero
-failed/skipped**, 13 each in Chromium and WebKit with the dependency core above.
+Latest validation: **638 web unit tests passed, zero failed/skipped**, including
+24 focused runtime controls; **30 runtime browser controls passed, zero
+failed/skipped**, 15 each in Chromium and WebKit with the dependency core above.
 TypeScript, focused Prettier, app build/provenance and distribution audit pass.
 The build remains private synthetic review output with public release blocked.
+
+PR111 current `191ef69e` tightens the complete descriptor schema (all fields,
+finite coordinate pairs, explicit nullable/default fields). Its bridge is unchanged
+from the dependency core above. Runtime hashes the exact complete descriptors;
+review artifacts still require authoritative release sequences and retained
+transition history before any endpoint can be admitted.

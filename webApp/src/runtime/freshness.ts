@@ -1,6 +1,8 @@
 import { DatasetError } from "../dataset";
 import {
   assertSafeSuccessor,
+  assertManifestClock,
+  parseSafetyHistory,
   canonical,
   parseRefreshManifest,
   staleSources,
@@ -145,7 +147,7 @@ export class RuntimeFreshness<T> {
             );
           const storedFloor = await this.deps.readSafetyFloor?.();
           if (storedFloor) {
-            const floor = parseRefreshManifest(storedFloor, this.now());
+            const floor = parseSafetyHistory(storedFloor);
             if (this.safetyFloor && floor.sequence < this.safetyFloor.sequence)
               assertSafeSuccessor(floor, this.safetyFloor);
             else {
@@ -154,6 +156,8 @@ export class RuntimeFreshness<T> {
               this.safetyFloor = floor;
             }
           }
+          if (this.safetyFloor)
+            assertManifestClock(this.safetyFloor, this.now());
           const manifest = parseRefreshManifest(
             await this.deps.readManifest(abort.signal),
             this.now(),

@@ -284,3 +284,99 @@ test("long horizon freshness timer rearms beyond browser timeout limit", async (
     "Source evidence is stale",
   );
 });
+test("clock rollback and reload preserve floor; correcting time still rejects unsafe releases", async ({
+  page,
+  context,
+}) => {
+  const s = await serve(context);
+  await open(page);
+  const next = { ...s.fixture.manifest, sequence: 2 };
+  s.next(next);
+  expect(await api(page, "check()")).toBe(true);
+  const floor = await page.evaluate(() =>
+    localStorage.getItem("trail-mapper.refresh-safety-floor/1"),
+  );
+  await api(page, "active(true)");
+  await page.clock.setSystemTime(REFRESH_NOW - 86400000);
+  expect(await api(page, "check()")).toBe(false);
+  await expect(page.getByRole("alert")).toContainText("device's clock");
+  expect(await api(page, "accepted().sequence")).toBe(2);
+  expect(await api(page, "state().activeRide")).toBe(true);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("trail-mapper.refresh-safety-floor/1"),
+    ),
+  ).toBe(floor);
+  await page.reload();
+  await expect
+    .poll(() => api(page, "state().checking"), { timeout: 20000 })
+    .toBe(false);
+  await expect(page.getByRole("alert")).toContainText("device's clock");
+  expect(await api(page, "accepted()")).toBeNull();
+  expect(await api(page, "start()")).toBe(false);
+  await page.clock.setSystemTime(REFRESH_NOW);
+  s.next(s.fixture.manifest);
+  expect(await api(page, "check()")).toBe(false);
+  await expect(page.getByRole("alert")).toContainText("older release");
+  s.next({ ...next, sequence: 3, closures: [] });
+  expect(await api(page, "check()")).toBe(false);
+  await expect(page.getByRole("alert")).toContainText("Known closure");
+  s.next(next);
+  expect(await api(page, "start()")).toBe(true);
+  expect(await api(page, "accepted().sequence")).toBe(2);
+});
+test("damaged or unavailable history fails closed and intact restoration needs fresh validated bytes", async ({
+  page,
+  context,
+}) => {
+  const s = await serve(context);
+  await open(page);
+  s.next({ ...s.fixture.manifest, sequence: 2 });
+  expect(await api(page, "check()")).toBe(true);
+  const floor = await page.evaluate(() =>
+    localStorage.getItem("trail-mapper.refresh-safety-floor/1"),
+  );
+  await page.evaluate(() =>
+    localStorage.setItem("trail-mapper.refresh-safety-floor/1", "{interrupted"),
+  );
+  expect(await api(page, "start()")).toBe(false);
+  await expect(page.getByRole("alert")).toContainText("history is damaged");
+  expect(await api(page, "accepted().sequence")).toBe(2);
+  await page.reload();
+  await expect
+    .poll(() => api(page, "state().checking"), { timeout: 20000 })
+    .toBe(false);
+  await expect(page.getByRole("alert")).toContainText("history is damaged");
+  expect(await api(page, "accepted()")).toBeNull();
+  await page.evaluate(() => {
+    const get = Storage.prototype.getItem;
+    Object.assign(window, {
+      restoreRead: () => (Storage.prototype.getItem = get),
+    });
+    Storage.prototype.getItem = function (key) {
+      if (key.includes("safety-floor"))
+        throw new DOMException("Blocked", "SecurityError");
+      return get.call(this, key);
+    };
+  });
+  expect(await api(page, "check()")).toBe(false);
+  await expect(page.getByRole("alert")).toContainText(
+    "storage access is unavailable",
+  );
+  await page.evaluate(() => (window as any).restoreRead());
+  await page.evaluate(
+    (saved) =>
+      localStorage.setItem("trail-mapper.refresh-safety-floor/1", saved!),
+    floor,
+  );
+  s.next(s.fixture.manifest);
+  expect(await api(page, "check()")).toBe(false);
+  await expect(page.getByRole("alert")).toContainText("older release");
+  s.next({ ...s.fixture.manifest, sequence: 2 });
+  s.corrupt(true);
+  expect(await api(page, "start()")).toBe(false);
+  expect(await api(page, "accepted()")).toBeNull();
+  s.corrupt(false);
+  expect(await api(page, "start()")).toBe(true);
+  expect(await api(page, "accepted().sequence")).toBe(2);
+});
