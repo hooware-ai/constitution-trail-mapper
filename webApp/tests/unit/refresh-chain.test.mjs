@@ -242,6 +242,25 @@ test("genuine current-producer journal → immutable admission → blocked runti
 
 test("genuine chain refuses stale/tampered journal, whole-ledger runtime pins and unapproved history", async () => {
   const c = await chain();
+  const approvalTamper = structuredClone(c.snapshot);
+  approvalTamper.record.approval.approved = false;
+  assert.notEqual(
+    snapshotIdentity(approvalTamper).recordSha256,
+    snapshotIdentity(c.snapshot).recordSha256,
+  );
+  const contradictory = {
+    ...c.review,
+    candidates: structuredClone(c.review.candidates),
+    decisions: structuredClone(c.review.decisions),
+  };
+  contradictory.candidates[0].detection.transition.runDiff.removed = [];
+  contradictory.decisions[0].candidateSha256 = canonicalSha256(
+    contradictory.candidates[0],
+  );
+  assert.throws(
+    () => reviewRefresh(contradictory),
+    /current runDiff does not match retained baseline records/,
+  );
   const stale = {
     ...c.review,
     candidates: structuredClone(c.review.candidates),
@@ -255,12 +274,10 @@ test("genuine chain refuses stale/tampered journal, whole-ledger runtime pins an
     candidates: structuredClone(c.review.candidates),
     decisions: structuredClone(c.review.decisions),
   };
-  const alteredJournal = JSON.parse(
-    changed.candidates[0].detection.currentTransitionText,
-  );
-  alteredJournal.candidateId = "0".repeat(64);
+  const originalJournal = changed.candidates[0].detection.currentTransitionText;
+  const candidateId = JSON.parse(originalJournal).candidateId;
   changed.candidates[0].detection.currentTransitionText =
-    JSON.stringify(alteredJournal);
+    originalJournal.replace(candidateId, "0".repeat(64));
   changed.decisions[0].candidateSha256 = canonicalSha256(changed.candidates[0]);
   assert.throws(
     () => reviewRefresh(changed),
@@ -285,7 +302,11 @@ test("genuine chain refuses stale/tampered journal, whole-ledger runtime pins an
   unapproved.pins.priorManifestSha256 = canonicalSha256(
     unapproved.previousManifest,
   );
-  await assert.rejects(bindRuntimeRelease(unapproved), /approved/i);
+  await assert.rejects(bindRuntimeRelease(unapproved), {
+    code: "data-unapproved",
+    message:
+      "This trail data has not been approved for public use, so it will not be shown.",
+  });
 });
 
 test("genuine explicitly reviewed removal maps ledger hash to descriptor hash but cannot override the actual unchanged compiled core", async () => {
@@ -336,6 +357,7 @@ test("genuine explicitly reviewed removal maps ledger hash to descriptor hash bu
     closures: result.closures,
     reopenings: structuredClone(result.reopenings),
   };
+  assert.doesNotThrow(() => assertSafeSuccessor(c.previousManifest, unsafe));
   unsafe.reopenings.at(-1).fromContentSha256 = candidate.supersedesSha256;
   assert.throws(
     () => assertSafeSuccessor(c.previousManifest, unsafe),

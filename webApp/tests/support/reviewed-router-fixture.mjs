@@ -82,20 +82,29 @@ export async function reviewedRouterFixture({
     manifestBytes,
     ...(access ? { accessManifestBytes: access.manifestBytes } : {}),
   };
+  if (approvedSynthetic) {
+    // Build a consistent approved package from self-authored test bytes only.
+    Object.assign(
+      snapshot,
+      await buildPackage({
+        inputText: JSON.stringify(county.input),
+        manifest: county.manifest,
+        manifestBytes,
+        access,
+        approval: {
+          ...county.approval,
+          approved: true,
+          approvedBy: "SELF-AUTHORED TEST FIXTURE ONLY",
+          approvedOn: "2026-01-01",
+          approvedComposition: structuredClone(snapshot.record.composition),
+          blockers: [],
+        },
+      }),
+    );
+  }
   snapshot.parts = Object.fromEntries(
     snapshot.accessFiles.map((part) => [part.file, part.body]),
   );
-  if (approvedSynthetic) {
-    // Only these self-authored test bytes may enter the runtime parser's approved lane.
-    // No private county package or production approval is read or changed.
-    snapshot.record.approval = {
-      approved: true,
-      approvedBy: "SELF-AUTHORED TEST FIXTURE ONLY",
-      approvedOn: "2026-01-01",
-      approvedComposition: structuredClone(snapshot.record.composition),
-      blockers: [],
-    };
-  }
   const ledger = {
     schema: REVIEW_SCHEMA,
     dataset: snapshotIdentity(snapshot),

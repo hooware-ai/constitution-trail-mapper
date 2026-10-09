@@ -8,7 +8,7 @@ Private v12 remains the accepted application release.
 ## Genuine producer and admission chain
 
 The fixture generator pins the reviewed detector and durable state wrapper from main
-`452eccc0fc1016f0012c923e3a4d4b45de8e3c24`. The detector digest is
+`452eccc0fc1016f0012c923e3a4d4b45de8e3c24`. This commit label records the reviewed origin; the two file digests are the executable integrity pins. Verification imports an isolated copy of only those two pinned modules. The detector digest is
 `10da2ac2d74b0a08d317328aba0c23786e60dce5f6cda5b57af1235ed94a1743` and the
 state-wrapper digest is `33183e194d50a3ada5f1ea99ac2732218905b0387952903b202258e07061ed5d`.
 Both guards remain mandatory. The verifier regenerates twice, compares exact bytes
@@ -25,7 +25,7 @@ and unapproved runtime history fail closed. Original history is retained.
 
 The approved dataset lane uses only an explicitly self-authored test package with its
 matching synthetic composition. It reads no private county package and grants no
-production approval. Fixture sequence41→45 is not a Site version or assigned issuer.
+production approval. Fixture sequence 41→45 is not a Site version or assigned issuer.
 An independently reviewed synthetic removal proves the whole-ledger supersession
 maps to the compiled-descriptor hash. Its desired future catalog is a fixture,
 **not a rebuilt target core**: actual unchanged-core admission refuses that removal.
@@ -54,7 +54,7 @@ Use `PLAYWRIGHT_BROWSERS_PATH` when browsers are provisioned in a shared cache.
 An explicit safe `TRAIL_TEST_PORT` may be set; the server owns its port and is never reused.
 No filtering/retry option is accepted by the runner. Expected failures include wrong
 selected commit, dirty source, changed/missing core, changed producer pins and any
-failed/skipped/flaky browser control. Each engine must pass all16 existing controls;
+failed/skipped/flaky browser control. Each engine must pass all 16 existing controls;
 future additions need an explicit count update.
 
 ## Hosted evidence and limits
@@ -62,7 +62,7 @@ future additions need an explicit count update.
 `.github/workflows/web-refresh-regressions.yml` is read-only, secret-free CI on PR/push
 events, with no scheduled trigger or deploy. Each Chromium/WebKit job checks out the
 exact PR head (or selected push/manual SHA), regenerates the producer fixture, builds
-its own core and runs the chain plus all16 existing runtime controls. The strict
+its own core and runs the chain plus all 16 existing runtime controls. The strict
 runner verifies the selected clean source and core before and after the browsers,
 records full reports with digests under `dist-report/runtime-controls`, and refuses
 skips, retries, flaky passes, global errors or incomplete results. Existing release,

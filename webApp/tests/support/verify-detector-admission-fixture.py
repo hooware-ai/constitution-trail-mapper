@@ -20,9 +20,13 @@ def generate(detector_dir, output):
 
 with tempfile.TemporaryDirectory(prefix="verified-detector-fixture-") as directory:
     temporary = Path(directory)
+    isolated = temporary / "pinned-producer"
+    isolated.mkdir()
+    for filename in ("source_candidates.py", "source_candidate_state.py"):
+        shutil.copyfile(ROOT / "tools" / filename, isolated / filename)
     for name in ("first", "repeat"):
         output = temporary / (name + ".json")
-        result = generate(ROOT / "tools", output)
+        result = generate(isolated, output)
         if result.returncode or output.read_bytes() != EXPECTED.read_bytes():
             raise SystemExit("Pinned genuine producer fixture does not reproduce: " + result.stderr)
 
@@ -35,7 +39,9 @@ with tempfile.TemporaryDirectory(prefix="verified-detector-fixture-") as directo
             file.write(b"\n# Deliberate producer-pin negative control.\n")
         output = altered / "refused.json"
         result = generate(altered, output)
-        if not result.returncode or "differs from" not in result.stderr or output.exists():
+        expected_error = ("Producer differs from the pinned reviewed detector implementation"
+                          if module == "source_candidates.py" else "State producer differs from pinned implementation")
+        if not result.returncode or expected_error not in result.stderr or output.exists():
             raise SystemExit("Changed producer was not refused before fixture generation: " + module)
 
 print(json.dumps({"fixtureReproductions": 2, "changedProducerRefusals": 2,
