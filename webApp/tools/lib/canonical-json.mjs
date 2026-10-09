@@ -30,7 +30,7 @@ export function toPlain(tree) {
   return tree;
 }
 
-const codePointOrder = (a, b) => {
+export const codePointOrder = (a, b) => {
   const left = [...a],
     right = [...b];
   for (let i = 0; i < Math.min(left.length, right.length); i++) {
