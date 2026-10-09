@@ -495,5 +495,11 @@
       "costQuota": "No paid service or credential; proposed one-request cap only.",
       "reviewEvidenceUrl": "docs/web/closure-readiness.md"
     }
-  ]
+  ],
+  "retentionLimits": {
+    "maxSnapshots": 256,
+    "maxTransitions": 1024,
+    "maxBytes": 67108864
+  },
+  "retentionPolicy": "Shared local artifact-store caps, enforced by run_serialized under a shared lock. Stop stale at capacity; do not prune accepted/history evidence automatically. Pass these caps explicitly when configuring the offline runner. Production cadence/retention/rollover policy still requires review."
 }

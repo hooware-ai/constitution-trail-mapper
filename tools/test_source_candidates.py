@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+import source_candidates
 from source_candidates import digest, observe, read_bounded, validate_source
 
 SOURCE = {"sourceId": "synthetic", "url": "https://example.invalid/notices",
@@ -28,6 +30,21 @@ def parser(raw):
 
 
 class CandidatesTests(unittest.TestCase):
+    def test_provenance_is_checked_after_publication_reread(self):
+        original = source_candidates.immutable_write
+        def corrupt_after_write(directory, candidate, capacity=None):
+            path = original(directory, candidate, capacity)
+            value = json.loads(path.read_bytes())
+            value['retrievedAtUtc'] = '2000-01-01T00:00:00Z'
+            path.write_text(json.dumps(value))
+            return path
+        with tempfile.TemporaryDirectory() as directory:
+            with patch('source_candidates.immutable_write', side_effect=corrupt_after_write):
+                result = self.run_source(directory=directory)
+            self.assertEqual(result['status'], 'failed')
+            self.assertIsNone(result['candidate'])
+            self.assertNotIn('observation', result)
+
     def run_source(self, raw=b'{"notices":{"a":"closed"}}', **kwargs):
         return observe(SOURCE, transport=lambda *args: Response(raw), parser=parser,
                        parser_version=kwargs.pop("parser_version", "1"), schema_version=1,

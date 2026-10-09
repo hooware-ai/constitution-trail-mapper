@@ -41,11 +41,12 @@ result = run_serialized(
 ```
 
 The POSIX wrapper hashes source IDs for filenames and retains lock inodes. It
-holds `flock` across reservation, fetching and completion, durably writes the
+holds per-source and shared-store `flock` across reservation, fetching and completion, durably writes the
 attempt reservation **before** transport, and leaves that cooldown/stale state
 in place after a process crash. Failed fetches retain the previous observation.
 Rate-limited runs do not extend the cooldown; a backwards clock fails closed.
-Corrupt state or reservation-write failure prevents fetching. All processes must
+Corrupt state or reservation-write failure prevents fetching. Persisted state adds
+`stateSha256`, covering the entire state except that field. Every read verifies it. All processes must
 use the same trusted local store. This is local process coordination, not a
 multi-host lock or a scheduler. Windows requires a separately reviewed lock
 implementation; this wrapper and its hosted tests target the existing Linux lane.
@@ -148,6 +149,67 @@ Adapters add its `components` field for verified per-request conditional reuse.
 Admission owns approval/replacement of accepted snapshots; runtime consumes only
 accepted inputs. No module writes accepted manifests, packaged datasets, closure
 rules, native files or release configuration.
+
+
+## Durable current transitions and bounded retention
+
+The candidate contract and `candidateId = SHA256(identity)` remain schema version 1.
+A→B→A must not rewrite A's first-observation `diff`, parent or retrieval timestamp.
+`run_serialized` now persists an immutable **current transition** separately under
+`transitions/<transitionId>.json`, then references it in `state.lastTransitionId`.
+Successful results add `transition` and `transitionId`; their `runDiff` is this
+transition's diff. Failures retain the last successful observation/transition and
+record safe failure type/staleness in the current state; skips do not add journals.
+
+The transition has `schemaVersion: 1`, `sourceId`, `candidateId`,
+`parentCandidateId`, `candidateProvenanceSha256`, `parentProvenanceSha256`, current
+`retrievedAtUtc`, `attemptedAtSeconds`, `diff`, `status`, `changeKind`, and
+`observationOnly`. `transitionId` hashes the complete transition excluding itself.
+`changeKind` is `initial`, `no-change`, `records`, `contract`, or `provenance-only`.
+Both snapshot identities/provenance, filename IDs, current diff and classification
+are revalidated when loading a transition. State also binds the transition to its
+last successful attempt/retrieval fields. Admission should read this verified
+current transition plus its bound snapshot/evidence bundle, never substitute
+A's first diff for a later B→A event or scan orphan snapshots as complete runs.
+
+Snapshots and transitions fsync their files and containing directories before
+success; new directory names are also synced in their parents. No-change paths,
+including 304 and cooldown checks in the state wrapper, verify referenced candidate
+and transition files. Missing/corrupt evidence **refuses the run stale before
+fetching**, rather than silently returning no-change or guessing old provenance.
+The low-level `observe` also checks referenced candidates whenever given a directory.
+Every candidate reread checks full `provenanceSha256`, not just identity/record
+hashes. Aggregate component key sets must equal `componentHashes` exactly, and
+all component observations must pass integrity/source association checks.
+
+Older successful local stores without a state hash/current transition are not
+silently migrated: they fail stale. Repair/reseed requires a separately reviewed
+permitted evidence replay; accepted snapshots stay separate and are never reset.
+A partial publication can leave an unreferenced valid snapshot/transition; it
+cannot advance state. Retrying verifies those bytes and durably publishes its
+current transition before completing state.
+
+Overpass's moving `timestamp_osm_base` intentionally changes exact response hashes
+and `sourceTimes` even when all record hashes remain identical. The transition
+then records `changeKind: "provenance-only"` and `observationOnly: true` with an
+empty record diff. Keep that exact provenance. Observation-only is not fresh
+closure/admission evidence, does not reopen a route, and does not update accepted
+review dates. The immutable candidate keeps `requiresReview: true`; this
+classification does not grant approval or prove the source provided no other
+meaningful change. Parser/schema/registry changes remain `contract` review changes.
+
+The wrapper enforces reviewable **shared-store artifact** caps, also recorded at
+registry `retentionLimits`: 256 snapshots, 1,024 successful-run transitions and
+64 MiB of candidate/transition files (including orphan temporary bytes). Pass
+`retention_limits` explicitly to configure them. A shared-store lock serializes
+quota checks/publication across sources; the temporary/link budget is reserved
+conservatively before writes. At capacity, stop stale without replacing accepted
+or last-successful observations. No automatic deletion or loss of diff ancestry.
+These caps bound source-timestamp churn; production cadence, archival/rollover
+and retention policy remain an explicit review gate. Live state files are one
+bounded-current-state file per configured source, not a raw-body/history archive.
+The low-level writer alone does not enforce a shared-store quota; recurring
+callers must use `run_serialized`.
 
 ## Offline verification
 

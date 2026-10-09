@@ -7,16 +7,16 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from source_candidate_state import run_serialized
+from source_candidate_state import run_serialized, load_transition
 from source_candidates import digest
 from test_source_candidates import SOURCE, Response, parser
 
 
-def run(store, now=120, transport=None):
-    return run_serialized(SOURCE, store=store, now_seconds=now, retrieved_at_utc='2026-10-09T00:00:00Z',
+def run(store, now=120, transport=None, retrieved_at='2026-10-09T00:00:00Z', **kwargs):
+    return run_serialized(SOURCE, store=store, now_seconds=now, retrieved_at_utc=retrieved_at,
                           transport=transport or (lambda *args: Response(b'{"notices":{"a":"closed"}}')),
                           parser=parser, parser_version='1', schema_version=1,
-                          accepted={'candidateId': 'accepted-never-replaced'})
+                          accepted={'candidateId': 'accepted-never-replaced'}, **kwargs)
 
 
 def parallel_worker(store, started, release, queue):
@@ -36,6 +36,121 @@ def crash_worker(store):
 
 
 class StateTests(unittest.TestCase):
+    def test_candidate_directory_sync_failure_cannot_create_successful_reference(self):
+        from source_candidates import fsync_directory
+        synced = []
+        def sync(directory):
+            synced.append(Path(directory).name)
+            if Path(directory).name == 'candidates':
+                raise OSError('directory sync failed')
+            fsync_directory(directory)
+        with tempfile.TemporaryDirectory() as store:
+            with patch('source_candidates.fsync_directory', side_effect=sync):
+                failed = run(store)
+            self.assertEqual(failed['status'], 'failed')
+            state = json.loads(next(Path(store).glob('*.state.json')).read_bytes())
+            self.assertIsNone(state['observation'])
+            self.assertIsNone(state['lastTransitionId'])
+            self.assertTrue(state['staleEvidence'])
+            self.assertIn('candidates', synced)
+            self.assertEqual(run(store, now=180)['status'], 'candidate')
+
+    def test_corrupt_or_missing_transition_and_rate_metadata_block_fetch(self):
+        for damage in ('missing', 'diff', 'clock'):
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as store:
+                first = run(store)
+                state_path = next(Path(store).glob('*.state.json'))
+                state = json.loads(state_path.read_bytes())
+                path = Path(store) / 'transitions' / (first['transitionId'] + '.json')
+                if damage == 'missing':
+                    path.unlink()
+                elif damage == 'clock':
+                    state['lastAttemptSeconds'] = 0
+                    state_path.write_text(json.dumps(state))
+                else:
+                    transition = json.loads(path.read_bytes())
+                    transition['diff']['added'] = []
+                    path.write_text(json.dumps(transition))
+                calls = []
+                def transport(*args):
+                    calls.append(args)
+                    return Response(b'{"notices":{"a":"closed"}}')
+                self.assertEqual(run(store, now=180, transport=transport)['status'], 'failed')
+                self.assertEqual(calls, [])
+
+    def test_hash_valid_transition_must_match_bound_snapshot_diff(self):
+        with tempfile.TemporaryDirectory() as store:
+            first = run(store)
+            forged = copy.deepcopy(first['transition'])
+            forged['diff']['added'] = []
+            del forged['transitionId']
+            forged['transitionId'] = digest(forged)
+            (Path(store) / 'transitions' / (forged['transitionId'] + '.json')).write_text(json.dumps(forged))
+            with self.assertRaises(ValueError):
+                load_transition(Path(store), forged['transitionId'])
+
+    def test_retention_caps_refuse_growth_without_pruning_or_advancing_observation(self):
+        for limits, changed in (({'maxSnapshots': 1, 'maxTransitions': 5, 'maxBytes': 100000}, True),
+                                ({'maxSnapshots': 5, 'maxTransitions': 1, 'maxBytes': 100000}, False)):
+            with self.subTest(limits=limits), tempfile.TemporaryDirectory() as store:
+                first = run(store, retention_limits=limits)
+                self.assertEqual(first['status'], 'candidate')
+                before = {str(p): p.read_bytes() for group in ('candidates', 'transitions')
+                          for p in (Path(store) / group).glob('*.json')}
+                calls = []
+                def transport(*args):
+                    calls.append(args)
+                    return Response(b'{"notices":{"b":"new"}}' if changed else b'{"notices":{"a":"closed"}}')
+                second = run(store, now=180, retention_limits=limits, transport=transport)
+                self.assertEqual(second['status'], 'failed')
+                self.assertTrue(second['staleEvidence'])
+                if not changed:
+                    self.assertEqual(calls, [])
+                state = json.loads(next(Path(store).glob('*.state.json')).read_bytes())
+                self.assertEqual(state['observation'], first['observation'])
+                self.assertEqual(state['lastTransitionId'], first['transitionId'])
+                after = {str(p): p.read_bytes() for group in ('candidates', 'transitions')
+                         for p in (Path(store) / group).glob('*.json')}
+                self.assertEqual(after, before)
+        with tempfile.TemporaryDirectory() as store:
+            self.assertEqual(run(store, retention_limits={'maxSnapshots': 5, 'maxTransitions': 5, 'maxBytes': 1})['status'], 'failed')
+            self.assertEqual(list((Path(store) / 'candidates').glob('*.json')), [])
+
+    def test_current_transition_survives_a_b_a_restart(self):
+        with tempfile.TemporaryDirectory() as store:
+            first = run(store)
+            second = run(store, now=180, transport=lambda *args: Response(b'{"notices":{"b":"new"}}'))
+            third = run(store, now=240, retrieved_at='2026-10-09T00:02:00Z')
+            self.assertEqual(first['candidate'], third['candidate'])
+            state = json.loads(next(Path(store).glob('*.state.json')).read_bytes())
+            transition = json.loads((Path(store) / 'transitions' / (state['lastTransitionId'] + '.json')).read_bytes())
+            self.assertEqual(transition, third['transition'])
+            self.assertEqual(transition['candidateId'], first['candidate']['candidateId'])
+            self.assertEqual(transition['parentCandidateId'], second['candidate']['candidateId'])
+            self.assertEqual(transition['retrievedAtUtc'], '2026-10-09T00:02:00Z')
+            self.assertEqual(transition['diff'], {'added': ['a'], 'removed': ['b'], 'changed': []})
+
+    def test_missing_or_corrupt_candidate_blocks_unchanged_run(self):
+        for damage in ('missing', 'corrupt'):
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as store:
+                first = run(store)
+                path = Path(store) / 'candidates' / (first['candidate']['candidateId'] + '.json')
+                if damage == 'missing':
+                    path.unlink()
+                else:
+                    candidate = json.loads(path.read_bytes())
+                    candidate['retrievedAtUtc'] = '2000-01-01T00:00:00Z'
+                    path.write_text(json.dumps(candidate))
+                calls = []
+                def transport(*args):
+                    calls.append(args)
+                    return Response(b'{"notices":{"a":"closed"}}')
+                result = run(store, now=180, transport=transport)
+                self.assertEqual(result['status'], 'failed')
+                self.assertTrue(result['staleEvidence'])
+                self.assertIsNone(result['candidate'])
+                self.assertEqual(calls, [])
+
     def test_restart_failure_cooldown_and_clock_rollback(self):
         with tempfile.TemporaryDirectory() as store:
             first = run(store)

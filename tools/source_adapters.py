@@ -89,6 +89,8 @@ class Components:
         self.source, self.transport = source, transport
         self.previous = (previous or {}).get('components', {})
         if previous:
+            if set(self.previous) != set(previous.get('componentHashes', {})):
+                raise ValueError('Aggregate component key set is incomplete')
             for key, component in self.previous.items():
                 validate_observation(component)
                 if previous.get('componentHashes', {}).get(key) != component['contentSha256']:
@@ -290,7 +292,7 @@ def arcgis_notice_parser(source):
 
 def observe_adapter(source, *, transport, manifest, retrieved_at_utc, now_seconds,
                     previous=None, accepted=None, directory=None, monotonic=time.monotonic,
-                    sleeper=time.sleep, parser_version='adapter-1', schema_version=1):
+                    sleeper=time.sleep, parser_version='adapter-1', schema_version=1, capacity=None):
     """Whole-run candidate; any failed component discards all new observations.
 
     Reads approved-source shapes with synthetic/replayed transport by default at
@@ -379,7 +381,8 @@ def observe_adapter(source, *, transport, manifest, retrieved_at_utc, now_second
                          parser=lambda raw: json.loads(raw), parser_version='aggregate-' + parser_version,
                          schema_version=schema_version,
                          retrieved_at_utc=retrieved_at_utc, now_seconds=now_seconds,
-                         previous=previous, accepted=accepted, directory=directory, monotonic=monotonic)
+                         previous=previous, accepted=accepted, directory=directory,
+                         monotonic=monotonic, capacity=capacity)
         if 'observation' in result:
             result['observation']['components'] = parts.observations
         return result

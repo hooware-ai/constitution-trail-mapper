@@ -102,12 +102,81 @@ def read_bounded(response, limits, deadline, monotonic=time.monotonic):
         chunks.append(chunk)
 
 
-def immutable_write(directory, snapshot):
-    """Publish a complete file with no replace; reject any hash-path collision."""
+def fsync_directory(directory):
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def durable_directory(directory):
     directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    target = directory / (snapshot["candidateId"] + ".json")
-    payload = canonical(snapshot) + b"\n"
+    if not directory.exists():
+        durable_directory(directory.parent)
+        directory.mkdir(exist_ok=True)
+        fsync_directory(directory.parent)
+
+
+def record_diff(records, baseline):
+    return {"added": sorted(records.keys() - baseline.keys()),
+            "removed": sorted(baseline.keys() - records.keys()),
+            "changed": sorted(k for k in records.keys() & baseline.keys() if records[k] != baseline[k])}
+
+
+def validate_candidate(candidate):
+    identity = candidate["identity"]
+    if (candidate["schemaVersion"] != 1 or candidate["requiresReview"] is not True
+            or candidate["sourceId"] != identity["sourceId"]
+            or candidate["candidateId"] != digest(identity)
+            or digest(candidate["records"]) != identity["parsedSha256"]):
+        raise ValueError("Candidate integrity failed")
+    provenance = {k: v for k, v in candidate.items() if k != "provenanceSha256"}
+    if digest(provenance) != candidate.get("provenanceSha256"):
+        raise ValueError("Candidate provenance integrity failed")
+    utc_timestamp(candidate["retrievedAtUtc"])
+    if candidate["sourcePublishedAtUtc"] is not None:
+        utc_timestamp(candidate["sourcePublishedAtUtc"])
+    diff = candidate["diff"]
+    if set(diff) != {"added", "removed", "changed"}:
+        raise ValueError("Invalid candidate diff")
+    for values in diff.values():
+        if not isinstance(values, list) or values != sorted(set(values)):
+            raise ValueError("Invalid candidate diff order")
+
+
+def read_document(path, document_id, id_key, validate):
+    if not isinstance(document_id, str) or not re.fullmatch(r"[0-9a-f]{64}", document_id):
+        raise ValueError("Invalid persisted document ID")
+    document = json.loads(Path(path).read_bytes())
+    validate(document)
+    if document[id_key] != document_id:
+        raise ValueError("Persisted document differs from filename")
+    return document
+
+
+def load_candidate(directory, candidate_id, identity=None):
+    candidate = read_document(Path(directory) / (candidate_id + ".json"),
+                              candidate_id, "candidateId", validate_candidate)
+    if identity is not None and candidate["identity"] != identity:
+        raise ValueError("Candidate differs from observation")
+    return candidate
+
+
+def immutable_document(directory, document, id_key, validate, capacity=None):
+    """Publish complete immutable bytes and durably sync the containing directory."""
+    validate(document)
+    directory = Path(directory)
+    durable_directory(directory)
+    document_id = document[id_key]
+    target = directory / (document_id + ".json")
+    if target.exists():
+        read_document(target, document_id, id_key, validate)
+        fsync_directory(directory)
+        return target
+    payload = canonical(document) + b"\n"
+    if capacity is not None:
+        capacity(directory, target, len(payload))
     import tempfile
     fd, name = tempfile.mkstemp(dir=directory)
     try:
@@ -118,16 +187,17 @@ def immutable_write(directory, snapshot):
         try:
             os.link(name, target)
         except FileExistsError:
-            existing = json.loads(target.read_bytes())
-            # Retrieval time may differ; immutable first observation wins.
-            if existing["identity"] != snapshot["identity"]:
-                raise ValueError("Candidate identity collision")
-            provenance = {k: v for k, v in existing.items() if k != "provenanceSha256"}
-            if digest(provenance) != existing.get("provenanceSha256"):
-                raise ValueError("Stored candidate provenance integrity failed")
+            read_document(target, document_id, id_key, validate)
     finally:
         os.unlink(name)
+        # This flushes the published link and temporary-name removal. A failed
+        # directory sync never returns a successful candidate to durable state.
+        fsync_directory(directory)
     return target
+
+
+def immutable_write(directory, snapshot, capacity=None):
+    return immutable_document(directory, snapshot, "candidateId", validate_candidate, capacity)
 
 
 def validate_observation(observation):
@@ -140,6 +210,15 @@ def validate_observation(observation):
     if (digest(observation["records"]) != identity["parsedSha256"]
             or digest(identity) != observation["candidateId"]):
         raise ValueError("Observation integrity failed")
+    if "componentHashes" in observation:
+        components = observation.get("components")
+        if not isinstance(components, dict) or set(components) != set(identity["componentHashes"]):
+            raise ValueError("Aggregate component key set differs from identity")
+        for key, component in components.items():
+            validate_observation(component)
+            if (component["sourceId"] != observation["sourceId"] + ":" + key
+                    or component["contentSha256"] != identity["componentHashes"][key]):
+                raise ValueError("Aggregate component integrity failed")
     return identity
 
 
@@ -154,7 +233,7 @@ def validator(value):
 
 def observe(source, *, transport, parser, parser_version, schema_version,
             retrieved_at_utc, now_seconds, previous=None, accepted=None,
-            last_attempt_seconds=None, directory=None, budget=None, monotonic=time.monotonic):
+            last_attempt_seconds=None, directory=None, budget=None, monotonic=time.monotonic, capacity=None):
     """Return status/candidate/observation. Caller persists rate state even on failure.
 
     parser returns {records: {stable ID: SHA256}, sourcePublishedAtUtc: optional}.
@@ -174,6 +253,8 @@ def observe(source, *, transport, parser, parser_version, schema_version,
             raise PermissionError("Production source execution is disabled")
         if previous:
             validate_observation(previous)
+            if directory is not None:
+                load_candidate(directory, previous["candidateId"], validate_observation(previous))
             if previous["sourceId"] != source["sourceId"]:
                 raise ValueError("Observation belongs to another source")
         headers = {"Accept": source.get("accept", "application/json"),
@@ -229,9 +310,7 @@ def observe(source, *, transport, parser, parser_version, schema_version,
                                etag=validator(response.headers.get("ETag")),
                                lastModified=validator(response.headers.get("Last-Modified")))
             baseline = (previous or {}).get("records", {})
-            diff = {"added": sorted(records.keys() - baseline.keys()),
-                    "removed": sorted(baseline.keys() - records.keys()),
-                    "changed": sorted(k for k in records.keys() & baseline.keys() if records[k] != baseline[k])}
+            diff = record_diff(records, baseline)
             candidate = {"schemaVersion": 1, "candidateId": digest(identity), "identity": identity,
                          "sourceId": source["sourceId"], "retrievedAtUtc": retrieved_at_utc,
                          "sourcePublishedAtUtc": published,
@@ -243,11 +322,8 @@ def observe(source, *, transport, parser, parser_version, schema_version,
             if previous and previous.get("candidateId") == candidate["candidateId"]:
                 return dict(result, status="no-change", observation=observation)
             if directory is not None:
-                path = immutable_write(directory, candidate)
-                candidate = json.loads(path.read_bytes())
-                if (candidate["candidateId"] != digest(candidate["identity"])
-                        or digest(candidate["records"]) != candidate["identity"]["parsedSha256"]):
-                    raise ValueError("Stored candidate integrity failed")
+                immutable_write(directory, candidate, capacity)
+                candidate = load_candidate(directory, candidate["candidateId"], identity)
             return dict(result, status="candidate", candidate=candidate, observation=observation,
                         runDiff=diff, parentCandidateId=(previous or {}).get("candidateId"))
     except Exception as error:

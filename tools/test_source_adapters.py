@@ -103,6 +103,16 @@ def observe(source, manifest, transport, previous=None, directory=None):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_aggregate_component_key_set_must_be_complete(self):
+        manifest, transport = county_fixture()
+        first = observe(source('county-trails'), manifest, transport)
+        previous = copy.deepcopy(first['observation'])
+        previous['components'].pop(next(iter(previous['components'])))
+        calls_before = len(transport.calls)
+        result = observe(source('county-trails'), manifest, transport, previous)
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(len(transport.calls), calls_before)
+
     def test_county_complete_conditional_change_and_disappearance(self):
         manifest, transport = county_fixture()
         with tempfile.TemporaryDirectory() as directory:
@@ -190,6 +200,27 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(observe(source('osm-service-roads'), manifest, transport)['status'], 'candidate')
         with self.assertRaises(ValueError):
             overpass_parser(canonical({'remark': 'timeout', 'elements': []}))
+
+    def test_overpass_timestamp_only_change_keeps_exact_provenance_without_admission(self):
+        manifest = {'sourceInput': {'boundingBoxWgs84': [-89.2, 40.4, -88.9, 40.6]}}
+        timestamp = ['2026-10-09T00:00:00Z']
+        def transport(url, headers, timeout):
+            return Body(canonical({'osm3s': {'timestamp_osm_base': timestamp[0]}, 'elements': []}))
+        with tempfile.TemporaryDirectory() as store:
+            clock = Clock()
+            kwargs = dict(store=store, observer=observe_adapter, transport=transport, manifest=manifest,
+                          retrieved_at_utc='2026-10-09T00:00:00Z', monotonic=clock, sleeper=clock.sleep,
+                          accepted={'candidateId': 'accepted'})
+            first = run_serialized(source('osm-service-roads'), now_seconds=120, **kwargs)
+            timestamp[0] = '2026-10-09T01:00:00Z'
+            second = run_serialized(source('osm-service-roads'), now_seconds=86520, **kwargs)
+            self.assertEqual(second['status'], 'candidate')
+            self.assertEqual(second['runDiff'], {'added': [], 'removed': [], 'changed': []})
+            self.assertNotEqual(first['candidate']['identity']['componentHashes'], second['candidate']['identity']['componentHashes'])
+            self.assertNotEqual(first['candidate']['identity']['sourceTimes'], second['candidate']['identity']['sourceTimes'])
+            self.assertTrue(second['transition']['observationOnly'])
+            self.assertEqual(second['transition']['changeKind'], 'provenance-only')
+            self.assertEqual(second['acceptedSnapshotId'], 'accepted')
 
     def test_official_notice_changes_do_not_interpret_access_and_errors_stay_stale(self):
         selection = source('notice-uptown-initial')
