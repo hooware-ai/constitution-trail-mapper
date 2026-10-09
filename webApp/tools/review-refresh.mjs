@@ -1,3 +1,4 @@
+import { runReviewedRouterControls } from "./lib/reviewed-router-controls.mjs";
 // node tools/review-refresh.mjs --config <reviewer-owned.json> --out <private-output>
 // Offline inputs only; emits an immutable, nonreleasable review artifact.
 import { readFile } from "node:fs/promises";
@@ -55,6 +56,14 @@ try {
     policy: await json(config.policy),
     evidence,
   });
+  const routerAdmission = config.routerControls
+    ? await runReviewedRouterControls({
+        report,
+        snapshot: target,
+        cases: await json(config.routerControls.cases),
+        now: config.routerControls.now,
+      })
+    : null;
   const artifact = await writeReviewArtifact({
     outDir: resolve(option("--out")),
     report,
@@ -62,6 +71,7 @@ try {
     target,
     baselineLedger,
     evidence,
+    routerAdmission,
   });
   console.log(
     JSON.stringify(

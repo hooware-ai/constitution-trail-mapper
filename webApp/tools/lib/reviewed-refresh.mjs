@@ -360,6 +360,31 @@ export function reviewRefresh({
             )
               fail("closure geometry not exact source interval");
           }
+          if (c.compiledClosure) {
+            const compiled = c.compiledClosure;
+            const g = c.geometry[0];
+            const from = g.coordinates[0],
+              to = g.coordinates.at(-1);
+            if (
+              c.geometry.length !== 1 ||
+              compiled.id !== c.closureId ||
+              compiled.featureId !== g.id ||
+              compiled.noticeUrl !== e.url ||
+              compiled.boundsProjected !== false ||
+              compiled.isCrossing !== false ||
+              !same(compiled.closedFrom, {
+                latitude: from[1],
+                longitude: from[0],
+              }) ||
+              !same(compiled.closedTo, { latitude: to[1], longitude: to[0] }) ||
+              compiled.activeFromEpochMillis !== instant(c.activeFromUtc)
+            )
+              fail(
+                "compiled closure does not match exact reviewed source interval/activation",
+              );
+            text(compiled.title, "compiled closure title");
+            text(compiled.guidance, "compiled closure guidance");
+          }
           closures.set(c.closureId, {
             id: c.closureId,
             affectedIds: c.affectedIds,
@@ -367,6 +392,12 @@ export function reviewRefresh({
             candidateSha256: canonicalSha256(c),
             evidence: e,
             review: d,
+            ...(c.compiledClosure
+              ? {
+                  compiledClosure: c.compiledClosure,
+                  compiledSha256: canonicalSha256(c.compiledClosure),
+                }
+              : {}),
           });
         }
       }
@@ -382,6 +413,23 @@ export function reviewRefresh({
   )
     fail("known closure lost its canonical ID");
   for (const closure of closures.values()) {
+    if (closure.compiledClosure) {
+      const compiled = closure.compiledClosure;
+      if (
+        compiled.id !== closure.id ||
+        !same(closure.affectedIds, [compiled.featureId]) ||
+        closure.compiledSha256 !== canonicalSha256(compiled)
+      )
+        fail("compiled baseline closure identity mismatch");
+      if (
+        !same(
+          old.get(compiled.featureId)?.paths,
+          next.get(compiled.featureId)?.paths,
+        )
+      )
+        fail("geometry refresh invalidates compiled closure mapping");
+      continue;
+    }
     if (
       !Array.isArray(closure.geometry) ||
       !closure.geometry.length ||
@@ -472,6 +520,7 @@ export async function writeReviewArtifact({
   target,
   baselineLedger,
   evidence,
+  routerAdmission = null,
 }) {
   if (
     !same(report.baseline, snapshotIdentity(baseline)) ||
@@ -487,6 +536,16 @@ export async function writeReviewArtifact({
     "review.json": Buffer.from(canonical(report)),
     "rollback/ledger.json": Buffer.from(canonical(baselineLedger)),
   };
+  if (routerAdmission) {
+    if (
+      routerAdmission.schema !== "trail-mapper.router-admission/1" ||
+      routerAdmission.approved !== false ||
+      routerAdmission.reviewSha256 !== canonicalSha256(report) ||
+      !same(routerAdmission.dataset, report.target)
+    )
+      fail("router admission/report mismatch");
+    files["router-admission.json"] = Buffer.from(canonical(routerAdmission));
+  }
   for (const r of report.reviews) {
     const h = r.candidate.evidence.sha256;
     if (!evidence[h] || sha256(evidence[h]) !== h)
@@ -528,7 +587,7 @@ export async function verifyReviewArtifact(dir, expectedSha256) {
   for (const entry of index.files) {
     if (
       !/^(candidate|rollback|evidence)\/[a-zA-Z0-9_.-]+$/.test(entry.file) &&
-      entry.file !== "review.json"
+      !["review.json", "router-admission.json"].includes(entry.file)
     )
       fail("unsafe artifact path");
     if (seen.has(entry.file)) fail("duplicate artifact file");
