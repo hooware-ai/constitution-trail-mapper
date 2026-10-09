@@ -52,15 +52,13 @@ test("a fresh load serves the app with the production headers and no failing or 
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await expect(
-    page
-      .getByText(
-        county
-          ? /Review candidate|reviewed trails/
-          : /Synthetic review network/,
-      )
-      .first(),
-  ).toBeVisible();
+  if (county) {
+    await expect(page.locator(".review-banner")).toHaveCount(0);
+  } else {
+    await expect(
+      page.getByText(/Synthetic review network/).first(),
+    ).toBeVisible();
+  }
   const headers = document!.headers();
   expect(headers["content-security-policy"]).toContain("default-src 'self'");
   expect(headers["content-security-policy"]).toContain(

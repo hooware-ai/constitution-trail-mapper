@@ -1822,26 +1822,15 @@ export function App() {
           </div>
         </header>
       )}
-      {screen !== "navigation" && (
+      {screen !== "navigation" && network?.mode !== "county" && (
         <div className="review-banner" role="status">
-          {network?.mode === "county"
-            ? network.datasetRecord?.approval.approved
-              ? "Existing reviewed trails only · check posted signs and closures before you ride."
-              : "Review candidate · county trail data that is not approved for public release."
-            : network?.mode === "local"
-              ? "Local data review · current closures and access still need your attention."
-              : local
-                ? "Loading local trail data…"
-                : __TRAIL_DATASET__ === "county"
-                  ? "Loading trail data…"
-                  : "Synthetic review network — do not ride these paths."}
-        </div>
-      )}
-      {screen !== "navigation" && __TRAIL_ASSUME_ESTIMATED__ && (
-        <div className="test-mode-banner" role="status">
-          PRIVATE TEST MODE · estimated road and trail connections are assumed
-          traversable so routes can start. They are still estimated, not
-          confirmed: verify each connection on the ground before riding.
+          {network?.mode === "local"
+            ? "Local data review · current closures and access still need your attention."
+            : local
+              ? "Loading local trail data…"
+              : __TRAIL_DATASET__ === "county"
+                ? "Loading trail data…"
+                : "Synthetic review network — do not ride these paths."}
         </div>
       )}
       {!online && screen !== "navigation" && (
@@ -2205,7 +2194,10 @@ export function App() {
           {screen === "preview" && (
             <>
               <h1>Route preview</h1>
-              {selected && <h2>{selected.title}</h2>}
+              {selected &&
+                selected.title.toLowerCase() !== "map point to map point" && (
+                  <h2>{selected.title}</h2>
+                )}
               {checking && (
                 <p className="checking" role="status">
                   Checking the known closure catalog…
