@@ -41,6 +41,11 @@ async function riding(
   await ride(page, wakeLock);
   await fix(page, 40.51, -88.95);
   await expect(guidance(page)).toBeVisible();
+  await expect(page.locator(".ride-map-canvas")).toBeVisible();
+}
+
+async function openRideDetails(page: Page) {
+  await page.locator(".ride-details summary").click();
 }
 
 test("[sim-device] starting navigation says it is waiting for a fresh fix, then guides once one arrives, and holds the screen awake", async ({
@@ -50,14 +55,15 @@ test("[sim-device] starting navigation says it is waiting for a fresh fix, then 
   await expect(guidance(page)).not.toBeVisible();
   await fix(page, 40.51, -88.95);
   await expect(guidance(page)).toBeVisible();
-  await expect(wakeStatus(page)).toContainText("keeping this page awake");
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__device.wakeActive()))
+    .toBe(1);
   expect(
     await page.evaluate(() => (window as any).__device.wakeRequests()),
   ).toBe(1);
+  await openRideDetails(page);
   await expect(
-    page.getByText(
-      /Guidance pauses when the page is hidden or the screen locks/,
-    ),
+    page.getByText(/Guidance pauses if the screen locks/),
   ).toBeVisible();
 });
 
@@ -75,7 +81,7 @@ test("[sim-device] hiding the page pauses guidance and releases the wake lock; c
   // Guidance does not come back on its own: only a fresh, accurate fix restores it.
   await expect(guidance(page)).not.toBeVisible();
   await fix(page, 40.505, -88.95, 150); // too inaccurate
-  await expect(heading(page, "Waiting for location")).toBeVisible();
+  await expect(heading(page, "Location lost")).toBeVisible();
   await fix(page, 40.505, -88.95, 5, 60000); // too old
   await expect(guidance(page)).not.toBeVisible();
   await fix(page, 40.505, -88.95);
@@ -83,13 +89,16 @@ test("[sim-device] hiding the page pauses guidance and releases the wake lock; c
   expect(
     await page.evaluate(() => (window as any).__device.wakeRequests()),
   ).toBeGreaterThanOrEqual(2);
-  await expect(wakeStatus(page)).toContainText("keeping this page awake");
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__device.wakeActive()))
+    .toBe(1);
 });
 
 test("[sim-device] distance travelled while the page was hidden is not credited", async ({
   page,
 }) => {
   await riding(page);
+  await openRideDetails(page);
   await expect(page.getByText(/0\.0 mi observed this ride/)).toBeVisible();
   await setVisible(page, false);
   await setVisible(page, true);
@@ -123,11 +132,11 @@ test("[sim-device] losing and regaining the network is stated, guidance waits fo
 }) => {
   await riding(page);
   await context.setOffline(true);
-  await expect(page.locator(".offline-banner")).toBeVisible();
+  await expect(page.locator(".ride-offline")).toBeVisible();
   await page.evaluate(() => (window as any).__device.fail(2));
-  await expect(heading(page, "Waiting for location")).toBeVisible();
+  await expect(heading(page, "Location lost")).toBeVisible();
   await context.setOffline(false);
-  await expect(page.locator(".offline-banner")).not.toBeVisible();
+  await expect(page.locator(".ride-offline")).not.toBeVisible();
   await fix(page, 40.505, -88.95);
   await expect(guidance(page)).toBeVisible();
   await page
@@ -141,7 +150,7 @@ test("[sim-device] location lost mid-ride hides guidance at once and recovers on
 }) => {
   await riding(page);
   await page.evaluate(() => (window as any).__device.fail(2));
-  await expect(heading(page, "Waiting for location")).toBeVisible();
+  await expect(heading(page, "Location lost")).toBeVisible();
   await expect(guidance(page)).not.toBeVisible();
   await fix(page, 40.505, -88.95);
   await expect(guidance(page)).toBeVisible();
@@ -152,12 +161,13 @@ test("[sim-device] location permission denied when navigation starts is explaine
 }) => {
   await ride(page);
   await page.evaluate(() => (window as any).__device.fail(1));
+  await openRideDetails(page);
   await expect(
-    page.getByText(/Allow location in your browser settings/),
+    page.getByText(/Allow location in browser settings/),
   ).toBeVisible();
   await expect(
-    page.getByText(/You can still view the route and directions/),
-  ).toBeVisible();
+    page.getByRole("button", { name: "Directions", exact: true }),
+  ).toBeEnabled();
   await page
     .getByRole("button", { name: "Stop navigation", exact: true })
     .click();
@@ -170,9 +180,8 @@ test("[sim-device] a refused wake lock is stated and the ride carries on", async
   page,
 }) => {
   await riding(page, "deny");
-  await expect(wakeStatus(page)).toContainText(
-    "not allowed — the screen may lock",
-  );
+  await openRideDetails(page);
+  await expect(wakeStatus(page)).toContainText("wake lock denied");
   await fix(page, 40.505, -88.95);
   await expect(guidance(page)).toBeVisible();
   await expect(
@@ -188,7 +197,8 @@ test("[sim-device] a browser with no wake lock API (an older Safari) says so and
   page,
 }) => {
   await riding(page, "absent");
-  await expect(wakeStatus(page)).toContainText("not supported in this browser");
+  await openRideDetails(page);
+  await expect(wakeStatus(page)).toContainText("wake lock unsupported");
   await fix(page, 40.505, -88.95);
   await expect(guidance(page)).toBeVisible();
 });
@@ -198,7 +208,8 @@ test("[sim-device] the browser taking the wake lock back is stated and does not 
 }) => {
   await riding(page);
   await page.evaluate(() => (window as any).__device.releaseWake());
-  await expect(wakeStatus(page)).toContainText("released by the browser");
+  await openRideDetails(page);
+  await expect(wakeStatus(page)).toContainText("wake lock released");
   await fix(page, 40.505, -88.95);
   await expect(guidance(page)).toBeVisible();
   await expect(

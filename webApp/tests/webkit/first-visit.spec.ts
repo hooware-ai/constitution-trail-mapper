@@ -142,8 +142,15 @@ test("[sim-device] a route with an unverified connection explains it at the deci
     .getByRole("button", { name: /^Review trailhead · East/ })
     .click();
   await page.getByRole("button", { name: "Find route", exact: true }).click();
-  const details = page.getByRole("region", { name: "1 connection to check" });
-  await expect(details).toContainText("365 ft");
+  // An endpoint gap is shown on the map and blocks Start. Only interior gaps
+  // appear in the numbered "connections to check" list.
+  await expect(page.locator("#start-reason")).toContainText(
+    "1 estimated connection",
+  );
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
+  await expect(page.locator(".access-connections")).toHaveCount(0);
   await expect(startButton(page)).toBeDisabled();
   await expect(
     page.getByRole("region", {
