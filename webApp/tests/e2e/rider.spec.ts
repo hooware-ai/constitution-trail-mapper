@@ -3721,7 +3721,10 @@ test("where the browser can share a file the image goes to the share sheet, and 
   const share = page.getByRole("button", { name: "Share route image" });
   await expect(share).toBeEnabled();
   await share.click();
-  await expect(page.getByText("Route image shared.")).toBeVisible();
+  // Chromium can defer the real PNG toBlob callback beyond five seconds (measured at 6.7 s).
+  await expect(page.getByText("Route image shared.")).toBeVisible({
+    timeout: 15000,
+  });
   const shared = await page.evaluate(() => (window as any).__shares);
   expect(shared).toHaveLength(1);
   expect(shared[0].title).toBe("Trail Mapper route");
@@ -3735,7 +3738,9 @@ test("where the browser can share a file the image goes to the share sheet, and 
   await page.evaluate(() => ((window as any).__abort = true));
   await share.click();
   await expect
-    .poll(() => page.evaluate(() => (window as any).__shares.length))
+    .poll(() => page.evaluate(() => (window as any).__shares.length), {
+      timeout: 15000,
+    })
     .toBe(2);
   await expect(
     page
@@ -4281,6 +4286,8 @@ async function saveCollidingReversedCopy(page: Page, selected: any) {
       )!;
       const library = JSON.parse(localStorage.getItem(key)!);
       library.saved.push(record);
+      // Seed the store's canonical order so reload normalization is not mistaken for a record mutation.
+      library.saved.sort((a: any, b: any) => b.usedAt - a.usedAt);
       localStorage.setItem(key, JSON.stringify(library));
     },
     {
