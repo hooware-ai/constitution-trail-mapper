@@ -7,9 +7,9 @@ const raw = JSON.stringify({version:1,saved:[{key:'private-item'}],recent:[],pla
 function browser(origin, items={},failOn=null) {
  const storage=Object.assign(Object.create(null),items);
  Object.defineProperties(storage,{getItem:{value:k=>storage[k]??null},setItem:{value:(k,v)=>{if(k===failOn)throw Error('quota');storage[k]=v;}},removeItem:{value:k=>delete storage[k]}});
- const ctx=vm.createContext({location:{origin},localStorage:storage});vm.runInContext(code,ctx);return {api:ctx.trailMapperTransfer,storage};
+ const ctx=vm.createContext({location:{origin,pathname:'/browser-transfer.html'},document:{querySelector:()=>({content:'1'})},localStorage:storage});vm.runInContext(code,ctx);return {api:ctx.trailMapperTransfer,storage};
 }
-const old=browser('https://trail-mapper-private.hooware.chatgpt.site',{[key]:raw,unrelated:'secret'});
+const old=browser('https://trail-mapper-private.hooware.chatgpt.site',{[key]:raw});
 const backup=old.api.capture();assert.equal(backup.entries.length,1);assert.equal(old.storage[key],raw);
 const fresh=browser('https://constitution-trail-mapper.hooware.chatgpt.site');fresh.api.restore(backup);assert.equal(fresh.storage[key],raw);fresh.api.restore(backup);
 const conflict=browser('https://constitution-trail-mapper.hooware.chatgpt.site',{[key]:'different'});assert.throws(()=>conflict.api.restore(backup),/different/);assert.equal(conflict.storage[key],'different');
@@ -19,3 +19,5 @@ const active='trail-mapper.county:trail-mapper.web.active-ride.v1';assert.throws
 const session='trail-mapper.county:trail-mapper.web.session.v1';const quota=browser('https://constitution-trail-mapper.hooware.chatgpt.site',{},session);assert.throws(()=>quota.api.restore({...backup,entries:[...backup.entries,{key:session,value:'{}'}]}),/quota/);assert.equal(quota.storage[key],undefined);
 const carried='trail-mapper.county:trail-mapper.web.carried-ride.v1';fresh.api.restore({...backup,entries:[...backup.entries,{key:carried,value:'{}'}]});assert.equal(fresh.storage[carried],undefined);
 console.log('8 local transfer controls passed; no network/private browser data used.');
+
+assert.throws(()=>browser('https://trail-mapper-private.hooware.chatgpt.site',{unknown:'settings'}).api.capture(),/Unknown/);
