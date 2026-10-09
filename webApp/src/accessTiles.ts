@@ -156,6 +156,11 @@ export class AccessLoader {
     return attempt;
   }
 
+  /** Refresh preparation validates the mandatory index before a new router can be adopted. */
+  async validateIndex(): Promise<void> {
+    await this.tileIndex();
+  }
+
   private tileIndex(): Promise<Map<string, TileEntry>> {
     if (!this.index) {
       this.index = this.readIndex().catch((error) => {

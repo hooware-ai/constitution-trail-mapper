@@ -49,7 +49,10 @@ async function fetchOrExplain(url: string, what: string): Promise<Response> {
 }
 
 /** The packaged county candidate: fetched, described, hash-checked, then and only then given to the router. */
-async function loadCounty(pinned?: unknown): Promise<Loaded> {
+async function loadCounty(
+  pinned?: unknown,
+  validateRefresh = false,
+): Promise<Loaded> {
   const base = import.meta.env.BASE_URL;
   let raw: unknown = pinned;
   if (pinned === undefined) {
@@ -66,7 +69,10 @@ async function loadCounty(pinned?: unknown): Promise<Loaded> {
       );
     }
   }
-  const record = parseDatasetRecord(raw, __TRAIL_CHANNEL__);
+  const record = parseDatasetRecord(
+    raw,
+    validateRefresh ? "public" : __TRAIL_CHANNEL__,
+  );
   // A replacement worker is pinned to the exact data the page started with (the network file is named by its hash), so
   // the page's identity, map and saved routes always describe the data being routed on. Newer data needs a reload.
   const reload = pinned
@@ -102,6 +108,7 @@ async function loadCounty(pinned?: unknown): Promise<Loaded> {
         dispatch: (request) => JSON.parse(dispatch(JSON.stringify(request))),
       });
       access = await accessLoader.baseText();
+      if (validateRefresh) await accessLoader.validateIndex();
     }
   } catch (error) {
     if (error instanceof DatasetError && reload)
@@ -192,7 +199,7 @@ async function handle(event: MessageEvent) {
         import.meta.env.DEV && request.local
           ? await loadLocalReview()
           : __TRAIL_DATASET__ === "county"
-            ? await loadCounty(request.pinned)
+            ? await loadCounty(request.pinned, request.validateRefresh === true)
             : await loadFixture();
       const result = JSON.parse(
         dispatch(
