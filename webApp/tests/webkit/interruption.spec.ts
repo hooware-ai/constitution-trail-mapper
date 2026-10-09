@@ -131,6 +131,12 @@ test("[sim-device] losing and regaining the network is stated, guidance waits fo
   context,
 }) => {
   await riding(page);
+  // The canvas mounts before MapLibre's module worker finishes loading.
+  // Take the browser offline only after the real map load event, not a timer.
+  await expect(page.locator(".ride-map-canvas")).toHaveAttribute(
+    "data-ready",
+    "true",
+  );
   await context.setOffline(true);
   await expect(page.locator(".ride-offline")).toBeVisible();
   await page.evaluate(() => (window as any).__device.fail(2));
