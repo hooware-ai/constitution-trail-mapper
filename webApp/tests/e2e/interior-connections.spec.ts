@@ -2,8 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 // A saved route rebuilt from the owner's screenshot (start 111 ft, "Near S Hershey Rd" 37 ft, "Near Prospect Ave" under 1 ft,
-// destination 90 ft), opened through the real preview: only the genuine interior connection is announced, with a numbered
-// marker that keyboard focus reaches; the obvious start and destination connections and the under-1-ft join are not.
+// destination 90 ft), opened through the real preview. Notification cards are temporarily hidden; genuine interior
+// connections remain mapped, keyboard-accessible and unverified, and all routing blockers stay in force.
 type Seg = {
   type: "Trail" | "Access";
   from: number;
@@ -85,7 +85,7 @@ async function openSeeded(page: Page) {
   ).toBeVisible();
 }
 
-test("only the genuine interior connection is announced; start, destination and the under-1-ft join are not", async ({
+test("connection notification cards leave no headings or rows while the same estimated route remains blocked", async ({
   page,
 }) => {
   test.skip(
@@ -93,15 +93,13 @@ test("only the genuine interior connection is announced; start, destination and 
     "asserts the strict Start state",
   );
   await openSeeded(page);
-  const notices = page.getByRole("region", { name: "1 connection to check" });
-  await expect(notices).toBeVisible();
-  // Row 2: a real estimated connection between a road and the trail beside it, named for what it joins.
-  await expect(notices).toContainText("S Hershey Rd to trail");
-  await expect(notices).toContainText("37 ft");
-  // Rows 1, 3 and 4: not announced.
-  await expect(notices).not.toContainText("Start connection");
-  await expect(notices).not.toContainText("Destination connection");
-  await expect(notices).not.toContainText("Prospect Ave");
+  await expect(page.locator(".access-connections")).toHaveCount(0);
+  await expect(page.locator("#connections-title")).toHaveCount(0);
+  await expect(page.locator(".connection-total")).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: /connections? to check/ }),
+  ).toHaveCount(0);
+  await expect(page.getByText(/select one to see it/)).toHaveCount(0);
   await expect(page.locator(".connection-marker")).toHaveCount(1);
   // Honest status: three connections are still estimated (start, the road-to-trail step, destination) and Start is blocked.
   await expect(
@@ -115,15 +113,11 @@ test("only the genuine interior connection is announced; start, destination and 
   ).toBeVisible();
 });
 
-test("the numbered notice reaches its map marker by keyboard, with a popup, and focus can be restored", async ({
+test("the remaining unverified map marker works by keyboard without a notification card", async ({
   page,
 }, info) => {
   await openSeeded(page);
-  const details = page.getByRole("region", { name: "1 connection to check" });
-  const show = details.getByRole("button", {
-    name: /Show connection 1: S Hershey Rd to trail/,
-  });
-  await show.press("Enter");
+  await expect(page.locator(".access-connections")).toHaveCount(0);
   const map = page.getByRole("region", {
     name: "Route map with unverified connections",
     exact: true,
@@ -131,7 +125,17 @@ test("the numbered notice reaches its map marker by keyboard, with a popup, and 
   const marker = map.getByRole("button", {
     name: /Connection 1: S Hershey Rd to trail/,
   });
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
+  });
+  for (let tabs = 0; tabs < 40; tabs++) {
+    if (await marker.evaluate((element) => element === document.activeElement))
+      break;
+    await page.keyboard.press("Tab");
+  }
   await expect(marker).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(page.locator(".leaflet-popup")).toContainText(
     "Map data does not confirm a traversable connection here",
   );
@@ -144,7 +148,7 @@ test("the numbered notice reaches its map marker by keyboard, with a popup, and 
     .getByRole("button", { name: "Close popup", exact: true })
     .press("Enter");
   await page.getByRole("button", { name: "Fit route", exact: true }).click();
-  await show.press("Enter");
+  await marker.press("Enter");
   await expect(marker).toBeFocused();
   await expect(page.locator(".leaflet-popup")).toBeVisible();
   await page.screenshot({

@@ -14,6 +14,8 @@ Playwright's `iPhone 15` and `iPhone SE` profiles set the viewport, touch and us
 
 ## Automated coverage of the first-visit guest journey
 
+The owner has temporarily hidden the blue **“connection(s) to check”** notification cards. `CONNECTION_CHECK_NOTICES_ENABLED` in `webApp/src/AccessConnections.tsx` is the reversible presentation flag; restoring it shows the retained card component. The hidden component returns no section, heading, summary or rows. Estimated geometry/counts, keyboard-accessible map markers, navigation eligibility, strict blocked-Start explanations, private-mode caveats and closure warnings keep their existing behavior. `interior-connections.spec.ts` checks the empty card surface and the same three estimated connections/blocked Start through the real preview.
+
 `webApp/tests/webkit/` runs on three profiles: `webkit-desktop` (Desktop Safari), `webkit-iphone` (iPhone 15) and `webkit-iphone-se` (320 pt wide). Chromium columns refer to the existing suites in `webApp/tests/e2e/` (desktop Chrome and Pixel 7 emulation).
 
 | Journey step                                                                                  | Chromium suites                         | WebKit specs                                   | Physical device |
