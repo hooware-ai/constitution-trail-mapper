@@ -487,3 +487,34 @@ test(
     );
   },
 );
+
+test(
+  "catalog binding rejects unknown or omitted compiled descriptor fields even when both catalog and ledger are rehashed identically",
+  { skip },
+  async () => {
+    const { catalog, ledger } = await fixture();
+    for (const change of [
+      (c) => {
+        c.unknownDefault = false;
+      },
+      (c) => {
+        delete c.mappingNote;
+      },
+      (c) => {
+        c.closedFrom.extra = 0;
+      },
+    ]) {
+      const altered = structuredClone(catalog),
+        changed = structuredClone(ledger);
+      change(altered.closures[0]);
+      changed.closures[0].compiledClosure = structuredClone(
+        altered.closures[0],
+      );
+      changed.closures[0].compiledSha256 = canonicalSha256(altered.closures[0]);
+      assert.throws(
+        () => bindCompiledCatalog(changed, altered),
+        /compiled descriptor/,
+      );
+    }
+  },
+);

@@ -2,7 +2,11 @@
 import { pathToFileURL } from "node:url";
 import { coreEntry, verifyCoreManifest, sha256 } from "./core.mjs";
 import { canonicalSha256 } from "./canonical-json.mjs";
-import { verifySnapshot, snapshotIdentity } from "./reviewed-refresh.mjs";
+import {
+  verifySnapshot,
+  snapshotIdentity,
+  verifyCompiledDescriptor,
+} from "./reviewed-refresh.mjs";
 const refuse = (message) => {
   throw new Error(`Router admission refused: ${message}`);
 };
@@ -22,6 +26,8 @@ export function bindCompiledCatalog(ledger, catalog) {
     refuse("review ledger differs from complete compiled closure catalog");
   for (const closure of catalog.closures) {
     const entry = ledger.closures.find((c) => c.id === closure.id);
+    verifyCompiledDescriptor(closure);
+    verifyCompiledDescriptor(entry.compiledClosure);
     if (
       !same(entry.compiledClosure, closure) ||
       entry.compiledSha256 !== canonicalSha256(closure) ||

@@ -48,6 +48,70 @@ const exactIds = (ids) => {
     fail("exact distinct canonical affected IDs required");
 };
 const same = (a, b) => canonicalSha256(a) === canonicalSha256(b);
+/** Exact schema emitted by compiled-closures/1; no aliases, extras or omitted defaults. */
+export function verifyCompiledDescriptor(compiled) {
+  const keys = [
+    "id",
+    "title",
+    "guidance",
+    "noticeUrl",
+    "featureId",
+    "closedFrom",
+    "closedTo",
+    "activeFromEpochMillis",
+    "estimatedEndEpochMillis",
+    "boundsProjected",
+    "isCrossing",
+    "closedPath",
+    "sourceLine",
+    "mappingNote",
+    "checkedOn",
+  ];
+  if (
+    !compiled ||
+    typeof compiled !== "object" ||
+    Array.isArray(compiled) ||
+    !same(Object.keys(compiled).sort(codePointOrder), keys.sort(codePointOrder))
+  )
+    fail("compiled descriptor requires exact key schema");
+  for (const key of ["id", "title", "guidance", "noticeUrl"])
+    text(compiled[key], `compiled descriptor ${key}`);
+  exactIds([compiled.featureId]);
+  if (
+    typeof compiled.mappingNote !== "string" ||
+    typeof compiled.checkedOn !== "string" ||
+    typeof compiled.boundsProjected !== "boolean" ||
+    typeof compiled.isCrossing !== "boolean" ||
+    !Number.isSafeInteger(compiled.activeFromEpochMillis) ||
+    (compiled.estimatedEndEpochMillis !== null &&
+      !Number.isSafeInteger(compiled.estimatedEndEpochMillis))
+  )
+    fail("invalid compiled descriptor field types");
+  const point = (p) => {
+    if (
+      !p ||
+      typeof p !== "object" ||
+      Array.isArray(p) ||
+      !same(Object.keys(p).sort(codePointOrder), ["latitude", "longitude"]) ||
+      !Number.isFinite(p.latitude) ||
+      !Number.isFinite(p.longitude) ||
+      Math.abs(p.latitude) > 90 ||
+      Math.abs(p.longitude) > 180
+    )
+      fail(
+        "compiled descriptor point requires exact latitude/longitude schema",
+      );
+  };
+  point(compiled.closedFrom);
+  point(compiled.closedTo);
+  for (const key of ["closedPath", "sourceLine"]) {
+    if (!Array.isArray(compiled[key]))
+      fail("compiled descriptor paths must be arrays");
+    compiled[key].forEach(point);
+  }
+  return compiled;
+}
+
 const features = (network) =>
   new Map(
     network.layers.flatMap((layer) => layer.features.map((f) => [f.id, f])),
@@ -595,6 +659,8 @@ export function reviewRefresh({
     ledger.closures.map((c) => {
       text(c.id, "closure ID");
       exactIds(c.affectedIds);
+      if (Object.hasOwn(c, "compiledClosure"))
+        verifyCompiledDescriptor(c.compiledClosure);
       if (c.affectedIds.some((id) => !old.has(id)))
         fail("baseline closure refers to absent ID");
       return [c.id, structuredClone(c)];
@@ -639,6 +705,8 @@ export function reviewRefresh({
     exactIds(c.affectedIds);
     if (c.affectedIds.some((id) => !old.has(id) && !next.has(id)))
       fail("unknown affected ID");
+    if (Object.hasOwn(c, "compiledClosure"))
+      verifyCompiledDescriptor(c.compiledClosure);
     verifyDetection(c, policy);
     const e = evidenceOf(c, policy, evidence);
     const d = decisions.find((d) => d.candidateId === c.id);

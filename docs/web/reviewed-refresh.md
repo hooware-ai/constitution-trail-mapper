@@ -166,6 +166,12 @@ writing the artifact and includes a hash-indexed `router-admission.json`. Failed
 controls or catalog mismatches produce no output artifact. Omitting controls only
 produces a release-blocked preparatory artifact. Artifacts still never grant approval.
 
+Preliminary review, baseline-ledger validation and catalog binding share one exact
+compiled-descriptor schema. Every `compiled-closures/1` field is required, including
+nullable `estimatedEndEpochMillis` and empty `mappingNote`/`checkedOn` defaults.
+Unknown, missing or mistyped fields are refused; every point has only finite
+`latitude` and `longitude`. The actual catalog equality/hash gate remains mandatory.
+
 A new vertex-bounded closure may include the exact reviewed `compiledClosure`
 descriptor and `activeFromUtc`; review checks its endpoints, source, ID and activation
 against the source interval. It must then exactly match a separately reviewed,

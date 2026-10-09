@@ -1062,9 +1062,60 @@ test("compiled closedPath and sourceLine must bind the same complete reviewed in
         longitude,
       })),
       sourceLine: [],
+      estimatedEndEpochMillis: null,
+      mappingNote: "",
+      checkedOn: "",
     };
   });
-  assert.equal(reviewRefresh(args).ledger.closures.length, 1);
+  const admitted = reviewRefresh(args);
+  assert.equal(admitted.ledger.closures.length, 1);
+  const descriptor = clone(args.candidates[0].compiledClosure);
+  for (const key of Object.keys(descriptor)) {
+    update(args, (c) => {
+      c.compiledClosure = clone(descriptor);
+      delete c.compiledClosure[key];
+    });
+    assert.throws(() => reviewRefresh(args), /exact key schema/);
+  }
+  for (const change of [
+    (c) => {
+      c.unknownDefault = false;
+    },
+    (c) => {
+      c.closedFrom.altitude = 0;
+    },
+    (c) => {
+      c.sourceLine = [{ latitude: 40, longitude: -88, unknown: 0 }];
+    },
+    (c) => {
+      c.estimatedEndEpochMillis = "2026-01-01";
+    },
+    (c) => {
+      c.boundsProjected = 0;
+    },
+  ]) {
+    update(args, (c) => {
+      c.compiledClosure = clone(descriptor);
+      change(c.compiledClosure);
+    });
+    assert.throws(() => reviewRefresh(args), /compiled descriptor/);
+  }
+  args.candidates[0].compiledClosure = descriptor;
+  const invalidLedger = clone(admitted.ledger);
+  invalidLedger.closures[0].compiledClosure.unknownDefault = false;
+  invalidLedger.closures[0].compiledSha256 = canonicalSha256(
+    invalidLedger.closures[0].compiledClosure,
+  );
+  assert.throws(
+    () =>
+      reviewRefresh({
+        ...args,
+        ledger: invalidLedger,
+        candidates: [],
+        decisions: [],
+      }),
+    /exact key schema/,
+  );
   update(args, (c) => {
     c.compiledClosure.closedPath[1].longitude += 0.001;
   });
