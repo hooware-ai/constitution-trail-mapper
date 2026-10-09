@@ -12,7 +12,12 @@ export function RuntimeFreshnessStatus<T>({
   compact?: boolean;
 }) {
   const [renderVersion, render] = useState(0);
-  useEffect(() => runtime.subscribe(() => render((n) => n + 1)), [runtime]);
+  useEffect(() => {
+    const unsubscribe = runtime.subscribe(() => render((n) => n + 1));
+    // Catch an update emitted after render but before this passive subscription attached.
+    render((n) => n + 1);
+    return unsubscribe;
+  }, [runtime]);
   const state = runtime.snapshot;
   const manifest = runtime.accepted?.manifest;
   const staleKey = state.staleSources.join("|");
