@@ -112,6 +112,7 @@ export function HelpDialog({
                 ["help-build", "About this build"],
                 ["help-report", "Report a problem"],
                 ["help-feedback", "Share ride feedback"],
+                ["help-contact", "Project contact"],
               ].map(([id, label]) => (
                 <li key={id}>
                   <a
@@ -374,6 +375,24 @@ export function HelpDialog({
               Write ride feedback
             </button>
           </section>
+          <section aria-labelledby="help-contact">
+            <h3 id="help-contact" tabIndex={-1}>
+              Project contact
+            </h3>
+            <p>
+              <a
+                href="mailto:hoowareapps@gmail.com"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                hoowareapps@gmail.com
+              </a>
+            </p>
+            <p>
+              Opens your email app. Review what you include before sending;
+              nothing is sent automatically.
+            </p>
+          </section>
         </div>
       ) : (
         <ReportView
@@ -549,9 +568,8 @@ function ReportView({
         </a>
       </div>
       <p className="caption">
-        There is no private support inbox yet. The link opens the project&apos;s
-        issue tracker on GitHub, where anything you post is public and needs a
-        GitHub account.
+        The link opens the project&apos;s issue tracker on GitHub, where
+        anything you post is public and needs a GitHub account.
       </p>
     </div>
   );

@@ -39,7 +39,7 @@ IDs retain the app's canonical `54:OBJECTID` / `16:OBJECTID` form so existing cl
 
 `--source-json PATH` can replay an existing JSON bundle with `licenseItem`, `licensedMetadata`, `licensedQuery`, and `selectionSources` (layer IDs mapping to `metadata` and `query`). All verification still applies. Offline replay verifies the saved evidence, not the current upstream license or trail status. `generatedAtUtc` records normalization time, while `reviewedOn` records manifest review; neither is a source edit date.
 
-## Current owner-private review package (October 4)
+## Historical owner-private v4 review package (October 4)
 
 The private v4 review artifact's `data/dataset.json` records network SHA-256
 `903e43cf077acf79988920eb114b02e0f90bab022180aca88f5205c7a1ed882d`:
@@ -61,6 +61,23 @@ record explicitly describes included supplements and access roads. The package
 and committed approval record both remain `approved: false`, with no approved
 composition, approver, or approval date. Public ODbL compliance, exact artifact
 approval, hosting, and physical-device acceptance remain open.
+
+## Current v12 package and narrowed public gaps (October 9)
+
+The verified v12 package retains the same trail network hash above: 254 county
+trails and four OSM paths. Fresh reviewed road input contains 3,424 TIGER/Line
+roads and **9,344 OSM service roads**, totaling **12,768** access roads; it uses
+440 hash-indexed tiles. This supersedes the v4 access counts, not its history.
+Existing Help/export notices already identify these sources. Every normalized
+geometry file is shipped, but no discoverable complete-data offer or accepted
+combined-database license treatment is declared. Separate layers alone do not
+resolve an interacting routing graph's ODbL status.
+
+See [exact evidence, obligations and proposed smallest implementation](public-release-readiness.md).
+That record also separates physical GPS/navigation acceptance from a possible
+planning-only beta. It grants no license, sharing or capability change. The
+included county subset remains explicitly CC BY 4.0; excluded proposed geometries
+do not become a blocker for that subset merely because their future rights are open.
 
 ## Six proposed segments: unresolved release gate
 
