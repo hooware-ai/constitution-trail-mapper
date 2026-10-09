@@ -27,7 +27,8 @@
     "verify:county": "node tools/verify-county-package.mjs",
     "test:rules": "node tools/run-emulator-tests.mjs",
     "test:rules:controls": "node tools/rules-negative-control.mjs",
-    "test:rules:prefetch": "node tools/run-emulator-tests.mjs --prefetch"
+    "test:rules:prefetch": "node tools/run-emulator-tests.mjs --prefetch",
+    "build:public": "node tools/build-public.mjs"
   },
   "dependencies": {
     "leaflet": "1.9.4",

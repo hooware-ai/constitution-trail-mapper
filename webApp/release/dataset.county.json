@@ -2,11 +2,25 @@
   "schema": 1,
   "kind": "county",
   "id": "mclean-reviewed-existing-trails",
-  "label": "McLean County reviewed trails (owner-private review candidate, not approved)",
-  "approved": false,
-  "approvedBy": null,
-  "approvedOn": null,
-  "approvedComposition": null,
+  "label": "McLean County reviewed trails",
+  "approved": true,
+  "approvedBy": "Jesse Donahoo",
+  "approvedOn": "2026-10-09",
+  "approvedComposition": {
+    "networkSha256": "903e43cf077acf79988920eb114b02e0f90bab022180aca88f5205c7a1ed882d",
+    "countyManifestSha256": "11154bf245078fcb8fec0e5e4f73911012603b3a88ecb0df9b37df43ad7873ce",
+    "layerCounts": {
+      "8": 254,
+      "verified-osm": 4
+    },
+    "accessBaseSha256": "544b1add4dd62d6efce664c0f3d859ec58b06dd057c3789a2712a73748c40322",
+    "accessIndexSha256": "aef0eb30986096bcd500d562788d5754a240f83437aee8bfd9c4f35ad0e5ecb9",
+    "accessCombinedSha256": "1d011563ac8460df1416f294b04fe62df2bbad6f5adda5565a36b399ad599e41",
+    "accessSourceInputSha256": "f7be4a62cf5062147afff3206a5abf538ca02b083a059cf012acfe95cd82e033",
+    "accessSourceManifestSha256": "2e8964faa954e0207a0986196f030c94a2e79121fc55abb1bebd9fa16add7ae9",
+    "supplementManifestSha256": "6b2c9e1e2da718c53c69fccd9c536a71ca1b97981a03d570f8a3771441f75461",
+    "proposedManifestSha256": null
+  },
   "license": "CC-BY-4.0",
   "attribution": "Trail data: McLean County GIS Consortium (McGIS) and members, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Reviewed existing trails only; filtered and normalized by Constitution Trail Mapper. Routes are generated and are not an official county map.",
   "licenseEvidence": [
@@ -14,14 +28,8 @@
     "https://creativecommons.org/licenses/by/4.0/"
   ],
   "omitted": {
-    "supplements": "If no reviewed OpenStreetMap trail supplement is packaged, no OSM-derived path is included. A package that includes one supplies its own included-source description; public ODbL compliance remains unresolved (docs/web/data-rights.md).",
+    "supplements": "The included reviewed OpenStreetMap paths retain ODbL terms and attribution. Complete routing inputs and exact construction methods are linked in Help; proposed geometries remain excluded.",
     "accessRoads": "If no access-road package is included, routes connect only along admitted trail geometry; unverified street connections are never invented. A package with access roads supplies its own included-source description."
   },
-  "blockers": [
-    "The six Proposed branch geometries (OBJECTIDs 1929, 1952, 2349, 3824, 4275, 4772) are omitted by the owner's narrow first-release scope decision; their redistribution basis is still unresolved and nothing here grants it.",
-    "The ODbL classification of a merged OpenStreetMap graph is unresolved for any PUBLIC release: this review candidate INCLUDES 4 reviewed OpenStreetMap paths, 9,344 endpoint-local OpenStreetMap service roads and 3,424 Census TIGER/Line roads, and that inclusion is not a rights determination.",
-    "The owner has not approved this source composition (254 existing trails, 4 OpenStreetMap paths, 12,768 access roads) for public release; owner-private review is not publication.",
-    "Physical iPhone Safari and Android Chrome acceptance (#41) has not been done.",
-    "Hosting and basemap decisions are open (docs/web/hosting-runbook.md); sign-in and sync are deferred by decision, as the first launch is guest-first."
-  ]
+  "blockers": []
 }

@@ -1,8 +1,8 @@
 // Four things are kept apart here, and each has its own tests:
 //   integrity (parts match their hashes), source review (the access input is the reviewed extract), owner composition
 //   approval (an approval covers exactly one composition), and publication/rights approval (flags and blockers).
-// Nothing below grants or implies a right to publish: every approval here is a HYPOTHETICAL one in a temp repository,
-// and the committed release/dataset.county.json stays approved:false with an empty approver and date.
+// Hypothetical approvals in temporary repositories never grant publication rights. A separate control pins the
+// owner's October 9 committed release decision to the exact reviewed real composition; proposed rights stay unresolved.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -1146,7 +1146,7 @@ test("optional layers: every copied descriptor of the OpenStreetMap supplement a
   }
 });
 
-test("the committed source contract is real and unapproved: evidence recorded as an observation, rights unresolved", async () => {
+test("the committed release binds the owner decision to reviewed data while source evidence and proposed rights stay separate", async () => {
   const root = join(process.cwd(), "..");
   const manifest = JSON.parse(
     await readFile(
@@ -1179,10 +1179,27 @@ test("the committed source contract is real and unapproved: evidence recorded as
       "utf8",
     ),
   );
-  assert.equal(approval.approved, false);
-  assert.equal(approval.approvedBy, null);
-  assert.equal(approval.approvedOn, null);
-  assert.equal(approval.approvedComposition, null);
+  assert.equal(approval.approved, true);
+  assert.equal(approval.approvedBy, "Jesse Donahoo");
+  assert.equal(approval.approvedOn, "2026-10-09");
+  assert.deepEqual(compositionProblems(approval.approvedComposition), []);
+  assert.equal(
+    approval.approvedComposition.networkSha256,
+    "903e43cf077acf79988920eb114b02e0f90bab022180aca88f5205c7a1ed882d",
+  );
+  assert.deepEqual(approval.approvedComposition.layerCounts, {
+    "8": 254,
+    "verified-osm": 4,
+  });
+  assert.equal(
+    approval.approvedComposition.accessSourceInputSha256,
+    "f7be4a62cf5062147afff3206a5abf538ca02b083a059cf012acfe95cd82e033",
+  );
+  assert.equal(
+    approval.approvedComposition.accessIndexSha256,
+    "aef0eb30986096bcd500d562788d5754a240f83437aee8bfd9c4f35ad0e5ecb9",
+  );
+  assert.equal(approval.approvedComposition.proposedManifestSha256, null);
   const proposed = JSON.parse(
     await readFile(
       join(root, "data", "web-proposed-trails.manifest.json"),

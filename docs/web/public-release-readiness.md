@@ -54,7 +54,7 @@ exact build's public source revision. County content terms remain intact; the wh
 application is not relabeled ODbL. Existing map attribution stays visible. No removed
 cards, new service, coverage removal, sharing change or runtime activation is needed.
 A private 1.45 MB preparation archive remains optional evidence, not a required
-public deliverable. Public sharing still awaits the capability choice below.
+public deliverable. Jesse subsequently authorized public live guidance with strict gap blocking; see [the release decision](public-launch-20261009.md).
 
 ## Proposed connection design: retain coverage, separate evidence from guidance
 
@@ -74,21 +74,23 @@ Use the existing preview summary and accessible map markers, not restored privat
 cards: for example, **Route includes 2 connections the data cannot verify. You can
 review and save this plan; guidance cannot cover those connections.** Keep gaps
 as end markers rather than invented path lines, and preserve warnings in downloads.
-After device acceptance, enable guidance for entirely supported routes only.
+The authorized launch enables guidance for entirely supported routes only; physical-device evidence remains NOT RUN.
 Do not increase snap tolerance, label an estimate verified, or unlock guidance with
 an acknowledgement checkbox. Future guidance on supported portions while paused
 at gaps requires a distinct design and regression proof.
 
-**Product decision needed:** launch a planning beta first with all active guidance
-disabled, or wait for physical acceptance and launch guidance for supported routes.
-Either retains geographic data coverage; both change capability availability from
-private v12 and require an explicit release choice. No capability change is made here.
+**Decision resolved October 9:** Jesse chose public live guidance and public feedback
+to inform physical testing. The planning-only alternative was not selected. The
+release disables the private estimated-gap override while retaining supported
+guidance and all planning/saving coverage. Physical results remain NOT RUN.
+See [the exact launch record](public-launch-20261009.md).
 
 ## Physical acceptance: capability-specific, not a data-license requirement
 
 Missing device evidence is a strong reservation for active outdoor guidance,
-not a legal prohibition on public map viewing/planning. The existing #41 release
-matrix requires both physical platforms for its full navigation launch. A planning
+not a legal prohibition on public map viewing/planning. The original #41 full-acceptance
+matrix called for both physical platforms; Jesse's October 9 release decision
+uses public feedback to prioritize those follow-up runs. A planning
 beta could narrow the acceptance claim only through the product decision above,
 with Start and all resume/recovery/reroute paths actually disabled. Warnings alone
 do not make the currently enabled private guidance a planning-only release.

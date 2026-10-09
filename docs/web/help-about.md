@@ -33,7 +33,14 @@ The owner selected **hoowareapps@gmail.com**. Help and about now has a Project
 contact topic and a visible `mailto:hoowareapps@gmail.com` link. It opens the
 visitor's email app without attaching a report, location, route or browser details;
 review and sending remain the visitor's choice. The GitHub problem/ride-feedback
-flows, voluntary copy step and public-posting warning are retained. Mailbox access
-and monitoring are being checked separately; the app promises neither monitoring
-nor a response time. Browser tests inspect the address/href without launching mail
+flows, voluntary copy step and public-posting warning are retained. Mailbox monitoring was verified and enabled separately by the parent; the app
+makes no response-time promise. Browser tests inspect the address/href without launching mail
 or sending anything. This contact change does not authorize a public launch.
+
+## Active guidance note (October 9)
+
+Only active turn-by-turn guidance displays the owner's exact text,
+"Navigation is in beta and may experience issues." A readable caption outside the
+instruction live region avoids repeating it with every direction update. It clears
+while acquiring/paused/lost and after Stop. No site-wide beta label, banner or new
+generic phone-testing warning is added. Physical test records remain NOT RUN.
