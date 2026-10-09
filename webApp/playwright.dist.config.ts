@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { browserPortRange } from "./tools/lib/browser-port.mjs";
+import { checkDistExpectations } from "./tools/lib/dist-expectations.mjs";
+checkDistExpectations();
 // Smoke tests against the BUILT artifact served with the production header set (not the Vite dev server).
 const port = browserPortRange(process.env.TRAIL_TEST_PORT ?? 4174, 1);
 export default defineConfig({
