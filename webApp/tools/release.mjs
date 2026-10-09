@@ -12,7 +12,10 @@
 // webApp/generated/county from the private extract) instead of the synthetic fixture; the county-mode browser suite
 // on synthetic data runs in either case, because it is what proves the production loading path.
 import { spawnSync } from "node:child_process";
-import { createServer } from "node:net";
+import {
+  freeBrowserPortRange,
+  COUNTY_BROWSER_PORT_COUNT,
+} from "./lib/browser-port.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -65,37 +68,6 @@ function finish(code) {
     JSON.stringify(report, null, 2) + "\n",
   );
   process.exit(code);
-}
-
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.unref();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      server.close(() => resolve(port));
-    });
-  });
-}
-
-/** A free port whose successor is free too (the county suite owns both); retries past reserved or busy neighbours. */
-async function freePortPair() {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const port = await freePort();
-    const free = await new Promise((resolve) => {
-      const server = createServer();
-      server.unref();
-      server.on("error", () => resolve(false));
-      server.listen(port + 1, "127.0.0.1", () =>
-        server.close(() => resolve(true)),
-      );
-    });
-    if (free) return port;
-  }
-  throw new Error(
-    "Could not find two adjacent free ports for the county suite.",
-  );
 }
 
 function requireTools() {
@@ -183,7 +155,7 @@ run("Install the browser used by the suites", "npx", [
   "chromium",
 ]);
 if (!args.has("--skip-e2e")) {
-  const devPort = String(await freePort());
+  const devPort = String(await freeBrowserPortRange());
   run(
     `Browser suite: dev server, desktop + mobile (port ${devPort})`,
     "npx",
@@ -193,7 +165,7 @@ if (!args.has("--skip-e2e")) {
     },
   );
 }
-const distPort = String(await freePort());
+const distPort = String(await freeBrowserPortRange());
 run(
   `Built-artifact smoke tests (port ${distPort})`,
   "npx",
@@ -203,10 +175,12 @@ run(
   },
 );
 if (!args.has("--skip-e2e")) {
-  // Packaged-dataset production path on SYNTHETIC data, two owned ports (review and public builds).
-  const countyPort = String(await freePortPair());
+  // Packaged-dataset production path on SYNTHETIC data, six owned variant ports.
+  const countyPort = String(
+    await freeBrowserPortRange(COUNTY_BROWSER_PORT_COUNT),
+  );
   run(
-    `County-mode suite on synthetic data (ports ${countyPort} and ${Number(countyPort) + 1})`,
+    `County-mode suite on synthetic data (ports ${countyPort}–${Number(countyPort) + 5})`,
     "npx",
     ["playwright", "test", "-c", "playwright.county.config.ts"],
     { env: { TRAIL_TEST_PORT: countyPort } },

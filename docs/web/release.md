@@ -22,7 +22,7 @@ It runs, in order, and stops at the first failure:
 7. `tools/write-provenance.mjs --strict` writes `dist/provenance.json` (see below); `tools/audit-dist.mjs` scans the exact files for local review assets and credential patterns and re-verifies every hash.
 8. Desktop + mobile (Pixel 7) browser suite against the dev server on a **free port this run owns**; the server is never reused (an occupied port fails the run instead of silently testing another checkout).
 9. Built-artifact smoke tests (`tests/dist`) against `dist/` served by `tools/serve-dist.mjs` with the production header policy from `hosting/headers.mjs`, on another owned port.
-10. The county-mode browser suite on **synthetic** packaged data (`playwright.county.config.ts`, two more owned ports: a review build and a public build). It is what proves the production loading path, failure handling and saved-route revalidation whatever dataset the main artifact carries.
+10. The county-mode browser suite on **synthetic** packaged data (`playwright.county.config.ts`, six adjacent owned ports: review, public, OSM, access, Proposed control and all-layer credits variants). It is what proves the production loading path, failure handling and saved-route revalidation whatever dataset the main artifact carries.
 11. A final re-audit, then a summary of commit, core, dataset and artifact hashes. A machine-readable step log is written to `webApp/dist-report/release-report.json`.
 
 `npm run build` alone is safe too: it verifies the core manifest first, so it can no longer bundle a stale or hand-copied Kotlin library. If the manifest is missing or stale it stops and says to run `npm run build:core` (which now also writes the manifest) or the release check.
@@ -79,3 +79,9 @@ A second, independent workflow, `.github/workflows/web-firestore-rules.yml` (**W
 ## What this does not certify
 
 Real data, physical iPhone/Android browsers, hosting or a public launch: #47 and #41 remain gates for the first launch, which is guest-first (route planning, foreground navigation and browser-local saves, no sign-in). Authentication and cloud sync (#31-#33, #51) are deferred to a later phase and are not first-launch dependencies. Built-artifact smoke tests use the fixture network (or, for `--dataset county`, check the county files, headers and provenance); automated runs never request map tiles. A real-data county artifact is produced by `python tools/fetch-web-review-data.py`, `npm run package:dataset` and `npm run release:check -- --dataset county`; see [county-dataset.md](county-dataset.md) for what it was measured to do.
+
+## Browser port preflight
+
+`TRAIL_TEST_PORT` must be a decimal integer from 1 through 65535 and an HTTP port browsers allow. Playwright configurations, Vite and the artifact preview and synthetic county servers reject invalid or Fetch-blocked ports before starting a server (for example 4190). The county configuration validates its complete range from base through base + 5, so a valid base beside a blocked port also refuses. Defaults and explicit safe selections are unchanged. Direct preview server `--port` values use the same validation.
+
+Automatic release allocation skips blocked candidates and probes every required port while holding the successful binds, then releases the probes before the owned servers start. The county allocation checks all six ports, including its last variant. There is still a bind race between probing and starting; strict-port/no-reuse servers fail visibly on a competing listener rather than switching to another checkout. This does not disable browser restrictions or certify a physical device. Port policy: [Fetch Standard, port blocking](https://fetch.spec.whatwg.org/#port-blocking), checked 2026-10-09.

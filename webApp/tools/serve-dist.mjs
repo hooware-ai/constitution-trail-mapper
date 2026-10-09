@@ -10,15 +10,19 @@ import {
   securityHeaders,
 } from "../hosting/headers.mjs";
 import { distDir } from "./lib/provenance.mjs";
+import { browserPort } from "./lib/browser-port.mjs";
 
 const portArg = process.argv.indexOf("--port");
-const port = Number(
-  portArg > 0
-    ? process.argv[portArg + 1]
-    : (process.env.TRAIL_TEST_PORT ?? 4173),
-);
-if (!Number.isInteger(port) || port <= 0) {
-  console.error("serve-dist needs a valid --port <n> (or TRAIL_TEST_PORT).");
+let port;
+try {
+  port = browserPort(
+    portArg > 0
+      ? process.argv[portArg + 1]
+      : (process.env.TRAIL_TEST_PORT ?? 4173),
+    portArg > 0 ? "--port" : "TRAIL_TEST_PORT",
+  );
+} catch (error) {
+  console.error(error.message);
   process.exit(2);
 }
 

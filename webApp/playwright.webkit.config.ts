@@ -1,9 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
+import { browserPortRange } from "./tools/lib/browser-port.mjs";
 // Automated WebKit launch-acceptance coverage (issue #41). WebKit here is Playwright's own build of the Safari engine; it is
 // NOT iPhone Safari, iOS, a physical device, VoiceOver or a real GPS. The Chromium suites (playwright.config.ts) are
 // unchanged and keep running separately. Same rule as them: a port this run owns, never reused.
 //   npm run test:webkit            (first use: npx playwright install webkit)
-const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
+const port = browserPortRange(process.env.TRAIL_TEST_PORT ?? 4173, 1);
 export default defineConfig({
   testDir: "tests/webkit",
   fullyParallel: false,
