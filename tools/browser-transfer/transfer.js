@@ -6,18 +6,23 @@ globalThis.trailMapperTransfer = (() => {
   const allowed = /^trail-mapper\.(county|fixture):trail-mapper\.web\.(library(?:\.quarantine)?|session|completed-sessions|active-ride|carried-ride)\.v1$/;
   const recovery = /(?:active-ride|carried-ride)\.v1$/;
   const origin = () => globalThis.location.origin;
-  function capture() {
-    if (origin() !== oldOrigin) throw new Error("Open the existing private site before exporting.");
+  function captureLocal() {
+    if (![oldOrigin, newOrigin].includes(origin())) throw new Error("Open a recognized Trail Mapper origin before exporting.");
     // Planner preferences live in session.v1. This source has no separate settings/IndexedDB/sessionStorage store.
     // Unknown keys anywhere on this dedicated origin need local investigation, never silent omission.
     const entries = Object.keys(localStorage).sort().map((key) => ({ key, value: localStorage.getItem(key) }));
     if (entries.some(({ key }) => !allowed.test(key))) throw new Error("Unknown app storage key: review locally before migration.");
-    if (entries.some(({ key }) => /active-ride\.v1$/.test(key))) throw new Error("Stop the ride in the app before exporting, then close other app tabs.");
-    return { schema: "trail-mapper.browser-transfer/1", sourceOrigin: oldOrigin, createdAt: new Date().toISOString(), entries };
+    return { schema: "trail-mapper.browser-transfer/1", sourceOrigin: origin(), createdAt: new Date().toISOString(), entries };
+  }
+  function capture() {
+    if (origin() !== oldOrigin) throw new Error("Open the existing private site before exporting.");
+    const backup = captureLocal();
+    if (backup.entries.some(({ key }) => /active-ride\.v1$/.test(key))) throw new Error("Stop the ride in the app before exporting, then close other app tabs.");
+    return backup;
   }
   function restore(backup) {
     if (origin() !== newOrigin) throw new Error("Open the new site before importing.");
-    if (location.pathname !== "/browser-transfer.html" || document.querySelector('meta[name="trail-mapper-transfer"]')?.content !== "1") throw new Error("Import on the dedicated browser-transfer.html page, where the app is not running.");
+    if (!["/browser-transfer.html", "/browser-transfer"].includes(location.pathname) || document.querySelector('meta[name="trail-mapper-transfer"]')?.content !== "1" || document.scripts.length !== 0) throw new Error("Import on the dedicated browser-transfer.html page, where the app is not running.");
     if (!backup || backup.schema !== "trail-mapper.browser-transfer/1" || backup.sourceOrigin !== oldOrigin || !Array.isArray(backup.entries) || backup.entries.length > 14) throw new Error("Not a supported browser-library backup.");
     const seen = new Set();
     let bytes = 0;
@@ -49,5 +54,5 @@ globalThis.trailMapperTransfer = (() => {
     }
     return { importedKeys: entries.map(({ key }) => key), recoveryKeysKeptOnlyInBackup: backup.entries.filter(({ key }) => recovery.test(key)).map(({ key }) => key) };
   }
-  return Object.freeze({ capture, restore });
+  return Object.freeze({ capture, captureLocal, restore });
 })();
