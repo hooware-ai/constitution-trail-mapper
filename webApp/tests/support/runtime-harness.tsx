@@ -32,7 +32,18 @@ const runtime = new RuntimeFreshness<number>({
     saveRefreshHint(localStorage, m);
   },
 });
-const unbind = bindRefreshLifecycle(runtime);
+const subscriptionGap = new URLSearchParams(location.search).has(
+  "subscription-gap",
+);
+if (subscriptionGap) {
+  const subscribe = runtime.subscribe;
+  runtime.subscribe = (listener) => {
+    // Reproduce an external state change after render, immediately before subscription.
+    runtime.setOffline(true);
+    return subscribe(listener);
+  };
+}
+const unbind = subscriptionGap ? () => {} : bindRefreshLifecycle(runtime);
 const api = {
   state: () => runtime.snapshot,
   accepted: () => runtime.accepted?.manifest ?? null,
