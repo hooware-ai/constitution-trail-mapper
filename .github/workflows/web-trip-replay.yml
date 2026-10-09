@@ -1,0 +1,112 @@
+name: Web synthetic trip replay
+
+# Secret-free fast replay on PRs and a manual deep replay/release/WebKit lane.
+# Firestore and the standalone release/WebKit workflows remain separate PR gates; none deploys.
+on:
+  pull_request:
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "shared/**"
+      - "data/**"
+      - "tools/**"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "kotlin-js-store/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-trip-replay.yml"
+  push:
+    branches: [main]
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "shared/**"
+      - "data/**"
+      - "tools/**"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "kotlin-js-store/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-trip-replay.yml"
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Synthetic replay gate depth
+        type: choice
+        options: [fast, deep]
+        default: fast
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-trip-replay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trip-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: webApp/package-lock.json
+
+      - name: Point Gradle at the runner's Android SDK
+        run: echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Install locked dependencies and Chromium
+        working-directory: webApp
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Install WebKit for the manually selected deep lane
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.lane == 'deep' }}
+        working-directory: webApp
+        run: npx playwright install --with-deps webkit
+
+      - name: Replay synthetic trips and closure controls through the real Kotlin core
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.lane != 'deep' }}
+        working-directory: webApp
+        run: npm run test:trip:fast
+        env:
+          CI: "true"
+
+      - name: Deep replay, release and WebKit checks on synthetic data
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.lane == 'deep' }}
+        working-directory: webApp
+        run: npm run test:trip:deep
+        env:
+          CI: "true"
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-trip-replay-traces
+          path: webApp/test-results
+          retention-days: 7
+          if-no-files-found: ignore
