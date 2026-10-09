@@ -1,0 +1,94 @@
+name: Web WebKit launch acceptance
+
+# Runs the automated WebKit specs (webApp/tests/webkit, issue #41) on GitHub-hosted Linux. WebKit here is Playwright's
+# build of the Safari engine: it is NOT iPhone Safari, a physical device, VoiceOver or a real GPS, and a green run is not
+# launch acceptance (see docs/web/launch-acceptance.md). A separate workflow from "Web release check" and "Web Firestore
+# rules", which are unchanged. No secrets, no deployment, no cloud access, no authentication; the specs run the app on its
+# synthetic fixture network against a loopback dev server.
+
+on:
+  pull_request:
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-webkit.yml"
+  push:
+    branches: [main, "codex/web-app"]
+    paths:
+      - "webApp/**"
+      - "webBridge/**"
+      - "sharedLogic/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/web-webkit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-webkit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webkit-specs:
+    name: WebKit launch-acceptance specs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: webApp/package-lock.json
+
+      # Gradle still configures the Android modules, so it needs an SDK location. The hosted image ships one.
+      - name: Point Gradle at the preinstalled Android SDK
+        run: echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Locked install and WebKit with its system dependencies
+        working-directory: webApp
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+
+      # The specs run the real Kotlin routing core, so it is built from this checkout (the same task the release check uses).
+      - name: Build the Kotlin core
+        working-directory: webApp
+        timeout-minutes: 20
+        run: npm run build:core
+
+      - name: WebKit specs (desktop Safari engine, iPhone 15 and iPhone SE profiles)
+        working-directory: webApp
+        timeout-minutes: 20
+        run: npm run test:webkit
+        env:
+          CI: "true"
+
+      - name: Upload traces on failure (synthetic data only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkit-test-results
+          path: webApp/test-results
+          retention-days: 7
+          if-no-files-found: ignore

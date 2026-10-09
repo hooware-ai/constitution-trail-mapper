@@ -48,7 +48,7 @@ class SavedTrailRouteShareTextSijkoTest {
 
     @Test
     fun retainsReopeningUncertaintyInSharesAfterTheEstimatedEnd() {
-        val text = SavedTrailRouteShareTextSijko.textFor(hamiltonRoute(), October1)
+        val text = SavedTrailRouteShareTextSijko.textFor(hamiltonRoute(), AfterHamiltonEstimate)
 
         assertTrue(text.contains("reopening has not been confirmed"))
         assertTrue(text.contains("last checked September 7, 2026"))
@@ -137,5 +137,7 @@ class SavedTrailRouteShareTextSijkoTest {
     private companion object {
         const val September7 = 1_788_782_400_000L
         const val October1 = 1_790_856_000_000L
+        // One millisecond after the official map's October 31, 2026 18:00 CDT estimate for the Hamilton closure.
+        const val AfterHamiltonEstimate = 1_793_487_600_001L
     }
 }

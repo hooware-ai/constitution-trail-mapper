@@ -1,0 +1,191 @@
+[
+ {
+  "place": "Tipton Park · North entrance",
+  "typed": "2201 Stone Mountain Boulevard",
+  "catalogAddressSearch": [
+   "Tipton Park · North entrance"
+  ],
+  "index": {
+   "kind": "matches",
+   "ambiguous": false,
+   "places": [
+    {
+     "label": "2201 Stone Mountain Blvd, Bloomington",
+     "units": 0,
+     "metersFromCatalogMarker": 50
+    }
+   ]
+  },
+  "reverseLabelAtCatalogMarker": {
+   "label": "2201 Stone Mountain Blvd, Bloomington",
+   "distanceMeters": 49.9
+  }
+ },
+ {
+  "place": "Culver’s · Hershey Road",
+  "typed": "901 Hershey Road",
+  "catalogAddressSearch": [
+   "Culver’s · Hershey Road"
+  ],
+  "index": {
+   "kind": "matches",
+   "ambiguous": false,
+   "places": [
+    {
+     "label": "901 N Hershey Rd, Bloomington",
+     "units": 0,
+     "metersFromCatalogMarker": 1
+    }
+   ]
+  },
+  "reverseLabelAtCatalogMarker": {
+   "label": "901 N Hershey Rd, Bloomington",
+   "distanceMeters": 1.3
+  }
+ },
+ {
+  "place": "Culver’s · West Market Street",
+  "typed": "1807 W. Market Street",
+  "catalogAddressSearch": [
+   "Culver’s · West Market Street"
+  ],
+  "index": {
+   "kind": "matches",
+   "ambiguous": false,
+   "places": [
+    {
+     "label": "1807 W Market St, Bloomington",
+     "units": 0,
+     "metersFromCatalogMarker": 3
+    }
+   ]
+  },
+  "reverseLabelAtCatalogMarker": {
+   "label": "1807 W Market St, Bloomington",
+   "distanceMeters": 3.1
+  }
+ },
+ {
+  "place": "Normal Public Library",
+  "typed": "206 W. College Ave.",
+  "catalogAddressSearch": [
+   "Normal Public Library"
+  ],
+  "index": {
+   "kind": "matches",
+   "ambiguous": false,
+   "places": [
+    {
+     "label": "206 W College Ave, Normal",
+     "units": 1,
+     "metersFromCatalogMarker": 10
+    }
+   ]
+  },
+  "reverseLabelAtCatalogMarker": {
+   "label": "206 W College Ave, Normal",
+   "distanceMeters": 10.3
+  }
+ },
+ {
+  "place": "Fairview Park",
+  "typed": "801 North Main Street",
+  "catalogAddressSearch": [
+   "Fairview Park"
+  ],
+  "index": {
+   "kind": "matches",
+   "ambiguous": true,
+   "places": [
+    {
+     "label": "801 N Main St, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 3899
+    },
+    {
+     "label": "801 N Main St, Normal",
+     "units": 0,
+     "metersFromCatalogMarker": 49
+    },
+    {
+     "label": "801 N Main St, Saybrook",
+     "units": 0,
+     "metersFromCatalogMarker": 40884
+    },
+    {
+     "label": "801 N Main St, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 3897
+    },
+    {
+     "label": "801 N Main St, Normal",
+     "units": 1,
+     "metersFromCatalogMarker": 129
+    },
+    {
+     "label": "801 N Main St, Normal",
+     "units": 1,
+     "metersFromCatalogMarker": 146
+    }
+   ]
+  },
+  "reverseLabelAtCatalogMarker": {
+   "label": "514 Mckinley St, Normal",
+   "distanceMeters": 35.1
+  }
+ },
+ {
+  "place": "Miller Park",
+  "typed": "1020 South Morris Avenue",
+  "catalogAddressSearch": [
+   "Miller Park"
+  ],
+  "index": {
+   "kind": "matches",
+   "ambiguous": true,
+   "places": [
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 0,
+     "metersFromCatalogMarker": 125
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 133
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 231
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 131
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 126
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 128
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 132
+    },
+    {
+     "label": "1020 S Morris Ave, Bloomington",
+     "units": 1,
+     "metersFromCatalogMarker": 123
+    }
+   ]
+  },
+  "reverseLabelAtCatalogMarker": null
+ }
+]

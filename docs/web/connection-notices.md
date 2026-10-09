@@ -1,0 +1,23 @@
+# Which estimated connections are announced (2026-10-04)
+
+Jesse's feedback on the private test site: the start and end connection notices are obvious, one interior notice was "the same road", and one "isn't even a gap".
+
+**Diagnosis on the real review package (30 catalog pairs, all of which showed four notices).** Each route's connections are the unrouted `Access` segments in the route: the first and last (start and destination or loop-return, `kind: endpoint`) and the joins where the access road meets the trail (`kind: interior`, labelled `Near <adjacent name>`). In the real data the interior joins were of two kinds: a mapped road end and a trail snap point within 0.03 to 0.86 m of each other (coordinate discrepancies where two mapped features meet, for example `Near N School St` 0.1 m, `Near McCormick Blvd` 0.27 m, `Near W North St` 0.86 m, `Near Gettysburg Dr` 0.03 m), and genuine inferred road-to-trail links (`Near Hubbard Dr` 13.84 m, `Near White Oak Rd` 78.44 m). The exact route Jesse used was not available, so which of these he saw as "the same road" is not established.
+
+**Correction.**
+- Bridge (`accessGapJson`): an interior unrouted connector of 1.0 m or less between two MAPPED (routed) segments is not a gap: the mapped geometry on both sides reaches the same place within mapping precision. Same road name alone, short length alone, endpoint connectors and connectors next to another estimated segment are NOT joined (tests). The route data is unchanged (the connector is still an unrouted segment and its length stays in the distance). Each remaining gap carries `kind`.
+- Web: only interior connections get a numbered notice and numbered map marker. Start and destination connections are not announced, but they remain in the route data and in counts and warnings, are drawn as a dashed estimated line with the tooltip "Estimated connection, not confirmed", and the map section carries `data-estimated-connections`. The strict Start-blocked caption and the private test-mode banner, warning and note are unchanged.
+
+**Effect on the 30 pairs (strict build).** Routes and distances identical; gap counts 4 for all before, now 3 for 16 pairs, 2 for 12 and 4 for 2 (the genuine longer joins remain); every pair still has at least its endpoint connections, so strict Start remains blocked for all 30. This is a strict-Start classification change only for routes whose sole interior joins are 1 m or less between mapped segments and which have no endpoint connection.
+
+**Limits.** 1.0 m is a mapping-precision judgment, stated here and pinned in tests, not a surveyed fact. Genuine interior links (13 m, 78 m) are still estimated and still announced. No connection is verified by any of this.
+
+## The owner's screenshot (added after the first correction)
+
+The screenshot showed "4 connections to check": "Start connection" 111 ft, "Near S Hershey Rd" 37 ft, "Near Prospect Ave" under 1 ft, "Destination connection" 90 ft. I reproduced the 37 ft row on the real review package (S Hershey Rd is the only edge of that name; a start about 30 m off it and a destination off Prospect Ave give "Near S Hershey Rd" 11.3 m = 37 ft, a start connection and a destination connection of 26.6 m). Why each row is treated as it is (pinned by `eachRowOfTheOwnersScreenshotIsTreatedForItsOwnReason` and the browser spec `interior-connections.spec.ts`):
+
+1. **Start connection, 111 ft** and 4. **Destination connection, 90 ft**: real estimated connections from the typed or picked point to the nearest mapped road. They are kept in the route data, counted, warned about and drawn dashed, but not announced (`kind: endpoint`).
+2. **Near S Hershey Rd, 37 ft**: NOT a coordinate discrepancy. The route follows S Hershey Rd, then steps 11.3 m east onto the trail that runs beside that road (the road continues past that point, and the map data has no connector between the road and the trail). It is a real, unmapped step, so it stays announced and keeps blocking strict Start; I did not join it because it is not the same line: it is two parallel mapped corridors. What was wrong is the label ("Near S Hershey Rd" read as a gap on the road itself). It is now named for what it joins: "S Hershey Rd to trail" (and "Trail to <road>" for the other direction; the neutral "Near <name>" wording remains for other cases).
+3. **Near Prospect Ave, under 1 ft**: two MAPPED segments (the trail and Prospect Ave) meeting within a tenth of a metre. That is a coordinate discrepancy and, after the first correction, is no longer a gap or a notice (the route data still holds the connector).
+
+Whether a rider can simply cross those 37 ft is a physical question the map data cannot answer; the private test mode assumes yes and says so.

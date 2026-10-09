@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "kind": "county",
+  "id": "mclean-reviewed-existing-trails",
+  "label": "McLean County reviewed trails (owner-private review candidate, not approved)",
+  "approved": false,
+  "approvedBy": null,
+  "approvedOn": null,
+  "approvedComposition": null,
+  "license": "CC-BY-4.0",
+  "attribution": "Trail data: McLean County GIS Consortium (McGIS) and members, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Reviewed existing trails only; filtered and normalized by Constitution Trail Mapper. Routes are generated and are not an official county map.",
+  "licenseEvidence": [
+    "https://www.arcgis.com/sharing/rest/content/items/a2a54b1f94704061abc90686fbc5c220?f=json",
+    "https://creativecommons.org/licenses/by/4.0/"
+  ],
+  "omitted": {
+    "supplements": "If no reviewed OpenStreetMap trail supplement is packaged, no OSM-derived path is included. A package that includes one supplies its own included-source description; public ODbL compliance remains unresolved (docs/web/data-rights.md).",
+    "accessRoads": "If no access-road package is included, routes connect only along admitted trail geometry; unverified street connections are never invented. A package with access roads supplies its own included-source description."
+  },
+  "blockers": [
+    "The six Proposed branch geometries (OBJECTIDs 1929, 1952, 2349, 3824, 4275, 4772) are omitted by the owner's narrow first-release scope decision; their redistribution basis is still unresolved and nothing here grants it.",
+    "The ODbL classification of a merged OpenStreetMap graph is unresolved for any PUBLIC release: this review candidate INCLUDES 4 reviewed OpenStreetMap paths, 9,313 endpoint-local OpenStreetMap service roads and 3,424 Census TIGER/Line roads, and that inclusion is not a rights determination.",
+    "The owner has not approved this source composition (254 existing trails, 4 OpenStreetMap paths, 12,737 access roads) for public release; owner-private review is not publication.",
+    "Physical iPhone Safari and Android Chrome acceptance (#41) has not been done.",
+    "Hosting and basemap decisions are open (docs/web/hosting-runbook.md); sign-in and sync are deferred by decision, as the first launch is guest-first."
+  ]
+}

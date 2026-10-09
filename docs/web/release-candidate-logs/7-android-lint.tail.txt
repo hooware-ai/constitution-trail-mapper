@@ -1,0 +1,61 @@
+# last 60 lines of 7-android-lint (paths made checkout-relative)
+> Task :shared:parseAndroidMainLocalResources
+> Task :androidApp:checkDebugAarMetadata
+> Task :androidApp:processDebugNavigationResources
+> Task :androidApp:compileDebugNavigationResources
+> Task :shared:generateAndroidMainRFile
+> Task :sharedLogic:extractAndroidMainAnnotations
+> Task :androidApp:packageDebugResources
+> Task :androidApp:parseDebugLocalResources
+> Task :androidApp:generateDebugRFile
+> Task :androidApp:processDebugMainManifest
+> Task :androidApp:processDebugManifest
+> Task :androidApp:processDebugManifestForPackage
+> Task :androidApp:mergeDebugResources
+> Task :androidApp:processDebugResources
+> Task :sharedLogic:compileAndroidMain
+> Task :sharedLogic:processAndroidMainJavaRes
+> Task :sharedLogic:mergeAndroidMainJavaResource
+> Task :sharedLogic:bundleAndroidMainClassesToCompileJar
+> Task :sharedLogic:bundleAndroidMainClassesToRuntimeJar
+> Task :shared:extractAndroidMainAnnotations
+> Task :sharedLogic:createFullJarAndroidMain
+> Task :sharedLogic:syncAndroidMainLibJars
+> Task :sharedLogic:bundleAndroidMainLocalLintAar
+
+> Task :shared:compileAndroidMain
+w: file:///<home>/Documents/ctm-web-release-candidate/shared/src/commonMain/kotlin/com/trailmapper/shared/TrailMapperViewModel.kt:119:13 Expression is unused.
+w: file:///<home>/Documents/ctm-web-release-candidate/shared/src/commonMain/kotlin/com/trailmapper/shared/TrailRoutePreviewSaveController.kt:104:17 Expression is unused.
+
+> Task :shared:processAndroidMainJavaRes
+> Task :shared:mergeAndroidMainJavaResource
+> Task :shared:bundleAndroidMainClassesToCompileJar
+> Task :shared:bundleAndroidMainClassesToRuntimeJar
+> Task :shared:createFullJarAndroidMain
+> Task :shared:syncAndroidMainLibJars
+> Task :shared:bundleAndroidMainLocalLintAar
+> Task :shared:generateAndroidHostTestLintModel
+
+> Task :androidApp:compileDebugKotlin
+w: file:///<home>/Documents/ctm-web-release-candidate/androidApp/src/main/kotlin/com/trailmapper/android/map/TrailRouteMapActivity.kt:295:13 Expression is unused.
+
+> Task :androidApp:compileDebugJavaWithJavac
+> Task :androidApp:bundleDebugClassesToCompileJar
+> Task :androidApp:generateDebugLintReportModel
+> Task :androidApp:generateDebugAndroidTestLintModel
+> Task :androidApp:generateDebugUnitTestLintModel
+> Task :androidApp:lintAnalyzeDebugAndroidTest
+> Task :androidApp:lintAnalyzeDebugUnitTest
+> Task :shared:lintAnalyzeAndroidHostTest
+> Task :androidApp:lintAnalyzeDebug
+
+> Task :androidApp:lintReportDebug
+Wrote HTML report to file:///<home>/Documents/ctm-web-release-candidate/androidApp/build/reports/lint-results-debug.html
+
+> Task :androidApp:lintDebug
+
+[Incubating] Problems report is available at: file:///<home>/Documents/ctm-web-release-candidate/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 45s
+71 actionable tasks: 71 executed
+Configuration cache entry reused.

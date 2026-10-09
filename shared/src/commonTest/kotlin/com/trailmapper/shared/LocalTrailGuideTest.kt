@@ -16,9 +16,29 @@ class LocalTrailGuideTest {
     @Test
     fun estimatedClosureEndRequiresRecheckRatherThanClaimingReopening() {
         val closure = entries.single { it.id == "hamilton-rhodes" }
+        // The official city map now estimates 6 p.m. CDT on October 31, 2026 (23:00Z); the older notice said September 30.
         assertTrue(closure.statusAt(at("2026-09-30T20:00:00Z")).contains("Closure reported"))
-        assertEquals("Recheck needed", closure.statusAt(at("2026-10-01T05:00:00Z")))
+        assertTrue(closure.statusAt(at("2026-10-31T22:59:59Z")).contains("Closure reported"))
+        assertEquals("Recheck needed", closure.statusAt(at("2026-10-31T23:00:00Z")))
         assertEquals("Recheck needed", closure.statusAt(at("2028-10-01T05:00:00Z")))
+    }
+
+    @Test
+    fun dated2026OctoberNoticesAreScheduledThenEstimatedAndNeverBecomeAReopening() {
+        fun status(id: String, iso: String) = entries.single { it.id == id }.statusAt(at(iso))
+        // Willow Street trail crossing (Normal 3356): 6 a.m. CDT October 5 = 11:00Z, estimate 5 p.m. CDT October 19 = 22:00Z.
+        assertTrue(status("willow-trail-closure", "2026-10-05T10:59:59Z").startsWith("Scheduled"))
+        assertTrue(status("willow-trail-closure", "2026-10-05T11:00:00Z").startsWith("Closed since October 5"))
+        assertEquals("Recheck needed", status("willow-trail-closure", "2026-10-19T22:00:00Z"))
+        // Virginia Avenue / Camelback Bridge (Normal 3353): 8 a.m. CDT October 5 = 13:00Z, estimate 5 p.m. CDT October 6.
+        assertTrue(status("camelback-trail-closure", "2026-10-05T12:59:59Z").startsWith("Scheduled"))
+        assertTrue(status("camelback-trail-closure", "2026-10-05T13:00:00Z").startsWith("Closed at Virginia Avenue"))
+        assertEquals("Recheck needed", status("camelback-trail-closure", "2026-10-06T22:00:00Z"))
+        // Raab Road trail paving (Normal 3357): begins October 3; no end or trail sections are given.
+        assertTrue(status("trail-paving-raab", "2026-10-03T10:59:59Z").startsWith("Scheduled"))
+        assertTrue(status("trail-paving-raab", "2026-10-03T11:00:00Z").startsWith("Paving under way"))
+        assertEquals("Recheck needed", status("collegiate-repaving", "2026-10-03T05:00:00Z"))
+        assertTrue(entries.single { it.id == "trail-paving-raab" }.details.contains("does not say which trail sections close"))
     }
 
     @Test

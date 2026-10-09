@@ -1,0 +1,81 @@
+[
+ {
+  "typed": "2210 stone mountain blvd",
+  "kind": "nearest-numbers",
+  "result": {
+   "street": "Stone Mountain Blvd",
+   "lower": "2201 Stone Mountain Blvd, Bloomington",
+   "higher": "2303 Stone Mountain Blvd, Bloomington"
+  }
+ },
+ {
+  "typed": "421 n main",
+  "kind": "matches",
+  "result": {
+   "ambiguous": true,
+   "places": [
+    "421 N Main St, Bloomington",
+    "421 N Main St, Isu"
+   ]
+  }
+ },
+ {
+  "typed": "100 main",
+  "kind": "matches",
+  "result": {
+   "ambiguous": true,
+   "places": [
+    "100 E Main St, Danvers",
+    "100 E Main St, Heyworth",
+    "100 N Main St, Ellsworth",
+    "100 W Main St, Stanford"
+   ]
+  }
+ },
+ {
+  "typed": "99999 main st",
+  "kind": "streets",
+  "result": [
+   "Main St",
+   "E Main St",
+   "N Main St",
+   "S Main St",
+   "W Main St"
+  ]
+ },
+ {
+  "typed": "stone mtn",
+  "kind": "none",
+  "result": null
+ },
+ {
+  "typed": "main",
+  "kind": "streets",
+  "result": [
+   "Main St",
+   "E Main St",
+   "N Main St",
+   "S Main St",
+   "W Main St"
+  ]
+ },
+ {
+  "typed": "123 e mulberry",
+  "kind": "nearest-numbers",
+  "result": {
+   "street": "E Mulberry St",
+   "lower": "108 E Mulberry St, Normal",
+   "higher": "204 E Mulberry St, Normal"
+  }
+ },
+ {
+  "typed": "901 hershey",
+  "kind": "matches",
+  "result": {
+   "ambiguous": false,
+   "places": [
+    "901 N Hershey Rd, Bloomington"
+   ]
+  }
+ }
+]

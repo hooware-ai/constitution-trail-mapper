@@ -1,0 +1,57 @@
+# last 60 lines of 5-shared-androidHost (paths made checkout-relative)
+Reusing configuration cache.
+> Task :shared:androidPreBuild UP-TO-DATE
+> Task :sharedLogic:androidPreBuild UP-TO-DATE
+> Task :sharedLogic:preAndroidMainBuild UP-TO-DATE
+> Task :shared:preAndroidHostTestBuild UP-TO-DATE
+> Task :shared:preAndroidMainBuild UP-TO-DATE
+> Task :shared:convertXmlValueResourcesForCommonMain NO-SOURCE
+> Task :shared:convertXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :shared:convertXmlValueResourcesForAndroidHostTest NO-SOURCE
+> Task :shared:copyNonXmlValueResourcesForCommonMain NO-SOURCE
+> Task :shared:convertXmlValueResourcesForCommonTest NO-SOURCE
+> Task :shared:copyNonXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :sharedLogic:kmpPartiallyResolvedDependenciesChecker
+> Task :shared:kmpPartiallyResolvedDependenciesChecker
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :sharedLogic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:processAndroidHostTestJavaRes NO-SOURCE
+> Task :shared:copyNonXmlValueResourcesForAndroidHostTest NO-SOURCE
+> Task :shared:copyNonXmlValueResourcesForCommonTest NO-SOURCE
+> Task :shared:prepareComposeResourcesTaskForAndroidMain NO-SOURCE
+> Task :shared:prepareComposeResourcesTaskForCommonMain NO-SOURCE
+> Task :shared:prepareComposeResourcesTaskForCommonTest NO-SOURCE
+> Task :shared:prepareComposeResourcesTaskForAndroidHostTest NO-SOURCE
+> Task :shared:androidJar
+> Task :shared:generateResourceAccessorsForCommonTest NO-SOURCE
+> Task :shared:generateResourceAccessorsForCommonMain NO-SOURCE
+> Task :shared:generateResourceAccessorsForAndroidMain NO-SOURCE
+> Task :shared:generateResourceAccessorsForAndroidHostTest NO-SOURCE
+> Task :shared:generateAndroidMainEmptyResourceFiles
+> Task :shared:copyAndroidMainComposeResourcesToAndroidAssets
+> Task :shared:generateExpectResourceCollectorsForCommonMain
+> Task :shared:generateComposeResClass
+> Task :shared:generateActualResourceCollectorsForAndroidMain
+> Task :shared:packageAndroidMainResources
+> Task :shared:parseAndroidMainLocalResources
+> Task :shared:generateAndroidMainRFile
+> Task :sharedLogic:compileAndroidMain
+> Task :sharedLogic:processAndroidMainJavaRes
+> Task :sharedLogic:bundleAndroidMainClassesToCompileJar
+> Task :sharedLogic:bundleAndroidMainClassesToRuntimeJar
+
+> Task :shared:compileAndroidMain
+w: file:///<home>/Documents/ctm-web-release-candidate/shared/src/commonMain/kotlin/com/trailmapper/shared/TrailMapperViewModel.kt:119:13 Expression is unused.
+w: file:///<home>/Documents/ctm-web-release-candidate/shared/src/commonMain/kotlin/com/trailmapper/shared/TrailRoutePreviewSaveController.kt:104:17 Expression is unused.
+
+> Task :shared:processAndroidMainJavaRes
+> Task :shared:bundleAndroidMainClassesToCompileJar
+> Task :shared:bundleAndroidMainClassesToRuntimeJar
+> Task :shared:compileAndroidHostTest
+> Task :shared:testAndroidHostTest
+
+[Incubating] Problems report is available at: file:///<home>/Documents/ctm-web-release-candidate/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 15s
+21 actionable tasks: 21 executed
+Configuration cache entry reused.

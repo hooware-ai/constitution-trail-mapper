@@ -1,0 +1,55 @@
+{
+  "schema": "trail-mapper.address-points.fetch/1",
+  "retrievedAt": "2026-10-04T00:20:13.422Z",
+  "item": {
+    "id": "502eefa828f94f749bbab9da63b0d016",
+    "title": "Addresses",
+    "type": "Feature Service",
+    "owner": "crystal.williams",
+    "url": "https://www.arcgis.com/home/item.html?id=502eefa828f94f749bbab9da63b0d016",
+    "modified": "2022-09-06T19:08:23.000Z",
+    "snippet": "Address points for McLean County, IL",
+    "access": "public",
+    "serviceUrl": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
+    "licenseInfo": "<a href='https://creativecommons.org/licenses/by/4.0/' rel='nofollow ugc'><img alt='Creative Commons License' src='https://i.creativecommons.org/l/by/4.0/88x31.png' style='border-width:0px;' /></a><br />This work is licensed under a <a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='nofollow ugc noopener noreferrer'>Creative Commons Attribution 4.0 International License</a>.",
+    "accessInformation": null,
+    "itemJsonSha256": "3d29d6a97df1a7f6dbe1286ac1602c98121ad6fe585ded77ce70dd9127429fb2"
+  },
+  "service": {
+    "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
+    "name": "Address",
+    "maxRecordCount": 2000,
+    "outSR": 4326,
+    "fields": [
+      "OBJECTID_1",
+      "ADDRESS",
+      "Building",
+      "Unit",
+      "Post_Comm",
+      "Post_Code",
+      "Inc_Muni",
+      "County",
+      "State"
+    ],
+    "copyrightText": "",
+    "description": "",
+    "layerJsonSha256": "f8d57e777ffca872e608c176ab48facf1f399acb381a675b9d7e4661c2f0a104"
+  },
+  "completeness": {
+    "serviceCount": 85220,
+    "fetchedRows": 85220,
+    "distinctIds": 85220,
+    "objectIdRange": [
+      1,
+      202800
+    ],
+    "windowIds": 1500,
+    "windows": 136,
+    "rowsWithoutPoint": 0,
+    "transferLimitHit": false
+  },
+  "rawFile": {
+    "bytes": 10805388,
+    "sha256": "428e2c921afd011cc64e553b301946806e4af582090f0cb3ea3b1783ca6cd7cf"
+  }
+}

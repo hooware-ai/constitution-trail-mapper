@@ -1,0 +1,28 @@
+# Help and about (issue #50)
+
+The rider-facing Help and about dialog is `webApp/src/Help.tsx` (content helpers in `webApp/src/helpContent.ts`). It is reachable from a **Help** button in the header on every screen, including during a ride, where opening it does not stop or pause guidance and browser Back closes it. Explore and Updates also link to it. It describes what the app does **today**; account-dependent features are stated as not available rather than described as if they worked.
+
+## What it says, and what each claim depends on
+
+| Topic | Source of truth | Change this page when |
+| --- | --- | --- |
+| Foreground-only guidance, no background/offline | `ForegroundNavigationController`, wake-lock and visibility handling; also stated at the Start button (`#foreground-note`) and on the ride screen | background or offline behaviour changes |
+| Coverage | computed from the loaded trails (`coverageOf`): count, length, extent; fixture and local-review builds say so plainly | the dataset changes |
+| Mapped vs unverified, street access, shared roadway, proposed, closed | the map legend and routing rules: unverified connections block navigation, proposed is opt-in and not navigable, closures block | routing or legend semantics change |
+| Closure freshness | `network.freshnessMessage` (a bundled notice list, not a live feed) | closures become live |
+| Place search | `webApp/src/search.ts`: a handful of public places (the count shown is `places.length`), saved places, never address/business search; map, current-location and saved-place fallbacks; also stated in the chooser | a geocoder or more catalog entries are added |
+| Storage and removal | `LocalRouteStore`, `ActiveRideStore`, `BrowserSessionStore` (localStorage, namespaced per build); Delete on saved items, Clear recents, stopping a ride, browser site data | new stored data or a new "delete everything" control |
+| Export and sharing | the Share dialog: summary link without endpoints; GeoJSON with endpoint areas removed unless the rider ticks the exact-endpoint box | export options change |
+| Requests the app makes | this origin only; the optional basemap (`tile.openstreetmap.org`, off by default, not offered in the synthetic review build; when on, a visible OpenStreetMap credit links to https://www.openstreetmap.org/copyright); no analytics/ads/trackers | any new third-party request (must be added here and to `hosting/headers.mjs`) |
+| Sources, licenses, changes, review status | the dataset record (`DataSources`): attribution, license link, change disclosure, review date, extraction time, omissions, approval state | the dataset or its approval changes |
+| Build and data identity | `__TRAIL_BUILD__` (commit, uncommitted-changes flag, routing-core hash) read by Vite when the build is made, plus the dataset record | the build pipeline changes |
+| Phones and browsers | tested only with automated emulation until physical iPhone Safari and Android Chrome runs (#41) are recorded | #41 produces results |
+| Accounts and sync | not implemented; stated as unavailable (#31-#34); deferred: the first launch is guest-first, with browser-local saves | sign-in or sync ships: describe exactly what is uploaded, retention and deletion, before enabling it |
+
+## Report a problem
+
+Help opens a review step: an editable text box pre-filled with a short template and **only** the app version (build, data identity). Nothing is sent from the page. It never adds a location, route geometry, place or route label, search or ride history, or any account detail, and there is no identifier. An optional checkbox appends the browser string and window size to the visible text, where the rider can delete it. The rider copies the text, or opens the project's public issue form on GitHub (a plain link with no pre-filled content); the dialog says anything posted there is public and that there is no private support inbox yet. Choosing a private channel is the #72 decision; changing it only needs `REPORT_URL` and the closing paragraph.
+
+## Tests
+
+`webApp/tests/unit/help-content.test.ts` (coverage, build identity, the report template and optional line) and `webApp/tests/e2e/help.spec.ts` (reachability from every screen, keyboard and focus, Back, no interruption of a ride, foreground note at Start, chooser coverage note and fallbacks, report privacy and clipboard, narrow screen with 200% text, axe) run on desktop and Pixel 7. `tests/county/county.spec.ts` checks the county-data content.
