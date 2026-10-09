@@ -54,17 +54,12 @@ test("default build: no test banner, the estimated connection blocks Start", asy
   await expect(start(page)).toBeDisabled();
 });
 
-test("private test mode: the banner and route warning say estimated, the connection is still listed, and Start works", async ({
+test("private test mode: the route warning says estimated, the connection is still mapped, and Start works", async ({
   page,
 }) => {
   test.skip(!testMode, "runs in the private test-mode build only");
   await planFromLocation(page, 40.489);
-  await expect(page.locator(".test-mode-banner")).toContainText(
-    "PRIVATE TEST MODE",
-  );
-  await expect(page.locator(".test-mode-banner")).toContainText(
-    "estimated, not confirmed",
-  );
+  await expect(page.locator(".test-mode-banner")).toHaveCount(0);
   // Nothing is relabelled as confirmed: the same measured, unverified connection is listed and drawn.
   await expect(
     page.locator('.map-wrap[data-estimated-connections="1"]'),
