@@ -59,6 +59,15 @@ async function open(page: Page) {
   await expect.poll(() => api(page, "state().acceptedSequence")).toBe(1);
   await expect.poll(() => api(page, "state().checking")).toBe(false);
 }
+test("status catches a runtime change between render and subscription", async ({
+  page,
+}) => {
+  await page.goto("/tests/support/runtime-harness.html?subscription-gap=1");
+  await expect.poll(() => api(page, "state().offline")).toBe(true);
+  await expect(page.getByRole("status")).toContainText("Offline");
+  expect(await api(page, "accepted()")).toBeNull();
+  expect(await api(page, "counts().starts")).toBe(0);
+});
 test("accessible failure/manual recovery keeps accepted version, timestamps and legal warnings", async ({
   page,
   context,
