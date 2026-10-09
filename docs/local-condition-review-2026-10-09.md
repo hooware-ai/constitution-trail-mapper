@@ -1,0 +1,35 @@
+# Local condition review — October 9, 2026
+
+Issues #1 and #2. Retrieval attempts and editorial review: **October 9, 2026 (UTC)**. This is a desk review of public official sources, not signage inspection, a field test or direct Town confirmation. Publication dates below belong to the sources; retrieval does not make an old notice current. No reopening follows from an elapsed estimate, missing listing, HTTP error or bid status.
+
+## Evidence and decisions
+
+| Item / official source | Published | October 9 retrieval / review | Result and catalog action |
+| --- | --- | --- | --- |
+| [Hershey initial notice](https://www.bloomingtonil.gov/Home/Components/News/News/10939/1394), [resurfacing update](https://www.bloomingtonil.gov/Home/Components/News/News/10979/1394) | September 4, 11 a.m.; September 28, 2026 | Initial text available through web retrieval; newer official indexed result available, full newer page HTTP 403 | Initial notice says traffic remains permitted. September 28 indexed text reports work begun north of Lamon through Jumer. Replace future-start wording with historical work report and current completion unverified. Do not claim the full newer page was reviewed. Keep October 1 overdue review visible. |
+| [Collegiate repaving 3345](https://www.normalil.gov/m/newsflash/Home/Detail/3345) | September 24, 2026 | Indexed official notice found; direct web retrieval HTTP 404; shell retrieval HTTP 403 | Preserve previously reviewed project description and October 2 estimate. No completion confirmation found. Keep October 3 overdue deadline; no precise temporary closed sections supplied. |
+| [Camelback 3353](https://www.normalil.gov/CivicAlerts.aspx?AID=3353) | September 30, 2026 | One CivicAlerts retrieval returned a titled official page; repeated detail retrievals HTTP 404, shell HTTP 403; indexed estimate corroborated | No explicit reopening found. October 6, 5 p.m. CDT estimate is not reopening. Preserve crossing blocker and overdue October 6 22:00Z review instant. No road geometry promoted to trail closure limits. |
+| [Raab paving 3357](https://www.normalil.gov/CivicAlerts.aspx?AID=3357) | October 2, 2026 | Official indexed notice found; detail/CivicAlerts web retrieval HTTP 404, shell HTTP 403 | Road-lane dates do not establish trail-section reopening. Replace “under way” with “reported”; preserve unknown current access, no invented barrier and October 7 overdue deadline. |
+| [Normal storm update](https://www.normalil.gov/m/newsflash/Archive/Item/3319?arcId=6477) | August 18, 2026 | Archived text retrieved through web tool | Historical intermittent closures only; no later explicit Town/City trail all-clear found in official-source searches. Retain segment uncertainty; next reminder October 16 00:00 CDT (05:00Z). |
+| [Linden bridge bid](https://www.normalil.gov/bids.aspx?bidID=541) | August 13, 2026, 9 a.m. | Official bid text retrieved through web tool | Bid submission closed September 2 at 11 a.m. “Closed” is procurement status, not trail access. No construction closure schedule verified; retain planned status. |
+| [Hamilton object 841](https://services3.arcgis.com/ZntpsilxOye7y1YF/arcgis/rest/services/RoadClosures_public_7e10ca6b3d3a4e6fa88caf9918ade300/FeatureServer/1/query?objectIds=841&outFields=*&outSR=4326&f=json) | GIS edit September 25 (prior evidence) | Existing October 3 review in [closure-readiness](web/closure-readiness.md) inspected; not newly retrieved in this review | October 31 18:00 CDT estimate already implemented. Retain informational advisory and deadline unchanged; do not relabel it newly verified today. |
+
+The broad guide review remains September 7: rules, completed projects and every map source were not re-reviewed here. The freshness banner separately dates the selected conditions review October 9. Failed fetches keep overdue entries marked **Recheck needed** rather than receiving a fresh assurance. Successfully retrieved unresolved storm/Uptown notices receive a one-week editorial reminder, not an expiry or reopening date.
+
+## Vernon investigation — unresolved (#2 stays open)
+
+[September 14 Town notice 3337](https://www.normalil.gov/m/newsflash/Home/Detail/3337) was retrieved through the web tool October 9. It describes an initial sidewalk-installation closure north of Vernon, then a detour beginning at Phoenix after that initial phase reopens. It gives no exact endpoints or reopening date for the initial phase.
+
+The [official Underpass project page](https://engage.zencity.io/normal-il/en-US/projects/the-underpass) and its [construction/detour update](https://engage.zencity.io/normal-il/en-US/projects/the-underpass/updates/construction-closes-parkinson-street-parking-lot-creates-constitution-trail-detour) were also retrieved October 9. The update has **no displayed publication date**; it points back to the September 14 release and describes the Phoenix detour. That corroborates the long-term detour, not the initial phase's reopening. Current Town news/road-closure listings and targeted official-source searches supplied no explicit initial-phase status or surveyed limits. Search absence is an evidence gap.
+
+**Current status: unverified. Precise affected initial segment: unverified.** No new exclusion, endpoint guess, extension south from Phoenix or reopening is justified. Retain existing Phoenix-to-Uptown exclusion and saved-route guidance. Guide and route advisory now explicitly separate it from the unmapped initial phase. Authoritative status plus precise limits are still required to finish issue #2; no third-party contact was made.
+
+The October Haunted Trail event notice encountered during searching describes a separate future event south of Phoenix; it is not proof of Underpass reopening and is not used to change this construction exclusion. Generic future-notice detection remains with issue #105's owner.
+
+## Verification
+
+Regression coverage checks overdue warning persistence, the exact next-review instant for refreshed unresolved notices, and saved Uptown advisory wording. Existing shared-core advisory, closure, gate, timed-closure and real-data tests are required before integration. Test outcome and exact commit are recorded in the draft PR; no native UI feature or routing geometry changed.
+
+## Independent review corrections
+
+The October 9 review follow-up restores the source's conditional Phoenix detour sequencing in both guide and route advisory: after the initial phase reopens. Current initial-phase status and endpoints remain unverified. Pre-start Hershey status stays scheduled; after the scheduled start it states only that the start instant was reached. Collegiate remains expected work during September 28–October 2, not an already-passed estimate. Raab describes scheduled paving, not observed progress. The September 28 indexed Hershey subsection names north of Lamon through Jumer; it is a narrower named section and cannot establish progress throughout the guide's Lamon-to-GE corridor. Full newer notice retrieval remains blocked. Added controls exercise pre-start and in-window statuses plus conditional sequencing; no closure geometry or gates changed.

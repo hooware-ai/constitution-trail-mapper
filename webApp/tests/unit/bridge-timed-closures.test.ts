@@ -881,12 +881,12 @@ test(
       /normalil\.gov\/m\/newsflash\/Home\/Detail\/3357$/,
     );
     const on = await engine(willow(), RAAB_START);
-    assert.match(statusAt(on.init, "trail-paving-raab"), /^Paving under way/);
+    assert.match(statusAt(on.init, "trail-paving-raab"), /^Paving scheduled from October 3/);
     const old = on.init.updates.find(
       (u: any) => u.id === "collegiate-repaving",
     );
     assert.match(old.details, /estimated the closures would end by October 2/);
-    assert.match(old.details, /No confirmed completion was found/);
+    assert.match(old.details, /Reviewed October 9: completion remains unverified/);
     assert.doesNotMatch(old.details, /has passed/);
     assert.equal(statusAt(on.init, "collegiate-repaving"), "Recheck needed");
     // No closure for it exists: only the Uptown and Willow closures can be in force.

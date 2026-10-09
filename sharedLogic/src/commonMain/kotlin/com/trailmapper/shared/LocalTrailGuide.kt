@@ -30,7 +30,8 @@ data class LocalTrailGuideEntry(
 object LocalTrailGuide {
     const val reviewedOn = "September 7, 2026"
     const val updatedOn = "October 9, 2026"
-    const val freshnessMessage = "Reviewed $reviewedOn, with selected entries updated $updatedOn. " +
+    const val conditionsReviewedOn = "October 9, 2026"
+    const val freshnessMessage = "Guide reviewed $reviewedOn; selected conditions reviewed $conditionsReviewedOn and updated $updatedOn. " +
         "This guide is a saved update, not live conditions. " +
         "Check official notices and signs before riding. Estimated completion dates do not confirm reopening."
 
@@ -69,7 +70,8 @@ object LocalTrailGuide {
             "Posted September 30: Virginia Avenue between South Linden and Hillcrest Streets closes at 8 a.m. CDT on " +
                 "Monday, October 5 for bridge inspection and maintenance, and Constitution Trail is also closed at " +
                 "Virginia Avenue (Camelback Bridge). Completion is estimated by 5 p.m. CDT on Tuesday, October 6, " +
-                "weather permitting; an estimate does not confirm reopening. The notice gives no trail detour and no " +
+                "weather permitting. Reviewed October 9: no explicit reopening confirmation was found; the original " +
+                "notice could not be reliably re-fetched. An estimate does not confirm reopening. The notice gives no trail detour and no " +
                 "closure limits along the trail, so Trail Mapper cannot plan around it: once the closure begins, a route " +
                 "that crosses there can be previewed but not started. The road closure does not define the trail closure, and Trail Mapper " +
                 "marks no additional neighboring trail interval from this notice; that is a statement about what this " +
@@ -98,43 +100,50 @@ object LocalTrailGuide {
         ),
         LocalTrailGuideEntry(
             "hershey-work", LocalTrailGuideCategory.Conditions, "Hershey: Lamon Drive to GE Road",
-            "Road, curb, drainage and sidewalk work is scheduled to begin September 8, 2026. " +
-                "The street stays open, with travel impacts. The notice does not give a confirmed finish date.",
+            "The September 4 city notice scheduled road, curb, drainage and sidewalk work from September 8, 2026, " +
+                "with the street open to traffic. The indexed September 28 city update reports work had begun north " +
+                "of Lamon through Jumer, a narrower named road section; it does not verify progress along the full " +
+                "Lamon-to-GE corridor. Its full page could not be retrieved on October 9. Current completion and " +
+                "travel impacts remain unverified. Check the current City notice and signs.",
             "Scheduled · September 8, 2026",
-            TrailResourceLink("City roadwork notice", "https://www.bloomingtonil.gov/Home/Components/News/News/10939/1394?backlist=%2Fdepartments%2Fengineering%2Fbloomington-streets"),
-            effectiveAtEpochMillis = epoch("2026-09-08T05:00:00Z"), effectiveStatus = "Scheduled start reached · check current notice",
+            TrailResourceLink("City September 28 resurfacing update", "https://www.bloomingtonil.gov/Home/Components/News/News/10979/1394"),
+            effectiveAtEpochMillis = epoch("2026-09-08T05:00:00Z"), effectiveStatus = "Scheduled start reached · current completion unverified",
             reviewAfterEpochMillis = epoch("2026-10-01T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
             "storm-cleanup", LocalTrailGuideCategory.Conditions, "Storm cleanup on Constitution Trail",
             "Normal's August 18 update describes intermittent closures while crews remove trees and limbs damaged " +
-                "in the August 13 storm. As of September 27, no later storm-cleanup trail update or all-clear was found " +
+                "in the August 13 storm. Reviewed October 9: no later storm-cleanup trail update or all-clear was found " +
                 "from Normal or Bloomington. Follow local closure signs; the earlier blanket closure is not a " +
                 "reliable description of every segment today.",
-            "Segment access unverified · no all-clear found September 27",
+            "Segment access unverified · reviewed October 9",
             TrailResourceLink("Normal storm update", "https://www.normalil.gov/m/newsflash/Archive/Item/3319?arcId=6477"),
-            reviewAfterEpochMillis = epoch("2026-10-27T05:00:00Z"),
+            reviewAfterEpochMillis = epoch("2026-10-16T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
             "uptown-detour", LocalTrailGuideCategory.Conditions, "Uptown Normal: Underpass construction detour",
             "Beginning September 21, 2026, the Town announced a closure north of Vernon Avenue while a detour " +
-                "sidewalk is built. Once the trail reopens, the signed detour leaves the trail at " +
+                "sidewalk is built. Reviewed October 9: the initial closure's current status, exact endpoints and reopening " +
+                "remain unverified. That phase is not mapped in Trail Mapper. Per the notice, after that initial phase " +
+                "reopens, a signed construction detour leaves the trail at " +
                 "Phoenix Avenue: west on Phoenix to Broadway, north on Broadway to the north sidewalk of Beaufort Street, " +
                 "and east on Beaufort to Uptown Circle, rejoining at the trailhead north of Uptown Circle. On Uptown " +
                 "sidewalks, dismount and walk your bike; in the street, follow traffic up Beaufort and around Uptown Circle. " +
                 "The detour lasts until construction is complete. Trail Mapper routes do not yet follow this detour; " +
-                "new routes avoid the closed section, and saved routes through it show a detour advisory.",
+                "new routes avoid the mapped Phoenix-to-Uptown section, and saved routes through that section show a detour " +
+                "advisory. This exclusion does not establish access north of Vernon.",
             "Closure, then signed detour · from September 21, 2026",
             TrailResourceLink("Normal trail detour notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3337"),
-            reviewAfterEpochMillis = epoch("2026-10-27T05:00:00Z"),
+            reviewAfterEpochMillis = epoch("2026-10-16T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
             "collegiate-repaving", LocalTrailGuideCategory.Conditions, "Collegiate Branch repaving: Fairview Park to Heartland",
             "Repaving from the south entrance of Fairview Park at Adelaide Street to Heartland Community College at " +
                 "Millennium Boulevard was expected to begin September 28 or 29, weather permitting. Repairs, patching and " +
                 "milling need targeted, temporary closures in individual sections before the overlay. The September 24 " +
-                "notice estimated the closures would end by October 2. No confirmed completion was found, and the " +
-                "October 2 trail paving notice below is the latest evidence checked. Follow posted closure and detour signs.",
+                "notice estimated the closures would end by October 2. Reviewed October 9: completion remains unverified; " +
+                "the original notice could not be re-fetched. The later October 2 paving notice does not confirm " +
+                "Collegiate reopening. Follow posted closure and detour signs.",
             "Scheduled · from September 28, 2026",
             TrailResourceLink("Normal repaving notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3345"),
             effectiveAtEpochMillis = epoch("2026-09-28T05:00:00Z"),
@@ -143,16 +152,17 @@ object LocalTrailGuide {
         ),
         LocalTrailGuideEntry(
             "trail-paving-raab", LocalTrailGuideCategory.Conditions, "Constitution Trail paving: Raab Road",
-            "Posted October 2: paving work on Constitution Trail begins Saturday, October 3 and needs temporary trail " +
+            "Posted October 2: paving work on Constitution Trail was scheduled from Saturday, October 3, needing temporary trail " +
                 "and lane closures on Raab Road. The eastbound lane near the ISU Horticulture Center and Cornbelters " +
                 "Stadium closes from 6 a.m. October 3; the westbound lane from near Cornbelters Stadium to Millennium " +
                 "Boulevard closes 6 a.m.–4 p.m. on Monday, October 5 and Tuesday, October 6. Those are road-lane " +
                 "closures. The notice does not say which trail sections close, when each reopens or when the work ends, so " +
-                "Trail Mapper does not mark a trail barrier; follow posted signs.",
+                "Trail Mapper does not mark a trail barrier. Reviewed October 9: the original notice could not be " +
+                "re-fetched and no explicit completion confirmation was found; follow posted signs.",
             "Scheduled · paving begins October 3, 2026",
             TrailResourceLink("Normal paving notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3357"),
             effectiveAtEpochMillis = epoch("2026-10-03T11:00:00Z"),
-            effectiveStatus = "Paving under way · temporary closures; trail sections and end not published",
+            effectiveStatus = "Paving scheduled from October 3 · current trail access unverified",
             reviewAfterEpochMillis = epoch("2026-10-07T05:00:00Z"),
         ),
         LocalTrailGuideEntry(
@@ -237,7 +247,8 @@ object LocalTrailGuide {
         LocalTrailGuideEntry(
             "linden", LocalTrailGuideCategory.Routes, "Linden Street trail bridge replacement",
             "Bids for replacing the Constitution Trail bridge were due September 2, 2026. " +
-                "The solicitation does not establish a current closure or construction start.",
+                "Reviewed October 9: the bid page is marked Closed, which refers to bidding, and gives no verified " +
+                "construction start or trail closure schedule.",
             "Replacement planned · access not confirmed by bid notice",
             TrailResourceLink("Normal bridge project", "https://www.normalil.gov/bids.aspx?bidID=541"),
         ),
