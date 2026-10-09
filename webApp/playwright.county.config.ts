@@ -1,8 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
+import {
+  browserPortRange,
+  COUNTY_BROWSER_PORT_COUNT,
+} from "./tools/lib/browser-port.mjs";
 // County-mode browser suite: the packaged-dataset production path, run against SYNTHETIC data built into the real
-// artifact layout (tests/support/serve-county.mjs). Three owned ports: a review-channel build, a public-channel build
-// and a review build that also packages the synthetic OpenStreetMap supplement. None is ever reused.
-const port = Number(process.env.TRAIL_TEST_PORT ?? 4175);
+// artifact layout (tests/support/serve-county.mjs). Six owned ports: review, public, OSM, access, Proposed control and all-layer credits
+// variants. None is ever reused.
+const port = browserPortRange(
+  process.env.TRAIL_TEST_PORT ?? 4175,
+  COUNTY_BROWSER_PORT_COUNT,
+);
 // The artifact-level county checks live with the dist smoke tests and are enabled by this variable.
 process.env.TRAIL_EXPECT_DATASET = "county";
 export default defineConfig({

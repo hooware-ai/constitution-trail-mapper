@@ -17,6 +17,7 @@
 //
 // Output goes to webApp/dist-county-review or dist-county-public (ignored); the real dist/ is never touched.
 import { spawnSync } from "node:child_process";
+import { browserPort } from "../../tools/lib/browser-port.mjs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,20 @@ import {
   makeAccessManifest,
 } from "./access-fixture.mjs";
 import { makeProposed } from "./proposed-fixture.mjs";
+
+// Reject the selected HTTP port before generating packages or launching a build.
+const portArg = process.argv.indexOf("--port");
+try {
+  browserPort(
+    portArg > 0
+      ? process.argv[portArg + 1]
+      : (process.env.TRAIL_TEST_PORT ?? 4173),
+    portArg > 0 ? "--port" : "TRAIL_TEST_PORT",
+  );
+} catch (error) {
+  console.error(error.message);
+  process.exit(2);
+}
 
 const webRoot = fileURLToPath(new URL("../../", import.meta.url));
 const channel = process.argv.includes("--public") ? "public" : "review";

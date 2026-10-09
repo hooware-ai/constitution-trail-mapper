@@ -1,9 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
+import { browserPortRange } from "./tools/lib/browser-port.mjs";
 
 // Fast, synthetic trip replay. This drives the real web app, worker and Kotlin
 // router with a scripted browser location provider; it does not emulate an OS
 // GPS, phone lock screen, outdoor accuracy or accessibility service.
-const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
+const port = browserPortRange(process.env.TRAIL_TEST_PORT ?? 4173, 1);
 export default defineConfig({
   testDir: "tests/replay",
   fullyParallel: false,

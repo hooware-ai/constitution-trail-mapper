@@ -7,9 +7,10 @@ import { execFileSync } from "node:child_process";
 import { repoRoot, verifyCoreManifest } from "./tools/lib/core.mjs";
 import { verifyPackageDir } from "./tools/lib/dataset-package.mjs";
 import { distDir } from "./tools/lib/provenance.mjs";
+import { browserPort } from "./tools/lib/browser-port.mjs";
 
 // Automated runs own their port (TRAIL_TEST_PORT) and fail if it is taken instead of reusing another server.
-const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
+const port = browserPort(process.env.TRAIL_TEST_PORT ?? 4173);
 
 // Which dataset a build carries is decided here and nowhere at runtime: a county build has no fixture path.
 const datasetKind = process.env.TRAIL_DATASET ?? "fixture";

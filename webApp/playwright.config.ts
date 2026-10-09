@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { browserPortRange } from "./tools/lib/browser-port.mjs";
 // CI owns a fresh server; an explicit manual override may attach to a server already started on the selected port.
-const port = Number(process.env.TRAIL_TEST_PORT ?? 4173);
+const port = browserPortRange(process.env.TRAIL_TEST_PORT ?? 4173, 1);
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: false,

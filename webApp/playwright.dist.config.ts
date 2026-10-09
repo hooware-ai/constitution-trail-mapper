@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { browserPortRange } from "./tools/lib/browser-port.mjs";
 // Smoke tests against the BUILT artifact served with the production header set (not the Vite dev server).
-const port = Number(process.env.TRAIL_TEST_PORT ?? 4174);
+const port = browserPortRange(process.env.TRAIL_TEST_PORT ?? 4174, 1);
 export default defineConfig({
   testDir: "tests/dist",
   fullyParallel: false,
