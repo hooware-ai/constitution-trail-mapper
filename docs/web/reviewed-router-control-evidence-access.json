@@ -63,7 +63,14 @@
           "equals": true
         }
       ],
-      "responseSha256": "9fe2a1bb98bac8595e76e1badcd1c1a14a87889427c012c974b7f553f4e79622"
+      "responseSha256": "9fe2a1bb98bac8595e76e1badcd1c1a14a87889427c012c974b7f553f4e79622",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "16:9003",
+        "54:9001",
+        "54:9002"
+      ]
     },
     {
       "id": "loop",
@@ -87,7 +94,12 @@
           "equals": "ExerciseLoop"
         }
       ],
-      "responseSha256": "add551eba5e586c8c82dd9e2569fec6e3a1ccda35cca991686ecbf8cf85adf99"
+      "responseSha256": "add551eba5e586c8c82dd9e2569fec6e3a1ccda35cca991686ecbf8cf85adf99",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "54:9001"
+      ]
     },
     {
       "id": "detached",
@@ -113,7 +125,10 @@
           "equals": false
         }
       ],
-      "responseSha256": "15b6d2f7456919da5ed0652f5807008f42d1283c0719062d462dd28a1842c400"
+      "responseSha256": "15b6d2f7456919da5ed0652f5807008f42d1283c0719062d462dd28a1842c400",
+      "canNavigate": false,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": []
     },
     {
       "id": "access",
@@ -139,7 +154,14 @@
           "equals": false
         }
       ],
-      "responseSha256": "a1b7413aff0a81bb5d7c23021b1dacb2e5d342c032e04bf16e3377a1a6143e1d"
+      "responseSha256": "a1b7413aff0a81bb5d7c23021b1dacb2e5d342c032e04bf16e3377a1a6143e1d",
+      "canNavigate": false,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "16:9003",
+        "54:9001",
+        "54:9002"
+      ]
     },
     {
       "id": "preclosure",
@@ -165,7 +187,14 @@
           "equals": true
         }
       ],
-      "responseSha256": "da65685c708d3389372db99f7ab5ccdd61fdc10a28e18c03b999d2c767014b32"
+      "responseSha256": "da65685c708d3389372db99f7ab5ccdd61fdc10a28e18c03b999d2c767014b32",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "54:1305",
+        "54:9100",
+        "54:9101"
+      ]
     },
     {
       "id": "closure-after-estimate",
@@ -399,7 +428,16 @@
           "equals": "uptown-underpass-detour-2026-09-21"
         }
       ],
-      "responseSha256": "20d6bbf69e2f0fde0fa825b6d040bd1cd13f4227735c71c87bcfac0246cef6c2"
+      "responseSha256": "20d6bbf69e2f0fde0fa825b6d040bd1cd13f4227735c71c87bcfac0246cef6c2",
+      "canNavigate": false,
+      "blockingClosureIds": [
+        "uptown-underpass-detour-2026-09-21"
+      ],
+      "sourceFeatureIds": [
+        "54:1305",
+        "54:9100",
+        "54:9101"
+      ]
     },
     {
       "id": "saved-current",
@@ -682,7 +720,14 @@
           "equals": true
         }
       ],
-      "responseSha256": "e761bbce84c0de2a7323c6a2086fb06ff882f927a0bc322001df1970e0fe2eed"
+      "responseSha256": "e761bbce84c0de2a7323c6a2086fb06ff882f927a0bc322001df1970e0fe2eed",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "16:9003",
+        "54:9001",
+        "54:9002"
+      ]
     },
     {
       "id": "mapped-service-access",
@@ -708,7 +753,12 @@
           "equals": true
         }
       ],
-      "responseSha256": "b55d9402b02fd0ff0baa30ad5ba56739e20d36ba1cf131dd859b7ca7beb1586f"
+      "responseSha256": "b55d9402b02fd0ff0baa30ad5ba56739e20d36ba1cf131dd859b7ca7beb1586f",
+      "canNavigate": true,
+      "blockingClosureIds": [],
+      "sourceFeatureIds": [
+        "54:9001"
+      ]
     }
   ],
   "approved": false,

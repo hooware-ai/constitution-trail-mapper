@@ -186,7 +186,40 @@ export async function runReviewedRouterControls({
       request,
       assertions: c.assertions,
       responseSha256: canonicalSha256(result),
+      canNavigate: result.canNavigate ?? false,
+      blockingClosureIds: (result.closures ?? []).map((c) => c.id).sort(),
+      sourceFeatureIds: [
+        ...new Set(
+          (result.route ?? request.route)?.edges
+            ?.map((e) => e.sourceFeatureId)
+            .filter(Boolean) ?? [],
+        ),
+      ].sort(),
     });
+  }
+  for (const review of report.reviews) {
+    if (review.decision.decision !== "accept") continue;
+    const candidate = review.candidate;
+    if (
+      candidate.kind === "closure" &&
+      !results.some(
+        (c) =>
+          c.category === "closure" &&
+          c.blockingClosureIds.includes(candidate.closureId) &&
+          candidate.affectedIds.every((id) => c.sourceFeatureIds.includes(id)),
+      )
+    )
+      refuse("missing exact accepted closure gate control");
+    if (
+      candidate.kind === "reopening" &&
+      !results.some(
+        (c) =>
+          c.category === "saved-route" &&
+          c.canNavigate === true &&
+          candidate.affectedIds.every((id) => c.sourceFeatureIds.includes(id)),
+      )
+    )
+      refuse("missing exact authoritative reopening saved-route control");
   }
   await verifyCoreManifest();
   return {

@@ -108,7 +108,10 @@ endpoint-local tile loader as the worker, with tile loads before each operation;
 the report records exactly which admitted parts were loaded. Required control categories are point, loop,
 disconnected, unverified-access, closure and saved-route. Category-specific behavior
 checks cannot be replaced with a generic successful-dispatch assertion. Caller-owned
-assertions pin additional exact expected fields. Saved routes come from preceding
+assertions pin additional exact expected fields. Every accepted close must have a
+gate control naming its exact closure and affected features; every accepted reopen
+must have a navigable saved-route control on its exact affected features.
+Saved routes come from preceding
 control cases, not invented serialized inputs. Output binds full review/package,
 compiled catalog, core source/output hashes, requests, assertions and response hashes.
 

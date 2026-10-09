@@ -403,3 +403,87 @@ test(
     );
   },
 );
+
+test(
+  "a separately reviewed close requires a gate control for its exact closure and affected feature",
+  { skip },
+  async () => {
+    const args = await fixture();
+    const closure = args.catalog.closures[0];
+    const { sha256 } = await import("../../tools/lib/core.mjs");
+    const bytes = Buffer.from(
+      "Synthetic evidence explicitly closes this exact fixture interval.",
+    );
+    const h = sha256(bytes);
+    const coordinates = [
+      [closure.closedFrom.longitude, closure.closedFrom.latitude],
+      [closure.closedTo.longitude, closure.closedTo.latitude],
+    ];
+    const c = {
+      schema: "trail-mapper.refresh-candidate/1",
+      id: "reviewed-close",
+      kind: "closure",
+      baseline: snapshotIdentity(args.snapshot),
+      target: snapshotIdentity(args.snapshot),
+      affectedIds: [closure.featureId],
+      closureId: closure.id,
+      authoritativeDecision: "closed",
+      activeFromUtc: new Date(closure.activeFromEpochMillis).toISOString(),
+      compiledClosure: closure,
+      geometry: [
+        {
+          id: closure.featureId,
+          pathIndex: 0,
+          fromVertex: 0,
+          toVertex: 1,
+          coordinates,
+        },
+      ],
+      confidence: "verified",
+      status: "present",
+      evidence: {
+        authorityId: "synthetic-authority",
+        url: closure.noticeUrl,
+        sha256: h,
+        statement: bytes.toString(),
+        publishedAtUtc: "2026-01-01T00:00:00Z",
+        retrievedAtUtc: "2026-01-02T00:00:00Z",
+      },
+    };
+    const d = {
+      candidateId: c.id,
+      candidateSha256: canonicalSha256(c),
+      reviewer: "fixture-reviewer",
+      reviewedAtUtc: "2026-01-03T00:00:00Z",
+      decision: "accept",
+      reason: "Synthetic exact interval and compiled schedule reviewed.",
+    };
+    const ledger = {
+      ...args.ledger,
+      closures: args.ledger.closures.filter((entry) => entry.id !== closure.id),
+    };
+    const report = reviewRefresh({
+      baseline: args.snapshot,
+      target: args.snapshot,
+      ledger,
+      candidates: [c],
+      decisions: [d],
+      policy: {
+        syntheticFixture: true,
+        reviewers: ["fixture-reviewer"],
+        authorities: [{ id: "synthetic-authority", urls: [closure.noticeUrl] }],
+      },
+      evidence: { [h]: bytes },
+    });
+    assert.equal(
+      (await runReviewedRouterControls({ ...args, report })).approved,
+      false,
+    );
+    const mismapped = structuredClone(report);
+    mismapped.reviews[0].candidate.affectedIds = ["54:9001"];
+    await assert.rejects(
+      runReviewedRouterControls({ ...args, report: mismapped }),
+      /exact accepted closure gate control/,
+    );
+  },
+);
