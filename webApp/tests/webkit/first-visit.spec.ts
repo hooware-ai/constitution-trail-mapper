@@ -21,9 +21,21 @@ test.afterEach(async ({ page }) => {
   expect((page as any).__errors).toEqual([]);
 });
 
-test("[engine] a first opening has no stored data, offers the guest actions, and the routing worker starts", async ({
+type FreshStorageWindow = Window & {
+  __firstVisitStorage: { keys: string[]; at: number };
+};
+
+test("[engine] a first opening has no prior rider data, persists only a blank Home session, and offers the guest actions", async ({
   page,
 }) => {
+  await page.addInitScript(() => {
+    (window as unknown as FreshStorageWindow).__firstVisitStorage = {
+      keys: Object.keys(localStorage).filter((key) =>
+        key.includes("trail-mapper"),
+      ),
+      at: Date.now(),
+    };
+  });
   await page.goto("/");
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
@@ -31,13 +43,45 @@ test("[engine] a first opening has no stored data, offers the guest actions, and
   await expect(
     page.getByRole("button", { name: /Make an exercise loop/ }),
   ).toBeVisible();
-  // Nothing of ours is stored before the rider does something.
-  const keys = await page.evaluate(() =>
-    Object.keys(localStorage).filter((key) => key.includes("trail-mapper")),
+  const initial = await page.evaluate(
+    () => (window as unknown as FreshStorageWindow).__firstVisitStorage,
   );
-  expect(keys.filter((key) => /saved|recent|ride|session/.test(key))).toEqual(
-    [],
+  expect(initial.keys).toEqual([]);
+  // The existing persistence effect writes a blank current-screen session after 300ms.
+  // Check the settled payload instead of racing that timer or ignoring all session data.
+  const sessionKey = "trail-mapper.fixture:trail-mapper.web.session.v1";
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).filter((key) => key.includes("trail-mapper")),
+      ),
+    )
+    .toEqual([sessionKey]);
+  const { session, now } = await page.evaluate(
+    (key) => ({
+      session: JSON.parse(localStorage.getItem(key)!),
+      now: Date.now(),
+    }),
+    sessionKey,
   );
+  expect(session).toEqual({
+    version: 1,
+    screen: "plan",
+    draft: {
+      mode: "point",
+      start: null,
+      destination: null,
+      miles: 5,
+      proposed: false,
+    },
+    selected: null,
+    savedTab: "saved",
+    origin: "planner",
+    updatedAt: expect.any(Number),
+  });
+  expect(Number.isSafeInteger(session.updatedAt)).toBe(true);
+  expect(session.updatedAt).toBeGreaterThanOrEqual(initial.at);
+  expect(session.updatedAt).toBeLessThanOrEqual(now);
   // Truthful local-only wording, and no sign-in controls, on the first screen.
   await expect(page.locator("body")).toContainText(
     "On this browser · no account",
@@ -54,6 +98,11 @@ test("[engine] a first opening has no stored data, offers the guest actions, and
   // The module worker (real Kotlin router) answers: planning a route below proves it too.
   const workers = await page.evaluate(() => typeof Worker === "function");
   expect(workers).toBe(true);
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.includes("trail-mapper")),
+    ),
+  ).toEqual([sessionKey]);
 });
 
 test("[engine] Explore shows the trail map, closures are not hidden, and proposed trails are off until the rider opts in", async ({

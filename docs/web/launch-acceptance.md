@@ -18,7 +18,7 @@ Playwright's `iPhone 15` and `iPhone SE` profiles set the viewport, touch and us
 
 | Journey step                                                                                  | Chromium suites                         | WebKit specs                                   | Physical device |
 | --------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------- | --------------- |
-| Fresh opening: guest actions, nothing stored, local-only wording, routing worker starts       | `help.spec.ts`, `rider.spec.ts`         | `first-visit` `[engine]`                       | NOT RUN         |
+| Fresh opening: no prior rider data, blank Home session, guest/local-only actions              | `help.spec.ts`, `rider.spec.ts`         | `first-visit` `[engine]`                       | NOT RUN         |
 | Explore map, proposed trails off until the rider opts in                                      | `rider.spec.ts`                         | `first-visit` `[engine]`                       | NOT RUN         |
 | Point-to-point plan, preview, directions, foreground limit stated at the Start button         | `rider.spec.ts`, `help.spec.ts`         | `first-visit` `[engine]`                       | NOT RUN         |
 | Exercise loop validation, plan and preview                                                    | `rider.spec.ts`                         | `first-visit` `[engine]`                       | NOT RUN         |
