@@ -1,5 +1,6 @@
 import type { AccessGap } from "./types";
 import { connectionsToCheck, gapDistance } from "./gapDistance";
+import { CONNECTION_CHECK_NOTICES_ENABLED } from "./previewPresentation";
 
 export function AccessConnections({
   gaps: allGaps,
@@ -8,6 +9,7 @@ export function AccessConnections({
   gaps: AccessGap[];
   onShow: (id: string) => void;
 }) {
+  if (!CONNECTION_CHECK_NOTICES_ENABLED) return null;
   const gaps = connectionsToCheck(allGaps);
   if (!gaps.length) return null;
   const total = gaps.reduce((sum, gap) => sum + gap.distanceMeters, 0);

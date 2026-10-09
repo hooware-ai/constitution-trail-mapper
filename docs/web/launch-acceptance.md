@@ -14,6 +14,8 @@ Playwright's `iPhone 15` and `iPhone SE` profiles set the viewport, touch and us
 
 ## Automated coverage of the first-visit guest journey
 
+The owner has temporarily hidden the blue **“connection(s) to check”** notification card and the two orange **private test mode** cards in the route preview. The two presentation flags in `webApp/src/previewPresentation.ts` restore the retained cards after rebuilding. Hidden cards leave no section, heading, summary or rows. Estimated geometry/counts, keyboard-accessible map markers, navigation eligibility, strict blocked-Start explanations, saved/exported warnings and the ride's safety status keep their existing behavior. The separate foreground-only limitation card, attribution and closure information remain visible. Real-preview tests check the same three estimated connections/blocked Start, private-mode navigation and recalculation, retained uncertainty in a downloaded route, and actual keyboard access to the remaining marker.
+
 `webApp/tests/webkit/` runs on three profiles: `webkit-desktop` (Desktop Safari), `webkit-iphone` (iPhone 15) and `webkit-iphone-se` (320 pt wide). Chromium columns refer to the existing suites in `webApp/tests/e2e/` (desktop Chrome and Pixel 7 emulation).
 
 | Journey step                                                                                  | Chromium suites                         | WebKit specs                                   | Physical device |

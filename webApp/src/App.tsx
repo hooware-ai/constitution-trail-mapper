@@ -12,6 +12,7 @@ import { applyReverse, reverseOutcome } from "./reverseGate";
 import { renderImage } from "./shareImage";
 import { HelpDialog } from "./Help";
 import { AccessConnections } from "./AccessConnections";
+import { PRIVATE_TEST_MODE_CARDS_ENABLED } from "./previewPresentation";
 import {
   type DialogNotice,
   EndpointField,
@@ -2310,7 +2311,9 @@ export function App() {
                   {preview.warnings
                     .filter(
                       (warning) =>
-                        !(stale && warning.startsWith("This saved route ")),
+                        !(stale && warning.startsWith("This saved route ")) &&
+                        (PRIVATE_TEST_MODE_CARDS_ENABLED ||
+                          !warning.startsWith("PRIVATE TEST MODE:")),
                     )
                     .map((warning, index) => (
                       <p className="warning" key={index}>
@@ -2396,14 +2399,13 @@ export function App() {
                       </p>
                     )}
                   </div>
-                  {preview.canNavigate && preview.assumedConnections && (
-                    <p className="warning" role="note">
-                      Private test mode: this route can start only because its
-                      estimated connections ({preview.accessGaps?.length ?? 0})
-                      are assumed traversable. They are not confirmed. Verify
-                      the actual connection before riding.
-                    </p>
-                  )}
+                  {PRIVATE_TEST_MODE_CARDS_ENABLED &&
+                    preview.canNavigate &&
+                    preview.assumedConnections && (
+                      <p className="warning" role="note">
+                        {`Private test mode: this route can start only because its estimated connections (${preview.accessGaps?.length ?? 0}) are assumed traversable. They are not confirmed. Verify the actual connection before riding.`}
+                      </p>
+                    )}
                   {!preview.canNavigate && (
                     <p className="caption">
                       {stale
