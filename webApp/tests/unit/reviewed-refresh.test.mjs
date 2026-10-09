@@ -657,7 +657,7 @@ test("genuine pinned Python detector A→B→A feeds JS admission with numeric a
   const { args, fixtureData, run } = await genuineDetectorReview();
   assert.equal(
     fixtureData.producer.commit,
-    "4dea6720411fbc46d56496fd994fcfc969a39fd3",
+    "452eccc0fc1016f0012c923e3a4d4b45de8e3c24",
   );
   assert.equal(run.candidateText, fixtureData.runs[0].candidateText);
   assert.notDeepEqual(run.result.runDiff, run.result.candidate.diff);

@@ -10,7 +10,7 @@ from pathlib import Path
 import tempfile
 import sys
 
-PRODUCER_COMMIT = "4dea6720411fbc46d56496fd994fcfc969a39fd3"
+PRODUCER_COMMIT = "452eccc0fc1016f0012c923e3a4d4b45de8e3c24"
 parser = argparse.ArgumentParser()
 parser.add_argument("--detector-dir", type=Path, required=True)
 parser.add_argument("--out", type=Path, required=True)
@@ -20,7 +20,7 @@ EXPECTED_PRODUCER_SHA256 = "10da2ac2d74b0a08d317328aba0c23786e60dce5f6cda5b57af1
 if hashlib.sha256(module_path.read_bytes()).hexdigest() != EXPECTED_PRODUCER_SHA256:
     raise SystemExit("Producer differs from the pinned reviewed detector implementation")
 state_path=args.detector_dir / 'source_candidate_state.py'
-EXPECTED_STATE_SHA256='91dd78eaf24341aa1b4606191abb7af8df0e32585ad4b724fca9799c770ce347'
+EXPECTED_STATE_SHA256='33183e194d50a3ada5f1ea99ac2732218905b0387952903b202258e07061ed5d'
 if hashlib.sha256(state_path.read_bytes()).hexdigest()!=EXPECTED_STATE_SHA256:
     raise SystemExit('State producer differs from pinned implementation')
 sys.path.insert(0,str(args.detector_dir))

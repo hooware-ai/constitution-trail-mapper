@@ -211,12 +211,18 @@ supplies that approval.
 The genuine detector fixture is emitted by the pinned Python producer, not a JS
 facsimile. It exercises A→B→A immutable reuse, current removals, Unicode ordering,
 1.0, -0.0 and exponent spelling, and observation-only provenance churn. It uses
-`run_serialized` and rereads each journal with the real `load_transition`. Regenerate offline against PR109 commit
-`4dea6720411fbc46d56496fd994fcfc969a39fd3`:
+`run_serialized` and rereads each journal with the real `load_transition`. Regenerate offline against reviewed main commit
+`452eccc0fc1016f0012c923e3a4d4b45de8e3c24` (the unchanged detector plus PR114's reviewed state-storage repair):
 
 ```sh
-python webApp/tests/support/generate-detector-admission-fixture.py --detector-dir /path/to/pinned-checkout/tools --out webApp/tests/support/detector-admission.fixture.json
+python3 webApp/tests/support/generate-detector-admission-fixture.py --detector-dir tools --out webApp/tests/support/detector-admission.fixture.json
 ```
 
 The driver verifies both producer and state-wrapper file digests before importing it, injects only
 self-authored transport bytes, and never fetches or activates a schedule.
+
+`python3 webApp/tests/support/verify-detector-admission-fixture.py` verifies two byte-identical
+regenerations and refuses deliberate edits to each pinned producer before output. This is a
+POSIX cloud control because the real durable wrapper uses `fcntl`; normal JavaScript tests
+consume the committed fixture. The historical PR109 fixture remains in Git history. See
+[`refresh-regressions.md`](refresh-regressions.md) for the current-source chain and exact-head CI.
