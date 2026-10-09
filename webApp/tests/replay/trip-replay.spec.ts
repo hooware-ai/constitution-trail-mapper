@@ -107,6 +107,8 @@ async function rideState(page: Page): Promise<{
 }
 
 async function acceptedFix(page: Page, latitude: number, longitude: number) {
+  // A frozen clock otherwise lets a saved record from the preceding fix pass.
+  await page.clock.fastForward(1);
   const at = await page.evaluate(() => Date.now());
   await fix(page, latitude, longitude);
   await expect
@@ -136,13 +138,16 @@ async function replayStep(page: Page, step: Step) {
       case "fix": {
         if (!step.point) throw new Error("A fix needs a point");
         const place = coordinate(step.point);
-        await fix(
-          page,
-          place.latitude,
-          place.longitude,
-          step.accuracy ?? 5,
-          step.ageMs ?? 0,
-        );
+        if ((step.accuracy ?? 5) <= 5 && (step.ageMs ?? 0) === 0)
+          await acceptedFix(page, place.latitude, place.longitude);
+        else
+          await fix(
+            page,
+            place.latitude,
+            place.longitude,
+            step.accuracy ?? 5,
+            step.ageMs ?? 0,
+          );
         break;
       }
       case "hide":
@@ -161,11 +166,11 @@ async function replayStep(page: Page, step: Step) {
     await expectPhase(page, step.phase);
     if (step.progress) {
       await expect
-        .poll(async () => (await rideState(page)).routeProgressMeters)
-        .toBeGreaterThan(step.progress[0]);
-      await expect
-        .poll(async () => (await rideState(page)).routeProgressMeters)
-        .toBeLessThan(step.progress[1]);
+        .poll(async () => {
+          const value = (await rideState(page)).routeProgressMeters;
+          return value > step.progress![0] && value < step.progress![1];
+        })
+        .toBe(true);
     }
     if (step.creditedAtLeast !== undefined)
       await expect
@@ -244,7 +249,7 @@ const journeys: Journey[] = [
         event: "fix",
         point: [0, 800],
         phase: "navigating",
-        progress: [3100, 3300],
+        progress: [3175, 3225],
       },
     ],
   },

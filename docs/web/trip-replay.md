@@ -2,6 +2,8 @@
 
 `npm run test:trip:fast` is a small, deterministic navigation gate for a fresh checkout. It builds this checkout's Kotlin web bridge, runs synthetic closure/Start controls through the real router, then replays scripted browser trips on desktop Chromium and a Pixel-sized Chromium profile. The browser replaces only geolocation, page visibility and wake-lock APIs; the app, worker, route matching and saved-ride code are real. No private county extract, account, external map service, device or credential is required. External requests are blocked in the replay tests.
 
+The first three journeys seed a synthetic saved ride with scripted geometry and starting progress. They exercise the real navigation controller, route matching, persistence and recovery, rather than route planning or a cold start on the repeated return leg. The fourth journey plans, starts and reroutes through the real Kotlin router. Fresh-fix steps wait for persistence from that fix; the reload continuation must advance beyond the preceding return-pass position.
+
 The replay table in `webApp/tests/replay/trip-replay.spec.ts` covers:
 
 1. An ordinary corner: progress and observed distance increase with successive 20 m fixes.
