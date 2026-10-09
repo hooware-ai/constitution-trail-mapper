@@ -11,6 +11,7 @@ import {
   extentText,
   featureMix,
   reportTemplate,
+  riderFeedbackTemplate,
   withBrowserDetails,
   type BuildInfo,
 } from "./helpContent";
@@ -29,7 +30,7 @@ export function HelpDialog({
   build: BuildInfo;
   onClose: () => void;
 }) {
-  const [view, setView] = useState<"help" | "report">("help");
+  const [view, setView] = useState<"help" | "report" | "feedback">("help");
   const [notice, setNotice] = useState<DialogNotice | null>(null);
   // Coverage counts what is actually loaded: existing features only, with proposed ones (off by default) said apart.
   const mix = useMemo(() => featureMix(network?.features ?? []), [network]);
@@ -62,7 +63,7 @@ export function HelpDialog({
       if (owner === session.current) setNotice(next);
     });
   }
-  function switchView(next: "help" | "report") {
+  function switchView(next: "help" | "report" | "feedback") {
     session.current++;
     cancelAnimationFrame(frame.current);
     setNotice(null);
@@ -78,7 +79,13 @@ export function HelpDialog({
   }, [view]);
   return (
     <Modal
-      title={view === "help" ? "Help and about" : "Report a problem"}
+      title={
+        view === "help"
+          ? "Help and about"
+          : view === "feedback"
+            ? "Ride feedback"
+            : "Report a problem"
+      }
       notice={notice}
       onClose={onClose}
     >
@@ -98,6 +105,7 @@ export function HelpDialog({
                 ["help-sources", "Data sources and licenses"],
                 ["help-build", "About this build"],
                 ["help-report", "Report a problem"],
+                ["help-feedback", "Share ride feedback"],
               ].map(([id, label]) => (
                 <li key={id}>
                   <a
@@ -346,9 +354,25 @@ export function HelpDialog({
               Write a problem report
             </button>
           </section>
+          <section aria-labelledby="help-feedback">
+            <h3 id="help-feedback" tabIndex={-1}>
+              Share ride feedback
+            </h3>
+            <p>
+              Tell us what you tried, what worked and what got in your way. This
+              is optional: you write and review the feedback yourself. Planning
+              a route is different from actually riding it. Nothing is sent
+              automatically, and the app adds no location or history.
+            </p>
+            <button onClick={() => switchView("feedback")}>
+              Write ride feedback
+            </button>
+          </section>
         </div>
       ) : (
         <ReportView
+          key={view}
+          kind={view === "feedback" ? "feedback" : "problem"}
           network={network}
           build={build}
           heading={heading}
@@ -362,6 +386,7 @@ export function HelpDialog({
 }
 
 function ReportView({
+  kind,
   network,
   build,
   heading,
@@ -369,6 +394,7 @@ function ReportView({
   announce,
   back,
 }: {
+  kind: "problem" | "feedback";
   network: Network | null;
   build: BuildInfo;
   heading: React.RefObject<HTMLHeadingElement | null>;
@@ -377,7 +403,10 @@ function ReportView({
   announce: (notice: DialogNotice, owner: number) => void;
   back: () => void;
 }) {
-  const [text, setText] = useState(() => reportTemplate({ build, network }));
+  const feedback = kind === "feedback";
+  const [text, setText] = useState(() =>
+    (feedback ? riderFeedbackTemplate : reportTemplate)({ build, network }),
+  );
   const [browser, setBrowser] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const details = `${navigator.userAgent} · window ${window.innerWidth}×${window.innerHeight}`;
@@ -400,7 +429,9 @@ function ReportView({
       announce(
         {
           kind: "success",
-          message: "Report copied. Paste it where you send your report.",
+          message: feedback
+            ? "Feedback copied. Paste it where you choose to share it."
+            : "Report copied. Paste it where you send your report.",
         },
         owner,
       );
@@ -421,7 +452,7 @@ function ReportView({
     <div className="help report">
       <button onClick={back}>← Back to help</button>
       <h3 ref={heading} tabIndex={-1}>
-        Review your report
+        {feedback ? "Review your feedback" : "Review your report"}
       </h3>
       <p className="help-critical">
         Nothing is sent from this page. The text below is only what you see;
@@ -429,7 +460,7 @@ function ReportView({
         names or personal details.
       </p>
       <label className="field">
-        Report text
+        {feedback ? "Feedback text" : "Report text"}
         <textarea
           ref={area}
           rows={14}
@@ -457,7 +488,7 @@ function ReportView({
       </label>
       <div className="actions">
         <button className="primary" onClick={() => void copy()}>
-          Copy report
+          {feedback ? "Copy feedback" : "Copy report"}
         </button>
         <a
           className="button-link"

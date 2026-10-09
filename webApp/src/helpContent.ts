@@ -143,6 +143,33 @@ export function reportTemplate({ build, network }: ReportContext): string {
   ].join("\n");
 }
 
+/** Voluntary feedback is written by the rider, never inferred from GPS or history. */
+export function riderFeedbackTemplate({
+  build,
+  network,
+}: ReportContext): string {
+  return [
+    "Trail Mapper ride feedback",
+    "(Optional. Review this before sharing. Do not add your location, route geometry, saved names or personal details. Nothing is sent automatically.)",
+    "",
+    "What did you try? (Plan a route / understand a warning / save and reopen in this browser / foreground guidance):",
+    "",
+    "Did that task work? (Yes / partly / no / not tried):",
+    "",
+    "Did you plan only, try guidance, or actually ride? Planning or opening a route is not a completed ride:",
+    "",
+    "Was this your first visit or a return visit? What brought you back?",
+    "",
+    "What worked, and what got in your way?",
+    "",
+    "What did the app prevent you from doing, or what would make you return?",
+    "",
+    "App details (version only):",
+    `Build: ${buildText(build)}`,
+    `Data: ${datasetText(network)}`,
+  ].join("\n");
+}
+
 /** Adds or removes the optional browser line; the rider sees exactly what it adds. */
 export function withBrowserDetails(
   report: string,

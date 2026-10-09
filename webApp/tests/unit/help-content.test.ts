@@ -7,6 +7,7 @@ import {
   extentText,
   featureMix,
   reportTemplate,
+  riderFeedbackTemplate,
   withBrowserDetails,
   type BuildInfo,
 } from "../../src/helpContent";
@@ -118,6 +119,33 @@ test("the optional browser line is added and removed exactly, without touching w
     added,
   );
   assert.equal(withBrowserDetails(added, false, ""), original);
+});
+
+test("voluntary feedback distinguishes planning from riding and asks about this-browser tasks without attaching rider data", () => {
+  const current = network("county");
+  // Feedback has no reason to inspect geometry, names, notices or history.
+  for (const property of ["features", "closures", "updates", "label"])
+    Object.defineProperty(current, property, {
+      get() {
+        throw new Error(`Feedback read ${property}`);
+      },
+    });
+  const text = riderFeedbackTemplate({ build, network: current });
+  assert.match(text, /save and reopen in this browser/);
+  assert.match(text, /Planning or opening a route is not a completed ride/);
+  assert.match(text, /first visit or a return visit/);
+  assert.match(text, /What worked, and what got in your way/);
+  assert.match(text, /Nothing is sent automatically/);
+  assert.match(text, /Build: abc123def456/);
+  assert.match(text, /Data: mclean-reviewed-existing-trails/);
+  assert.doesNotMatch(
+    text,
+    /-?\d{2,3}\.\d{3,}|Private nickname|54:1|Mozilla|Browser and screen|sign in|sync/i,
+  );
+  assert.match(
+    riderFeedbackTemplate({ build, network: null }),
+    /Trail data has not loaded yet/,
+  );
 });
 
 test("the feature mix counts existing, proposed and shared-roadway features from their own status and roles", () => {

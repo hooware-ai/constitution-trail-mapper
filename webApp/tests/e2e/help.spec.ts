@@ -331,6 +331,179 @@ test("a problem report holds only the app version, can be reviewed and edited, a
   await expect(helpDialog(page)).toBeVisible();
 });
 
+test("voluntary ride feedback is editable, copied exactly and leaves the planned route intact without sending rider data", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await plan(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Wait for the pre-existing route-session persistence before isolating feedback writes.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).some(
+          (key) =>
+            key.endsWith("trail-mapper.web.session.v1") &&
+            JSON.parse(localStorage.getItem(key)!).screen === "preview",
+        ),
+      ),
+    )
+    .toBe(true);
+  const storedBefore = await page.evaluate(() => ({
+    local: { ...localStorage },
+    session: { ...sessionStorage },
+  }));
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  await helpButton(page).click();
+  await helpDialog(page)
+    .getByRole("button", { name: "Write ride feedback" })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Ride feedback",
+    exact: true,
+  });
+  const text = dialog.getByRole("textbox", { name: "Feedback text" });
+  const template = await text.inputValue();
+  expect(template).toContain("Trail Mapper ride feedback");
+  expect(template).toContain(
+    "Planning or opening a route is not a completed ride",
+  );
+  expect(template).toContain("save and reopen in this browser");
+  expect(template).toContain("first visit or a return visit");
+  expect(template).not.toMatch(
+    /Review trailhead|Culver|Seeded|-?\d{2,3}\.\d{3,}|Mozilla|Browser and screen/i,
+  );
+  await expect(dialog).toContainText("Nothing is sent from this page");
+  await expect(dialog).toContainText("anything you post is public");
+  await expect(
+    dialog.getByRole("link", { name: /public issue form/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/hooware-ai/constitution-trail-mapper/issues/new",
+  );
+  const edited = template + "\nI planned only. The warning was clear.";
+  await text.fill(edited);
+  await dialog
+    .getByRole("button", { name: "Copy feedback", exact: true })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText("Feedback copied");
+  expect(
+    (await page.evaluate(() => navigator.clipboard.readText())).replace(
+      /\r\n/g,
+      "\n",
+    ),
+  ).toBe(edited);
+  expect(requests).toEqual([]);
+  expect(await context.cookies()).toEqual([]);
+  expect(
+    await page.evaluate(() => ({
+      local: { ...localStorage },
+      session: { ...sessionStorage },
+    })),
+  ).toEqual(storedBefore);
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+});
+
+test("a late feedback-copy result cannot speak for a different report view", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () =>
+          new Promise<void>((resolve) => {
+            (window as any).__finishFeedbackCopy = resolve;
+          }),
+      },
+    });
+  });
+  await page.goto("/");
+  await helpButton(page).click();
+  await helpDialog(page)
+    .getByRole("button", { name: "Write ride feedback" })
+    .click();
+  const feedback = page.getByRole("dialog", {
+    name: "Ride feedback",
+    exact: true,
+  });
+  await feedback
+    .getByRole("button", { name: "Copy feedback", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as any).__finishFeedbackCopy),
+    )
+    .toBe("function");
+  await feedback.getByRole("button", { name: /Back to help/ }).click();
+  await helpDialog(page)
+    .getByRole("button", { name: "Write a problem report" })
+    .click();
+  const report = page.getByRole("dialog", {
+    name: "Report a problem",
+    exact: true,
+  });
+  await page.evaluate(() => (window as any).__finishFeedbackCopy());
+  // Modal keeps an empty live region mounted; allow queued announcements to run.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(report.getByRole("status")).toHaveText("");
+  await expect(
+    report.getByRole("textbox", { name: "Report text" }),
+  ).toHaveValue(/Trail Mapper problem report/);
+});
+
+test("ride feedback remains usable by keyboard on a narrow screen with large text", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/");
+  await page.addStyleTag({ content: "html {font-size:200% !important;}" });
+  await helpButton(page).press("Enter");
+  await helpDialog(page)
+    .getByRole("button", { name: "Write ride feedback" })
+    .press("Enter");
+  const dialog = page.getByRole("dialog", {
+    name: "Ride feedback",
+    exact: true,
+  });
+  await expect(
+    dialog.getByRole("heading", { name: "Review your feedback" }),
+  ).toBeFocused();
+  const box = dialog.getByRole("textbox", { name: "Feedback text" });
+  await box.fill("I planned only. A clearer warning would help.");
+  const copy = dialog.getByRole("button", {
+    name: "Copy feedback",
+    exact: true,
+  });
+  await copy.scrollIntoViewIfNeeded();
+  await expect(copy).toBeVisible();
+  const copyBounds = await copy.boundingBox();
+  expect(copyBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(copyBounds!.x + copyBounds!.width).toBeLessThanOrEqual(320);
+  expect(copyBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(copyBounds!.y + copyBounds!.height).toBeLessThanOrEqual(640);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  const bounds = await box.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
+  await page.keyboard.press("Escape");
+  await expect(helpButton(page)).toBeFocused();
+});
+
 test("on a narrow screen with large text nothing is cut off or off-screen", async ({
   page,
 }) => {
@@ -370,7 +543,7 @@ test("on a narrow screen with large text nothing is cut off or off-screen", asyn
   await expect(last).toBeInViewport();
 });
 
-test("Help and the report view have no automatically detectable accessibility violations", async ({
+test("Help, report and feedback views have no automatically detectable accessibility violations", async ({
   page,
 }) => {
   const { default: AxeBuilder } = await import("@axe-core/playwright");
@@ -389,6 +562,19 @@ test("Help and the report view have no automatically detectable accessibility vi
     .include("dialog[open]")
     .analyze();
   expect(report.violations.map((v) => `${v.id}: ${v.nodes[0].html}`)).toEqual(
+    [],
+  );
+  await page.getByRole("button", { name: /Back to help/ }).click();
+  await helpDialog(page)
+    .getByRole("button", { name: "Write ride feedback" })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Ride feedback", exact: true }),
+  ).toBeVisible();
+  const feedback = await new AxeBuilder({ page })
+    .include("dialog[open]")
+    .analyze();
+  expect(feedback.violations.map((v) => `${v.id}: ${v.nodes[0].html}`)).toEqual(
     [],
   );
 });
