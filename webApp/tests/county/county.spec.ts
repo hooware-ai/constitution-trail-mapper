@@ -138,23 +138,21 @@ test("the county build loads its packaged data and says what it is, with no fixt
   page.on("pageerror", (e) => failures.push(e.message));
   await seedPlaces(page);
   await page.goto("/");
-  await expect(page.locator(".review-banner")).toContainText(
-    "Review candidate",
-  );
-  await expect(page.locator(".review-banner")).not.toContainText("Synthetic");
+  await expect(page.locator(".review-banner")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
   await page.getByRole("button", { name: /Go somewhere/ }).click();
   await page.getByRole("button", { name: /^Start:/ }).click();
   await expect(page.getByRole("dialog")).not.toContainText("Review trailhead");
   await page.getByRole("button", { name: "Close Choose start" }).click();
   await page.getByRole("button", { name: "Trail Mapper home" }).click();
   await page.getByRole("button", { name: "Updates", exact: true }).click();
-  const virginiaRoadNotice = page
-    .locator(".updates-list article")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Virginia Avenue road access: Linden to Broadway",
-      }),
-    });
+  const virginiaRoadNotice = page.locator(".updates-list article").filter({
+    has: page.getByRole("heading", {
+      name: "Virginia Avenue road access: Linden to Broadway",
+    }),
+  });
   await expect(virginiaRoadNotice).toContainText("local traffic only");
   await expect(virginiaRoadNotice).toContainText(
     "does not establish that the trail is closed or reopened",
@@ -421,9 +419,7 @@ test("missing data fails visibly, survives a reload without falling back, and Re
   await expectLoadFailure(page, /missing from this site/);
   available = true;
   await alert.getByRole("button", { name: "Retry loading" }).click();
-  await expect(page.locator(".review-banner")).toContainText(
-    "Review candidate",
-  );
+  await expect(page.locator(".review-banner")).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
@@ -455,9 +451,7 @@ test("altered data is refused as corrupt, and so is a description this app canno
   );
   mode = "ok";
   await page.getByRole("button", { name: "Retry loading" }).click();
-  await expect(page.locator(".review-banner")).toContainText(
-    "Review candidate",
-  );
+  await expect(page.locator(".review-banner")).toHaveCount(0);
 });
 
 test("a routing worker that dies and restarts reloads the same packaged data, never the fixture", async ({
@@ -484,9 +478,7 @@ test("a routing worker that dies and restarts reloads the same packaged data, ne
   await expect(page.getByText("Route planning restarted")).toBeVisible();
   await page.getByRole("button", { name: "Recalculate route" }).click();
   await expect(page.getByText(/Recalculated route ready/)).toBeVisible();
-  await expect(page.locator(".review-banner")).toContainText(
-    "Review candidate",
-  );
+  await expect(page.locator(".review-banner")).toHaveCount(0);
   await expect(page.getByText("Review trailhead")).toHaveCount(0);
 });
 
@@ -725,9 +717,7 @@ test("a description with damaged omission details is refused at load, with Retry
   );
   damaged = false;
   await alert.getByRole("button", { name: "Retry loading" }).click();
-  await expect(page.locator(".review-banner")).toContainText(
-    "Review candidate",
-  );
+  await expect(page.locator(".review-banner")).toHaveCount(0);
 });
 
 test("Help describes the packaged county data it is running on: coverage, license, changes, identity and review status", async ({
@@ -735,9 +725,7 @@ test("Help describes the packaged county data it is running on: coverage, licens
 }) => {
   await seedPlaces(page);
   await page.goto("/");
-  await expect(page.locator(".review-banner")).toContainText(
-    "Review candidate",
-  );
+  await expect(page.locator(".review-banner")).toHaveCount(0);
   await page.getByRole("button", { name: /^Help/ }).first().click();
   const dialog = page.getByRole("dialog", { name: "Help and about" });
   await expect(dialog).toContainText(
@@ -777,9 +765,7 @@ test("Help on the build WITHOUT road data says so, claims no road files, and the
   );
   await seedPlaces(page);
   await page.goto("/");
-  await expect(page.locator(".review-banner")).toContainText(
-    "Review candidate",
-  );
+  await expect(page.locator(".review-banner")).toHaveCount(0);
   await page.getByRole("button", { name: /^Help/ }).first().click();
   const dialog = page.getByRole("dialog", { name: "Help and about" });
   await expect(dialog).toContainText(
