@@ -3,6 +3,7 @@ import { browserPortRange } from "./tools/lib/browser-port.mjs";
 // Smoke tests against the BUILT artifact served with the production header set (not the Vite dev server).
 const port = browserPortRange(process.env.TRAIL_TEST_PORT ?? 4174, 1);
 export default defineConfig({
+  globalSetup: "./tests/support/check-dist-server.ts",
   testDir: "tests/dist",
   fullyParallel: false,
   workers: 1,
