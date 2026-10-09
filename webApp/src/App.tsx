@@ -56,6 +56,16 @@ import {
 import { acquirePlannerLocation } from "./platform/plannerLocation";
 import { addressIndexSource } from "./addressSearch";
 import { startBlockedReason } from "./startReason";
+import {
+  RuntimeFreshness,
+  type RefreshDependencies,
+} from "./runtime/freshness";
+import { bindRefreshLifecycle } from "./runtime/browser";
+import { RuntimeFreshnessStatus } from "./runtime/RuntimeFreshness";
+import {
+  startReviewedRoute,
+  type RuntimeRoutingData,
+} from "./runtime/prepareRouting";
 
 // The WebGL camera is loaded only for a ride; planning stays fast on a phone.
 const RideMap = lazy(() =>
@@ -184,7 +194,17 @@ const mintedKey = (geometryKey: string) =>
   `${geometryKey}~r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 const recalculatedTitle = (title: string) =>
   title.endsWith(" (recalculated)") ? title : `${title} (recalculated)`;
-export function App() {
+export interface AppProps {
+  /** Explicit host injection only. Default builds have no admitted endpoint/policy and do not activate refresh. */
+  refresh?: RefreshDependencies<RuntimeRoutingData> &
+    Required<
+      Pick<
+        RefreshDependencies<RuntimeRoutingData>,
+        "readSafetyFloor" | "commitSafetyFloor"
+      >
+    >;
+}
+export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
@@ -273,6 +293,11 @@ export function App() {
   useEffect(() => () => cancelLocationRef.current?.(), []);
   const [sessionReady, setSessionReady] = useState(false);
   const sessionRef = useRef<BrowserSessionStore | null>(null);
+  const [freshness, setFreshness] =
+    useState<RuntimeFreshness<RuntimeRoutingData> | null>(null);
+  const freshnessRef = useRef<RuntimeFreshness<RuntimeRoutingData> | null>(
+    null,
+  );
   const clientRef = useRef<RoutingClient | null>(null),
     controllerRef = useRef<ForegroundNavigationController | null>(null),
     storeRef = useRef<LocalRouteStore | null>(null),
@@ -366,16 +391,24 @@ export function App() {
     let disposed = false,
       initialized = false,
       unbind: undefined | (() => void),
-      unsubscribe: undefined | (() => void);
+      unsubscribe: undefined | (() => void),
+      unbindRefresh: undefined | (() => void),
+      unsubscribeRefresh: undefined | (() => void);
+    const runtime = refresh ? new RuntimeFreshness(refresh) : null;
+    freshnessRef.current = runtime;
+    setFreshness(runtime);
     const client = new RoutingClient();
     clientRef.current = client;
     setRoutingDown(false);
-    client.onUnavailableChange = (down) => {
-      if (disposed) return;
-      setRoutingDown(down);
-      // Existing turn guidance must not outlive the worker that produced it.
-      if (down) controllerRef.current?.routingUnavailable();
+    const wireUnavailable = (routing: RoutingClient) => {
+      routing.onUnavailableChange = (down) => {
+        if (disposed || clientRef.current !== routing) return;
+        setRoutingDown(down);
+        // Existing turn guidance must not outlive the worker that produced it.
+        if (down) controllerRef.current?.routingUnavailable();
+      };
     };
+    wireUnavailable(client);
     setBootError("");
     setNetwork(null);
     setSessionReady(false);
@@ -413,7 +446,9 @@ export function App() {
           },
           onArrived: (record) => finishLoopRef.current(record),
           evaluate: async (route, fix, context) => {
-            const response = await client.call<any>({
+            const routing = clientRef.current;
+            if (!routing) throw new Error(ROUTING_UNAVAILABLE_MESSAGE);
+            const response = await routing.call<any>({
               op: "snapshot",
               route,
               point: { latitude: fix.latitude, longitude: fix.longitude },
@@ -442,8 +477,51 @@ export function App() {
           },
         });
         controllerRef.current = controller;
-        unsubscribe = controller.subscribe(setNav);
+        unsubscribe = controller.subscribe((state) => {
+          setNav(state);
+          runtime?.setActiveRide(Boolean(state.record));
+        });
         unbind = bindNavigationLifecycle(controller);
+        if (runtime) {
+          let accepted = runtime.accepted;
+          unsubscribeRefresh = runtime.subscribe(() => {
+            if (disposed) return;
+            const adopted = runtime.accepted;
+            if (!adopted || adopted === accepted) return;
+            accepted = adopted;
+            // One synchronous reference exchange: snapshots and new operations use the same accepted worker/map.
+            const previous = clientRef.current;
+            clientRef.current = adopted.value.client;
+            wireUnavailable(adopted.value.client);
+            setRoutingDown(adopted.value.client.isUnavailable);
+            setNetwork(adopted.value.network);
+            snapshotState.current = undefined;
+            if (previous === client) previous.dispose();
+            // Keep saved geometry and existing warnings. Reinspect their status without writing/replacing the record.
+            const selected = selectedRef.current;
+            if (selected && !controller.state.record) {
+              void adopted.value.client
+                .call<RouteResult>({
+                  op: "inspect",
+                  route: selected.route,
+                  now: Date.now(),
+                })
+                .then((result) => {
+                  if (
+                    !disposed &&
+                    runtime.accepted === adopted &&
+                    selectedRef.current?.key === selected.key
+                  )
+                    setPreview(routeOkay(result));
+                })
+                .catch((error) => {
+                  if (!disposed && runtime.accepted === adopted)
+                    setError(errorText(error));
+                });
+            }
+          });
+          unbindRefresh = bindRefreshLifecycle(runtime);
+        }
         const restored = active.read();
         if (!restored.ok)
           setStorageError(
@@ -458,41 +536,83 @@ export function App() {
           restoreScreen("preview");
           setChecking(true);
           try {
-            const inspected = routeOkay(
-              await client.call<RouteResult>({
-                op: "inspect",
-                route: ride.record.route,
-                now: Date.now(),
-              }),
-            );
-            if (disposed || token !== operation.current) return;
-            setPreview(inspected);
-            void restoreDirection(
-              client,
-              ride.record,
-              () => !disposed && token === operation.current,
-            );
-            if (inspected.canNavigate) {
-              snapshotState.current = undefined;
-              const carried = carriedStoreRef.current?.read();
-              carriedRef.current =
-                carried && carried.recordKey === ride.record.key
-                  ? carried.carried
-                  : null;
-              controller.start(
+            if (runtime) {
+              const resumed = await startReviewedRoute(
+                runtime,
+                ride.record.route,
+                () => {
+                  if (disposed || token !== operation.current)
+                    throw new Error(
+                      "Ride restoration was interrupted. Review the route before Start.",
+                    );
+                  snapshotState.current = undefined;
+                  const carried = carriedStoreRef.current?.read();
+                  carriedRef.current =
+                    carried && carried.recordKey === ride.record.key
+                      ? carried.carried
+                      : null;
+                  controller.start(
+                    ride.record,
+                    ride.routeProgressMeters,
+                    ride.creditedDistanceMeters,
+                    ride.riddenMeters,
+                  );
+                  restoreScreen("navigation");
+                },
+                (result) => {
+                  if (disposed || token !== operation.current)
+                    throw new Error("Ride restoration was interrupted.");
+                  setPreview(routeOkay(result));
+                  const routing = clientRef.current;
+                  if (routing)
+                    void restoreDirection(
+                      routing,
+                      ride.record,
+                      () => !disposed && token === operation.current,
+                    );
+                },
+              );
+              if (!resumed && !disposed && token === operation.current)
+                setError(
+                  runtime.snapshot.error ??
+                    "Your previous ride needs a fresh data check and route review before Start.",
+                );
+            } else {
+              const inspected = routeOkay(
+                await client.call<RouteResult>({
+                  op: "inspect",
+                  route: ride.record.route,
+                  now: Date.now(),
+                }),
+              );
+              if (disposed || token !== operation.current) return;
+              setPreview(inspected);
+              void restoreDirection(
+                client,
                 ride.record,
-                ride.routeProgressMeters,
-                ride.creditedDistanceMeters,
-                // The saved RIDDEN progress, kept apart from the matched position (older saves fall back conservatively).
-                ride.riddenMeters,
+                () => !disposed && token === operation.current,
               );
-              restoreScreen("navigation");
-            } else
-              setError(
-                routeNeedsRecalculation(inspected)
-                  ? `${staleRouteMessage(inspected)} Your previous ride was not resumed: recalculate to plan a new route.`
-                  : "Your previous ride needs review before navigation can resume.",
-              );
+              if (inspected.canNavigate) {
+                snapshotState.current = undefined;
+                const carried = carriedStoreRef.current?.read();
+                carriedRef.current =
+                  carried && carried.recordKey === ride.record.key
+                    ? carried.carried
+                    : null;
+                controller.start(
+                  ride.record,
+                  ride.routeProgressMeters,
+                  ride.creditedDistanceMeters,
+                  ride.riddenMeters,
+                );
+                restoreScreen("navigation");
+              } else
+                setError(
+                  routeNeedsRecalculation(inspected)
+                    ? `${staleRouteMessage(inspected)} Your previous ride was not resumed: recalculate to plan a new route.`
+                    : "Your previous ride needs review before navigation can resume.",
+                );
+            }
           } catch (e) {
             if (!disposed && token === operation.current)
               setError(errorText(e));
@@ -515,7 +635,7 @@ export function App() {
             setChecking(true);
             try {
               const inspected = routeOkay(
-                await client.call<RouteResult>({
+                await (clientRef.current ?? client).call<RouteResult>({
                   op: "inspect",
                   route: restoredSession.selected.route,
                   now: Date.now(),
@@ -524,7 +644,7 @@ export function App() {
               if (!disposed && token === operation.current) {
                 setPreview(inspected);
                 void restoreDirection(
-                  client,
+                  clientRef.current ?? client,
                   restoredSession.selected,
                   () => !disposed && token === operation.current,
                 );
@@ -549,12 +669,18 @@ export function App() {
       ++operation.current;
       unbind?.();
       unsubscribe?.();
+      unbindRefresh?.();
+      unsubscribeRefresh?.();
       controllerRef.current?.dispose();
       controllerRef.current = null;
+      const acceptedClient = runtime?.accepted?.value.client;
+      runtime?.dispose();
       client.dispose();
-      if (clientRef.current === client) clientRef.current = null;
+      if (clientRef.current === client || clientRef.current === acceptedClient)
+        clientRef.current = null;
+      if (freshnessRef.current === runtime) freshnessRef.current = null;
     };
-  }, [local, bootAttempt]);
+  }, [local, bootAttempt, refresh]);
   const overlayOpen = popup !== null || field !== null;
   const historyRef = useRef<BrowserHistorySync | null>(null),
     popContext = useRef<PopContext>({
@@ -932,6 +1058,35 @@ export function App() {
     setChecking(true);
     setError("");
     try {
+      const runtime = freshnessRef.current;
+      if (runtime) {
+        const begun = await startReviewedRoute(
+          runtime,
+          selected.route,
+          () => {
+            if (token !== operation.current)
+              throw new Error(
+                "Start was interrupted. Review the route and try again.",
+              );
+            snapshotState.current = undefined;
+            carriedRef.current = null;
+            carriedStoreRef.current?.clear();
+            controllerRef.current?.start(selected);
+            setScreen("navigation");
+          },
+          (result) => {
+            if (token !== operation.current)
+              throw new Error("Start was interrupted.");
+            setPreview(routeOkay(result));
+          },
+        );
+        if (!begun && token === operation.current)
+          setError(
+            runtime.snapshot.error ??
+              "Check the reviewed data and route before Start.",
+          );
+        return;
+      }
       const inspected = routeOkay(
         await clientRef.current.call<RouteResult>({
           op: "inspect",
@@ -1935,6 +2090,13 @@ export function App() {
               )}
             </div>
           )}
+          {freshness && network && screen !== "navigation" && (
+            <RuntimeFreshnessStatus
+              runtime={freshness}
+              appBuild={__TRAIL_BUILD__.commit}
+              compact
+            />
+          )}
           {routingDown && network && (
             <div className="error" role="alert">
               <p>{ROUTING_UNAVAILABLE_MESSAGE}</p>
@@ -2546,6 +2708,13 @@ export function App() {
               </div>
               <div className="ride-dock">
                 <div className="ride-dock-content">
+                  {freshness && (
+                    <RuntimeFreshnessStatus
+                      runtime={freshness}
+                      appBuild={__TRAIL_BUILD__.commit}
+                      compact
+                    />
+                  )}
                   {!online && (
                     <p className="ride-safety ride-offline" role="status">
                       Offline · live map tiles and offline navigation
