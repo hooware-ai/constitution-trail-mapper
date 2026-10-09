@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "scope": "Hash-only official notice observation scope derived from PR110 dated evidence. No current-access, geometry, reopening or redistribution approval implied; #1/#2 stay authoritative.",
+  "reviewEvidenceCommit": "a4474cfb11983840194fb4c8fccaf3c51938b16d",
+  "sources": [
+    {
+      "sourceId": "notice-hershey-initial",
+      "url": "https://www.bloomingtonil.gov/Home/Components/News/News/10939/1394",
+      "sourcePublishedOn": "2026-09-04",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "Initial notice text retrieved; current completion unverified."
+    },
+    {
+      "sourceId": "notice-hershey-update",
+      "url": "https://www.bloomingtonil.gov/Home/Components/News/News/10979/1394",
+      "sourcePublishedOn": "2026-09-28",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "Full newer page returned 403; indexed text does not prove completion."
+    },
+    {
+      "sourceId": "notice-collegiate-repaving",
+      "url": "https://www.normalil.gov/m/newsflash/Home/Detail/3345",
+      "sourcePublishedOn": "2026-09-24",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "October 9 retrieval failed 404/403; October 2 estimate is not completion."
+    },
+    {
+      "sourceId": "notice-camelback",
+      "url": "https://www.normalil.gov/CivicAlerts.aspx?AID=3353",
+      "sourcePublishedOn": "2026-09-30",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "Mixed October 9 retrieval results; October 6 estimate is not reopening."
+    },
+    {
+      "sourceId": "notice-raab-paving",
+      "url": "https://www.normalil.gov/CivicAlerts.aspx?AID=3357",
+      "sourcePublishedOn": "2026-10-02",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "October 9 full retrieval failed 404/403; road lane dates do not establish trail access."
+    },
+    {
+      "sourceId": "notice-normal-storm",
+      "url": "https://www.normalil.gov/m/newsflash/Archive/Item/3319?arcId=6477",
+      "sourcePublishedOn": "2026-08-18",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "Historical intermittent closures; no later explicit all-clear established."
+    },
+    {
+      "sourceId": "notice-linden-bridge-bid",
+      "url": "https://www.normalil.gov/bids.aspx?bidID=541",
+      "sourcePublishedOn": "2026-08-13",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "Closed procurement status is not trail access; no closure schedule verified."
+    },
+    {
+      "sourceId": "notice-uptown-initial",
+      "url": "https://www.normalil.gov/m/newsflash/Home/Detail/3337",
+      "sourcePublishedOn": "2026-09-14",
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "Initial-phase current status and precise endpoints unresolved; retain Phoenix exclusion."
+    },
+    {
+      "sourceId": "notice-uptown-detour-update",
+      "url": "https://engage.zencity.io/normal-il/en-US/projects/the-underpass/updates/construction-closes-parkinson-street-parking-lot-creates-constitution-trail-detour",
+      "sourcePublishedOn": null,
+      "reviewedOn": "2026-10-09",
+      "reviewEvidenceUrl": "https://github.com/hooware-ai/constitution-trail-mapper/blob/a4474cfb11983840194fb4c8fccaf3c51938b16d/docs/local-condition-review-2026-10-09.md",
+      "limitations": "No displayed publication date; corroborates long-term detour, not initial-phase reopening."
+    },
+    {
+      "sourceId": "notice-city-gis-road-closures",
+      "url": "https://services3.arcgis.com/ZntpsilxOye7y1YF/arcgis/rest/services/RoadClosures_public_7e10ca6b3d3a4e6fa88caf9918ade300/FeatureServer/1/query?objectIds=841%2C916%2C919%2C922%2C923&outFields=*&outSR=4326&f=json",
+      "sourcePublishedOn": null,
+      "reviewedOn": "2026-10-03",
+      "reviewEvidenceUrl": "docs/web/closure-readiness.md",
+      "limitations": "Broad road corridors are informational unless separately mapped and admitted; estimates and disappeared objects never imply reopening."
+    }
+  ]
+}

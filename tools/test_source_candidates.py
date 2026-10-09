@@ -76,7 +76,7 @@ class CandidatesTests(unittest.TestCase):
         def timeout(*args):
             raise TimeoutError()
         self.assertTrue(observe(SOURCE, transport=timeout, parser=parser, parser_version="1",
-                                schema_version=1, retrieved_at_utc="now", now_seconds=120)["staleEvidence"])
+                                schema_version=1, retrieved_at_utc="2026-10-09T00:00:00Z", now_seconds=120)["staleEvidence"])
         ticks = iter([0, 2])
         with self.assertRaises(TimeoutError):
             read_bounded(Response(b'x'), SOURCE["fetchLimits"], 1, lambda: next(ticks))
@@ -91,16 +91,65 @@ class CandidatesTests(unittest.TestCase):
         changed = self.run_source(b'{"notices":{"a":"changed","b":"new"}}', previous=previous)
         self.assertEqual(changed["candidate"]["diff"], {"added": ["b"], "removed": [], "changed": ["a"]})
         class Broken(Response):
-            def read(self, size):
+            def read1(self, size):
                 raise OSError("partial stream")
         for response in (Broken(), Response()):
             if not isinstance(response, Broken):
                 response.status = 503
             result = observe(SOURCE, transport=lambda *args: response, parser=parser,
-                             parser_version="1", schema_version=1, retrieved_at_utc="now",
+                             parser_version="1", schema_version=1, retrieved_at_utc="2026-10-09T00:00:00Z",
                              now_seconds=120, previous=previous)
             self.assertEqual(result["status"], "failed")
             self.assertNotIn("observation", result)
+
+    def test_content_length_truncation_and_validator_integrity(self):
+        previous = self.run_source()['observation']
+        for headers in ({'Content-Length': '99'}, {'ETag': 'bad\r\nheader'}):
+            def transport(*args):
+                response = Response(b'{"notices":{}}')
+                response.headers = headers
+                return response
+            result = observe(SOURCE, transport=transport, parser=parser, parser_version='1',
+                             schema_version=1, retrieved_at_utc='2026-10-09T00:00:00Z', now_seconds=120,
+                             previous=previous)
+            self.assertEqual(result['status'], 'failed')
+        previous['records']['a'] = digest('corrupt')
+        result = self.run_source(previous=previous)
+        self.assertEqual(result['status'], 'failed')
+
+    def test_completed_http_body_does_not_access_closed_socket_and_late_304_fails(self):
+        raw = b'{"notices":{}}'
+        class ClosingBody(Response):
+            headers = {'Content-Length': str(len(raw))}
+            def set_read_timeout(self, value):
+                if self.tell() == len(raw):
+                    raise OSError('socket already closed at EOF')
+        self.assertEqual(read_bounded(ClosingBody(raw), SOURCE['fetchLimits'], 2, lambda: 0), raw)
+        previous = self.run_source()['observation']
+        clock = [0]
+        def delayed(*args):
+            clock[0] = 2
+            response = Response()
+            response.status = 304
+            return response
+        result = observe(SOURCE, transport=delayed, parser=parser, parser_version='1', schema_version=1,
+                         retrieved_at_utc='2026-10-09T00:00:00Z', now_seconds=120,
+                         previous=previous, monotonic=lambda: clock[0])
+        self.assertEqual(result['failureType'], 'TimeoutError')
+
+    def test_recurring_content_keeps_first_snapshot_and_reports_current_diff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = self.run_source(directory=directory)
+            second = self.run_source(b'{"notices":{"b":"new"}}', previous=first['observation'], directory=directory)
+            returned = self.run_source(previous=second['observation'], directory=directory)
+            self.assertEqual(returned['candidate'], first['candidate'])
+            self.assertEqual(returned['runDiff'], {'added': ['a'], 'removed': ['b'], 'changed': []})
+            self.assertEqual(len(list(Path(directory).glob('*.json'))), 2)
+            path = Path(directory) / (first['candidate']['candidateId'] + '.json')
+            broken = json.loads(path.read_bytes())
+            broken['requiresReview'] = False
+            path.write_text(json.dumps(broken))
+            self.assertEqual(self.run_source(directory=directory)['status'], 'failed')
 
     def test_registry_is_review_only_and_references_existing_manifests(self):
         root = Path(__file__).resolve().parent.parent
@@ -123,7 +172,7 @@ class CandidatesTests(unittest.TestCase):
             source['limitations'] = 'new review constraint'
             result = observe(source, transport=lambda *args: Response(b'{"notices":{"a":"closed"}}'),
                              parser=parser, parser_version='1', schema_version=1,
-                             retrieved_at_utc='now', now_seconds=120, previous=first['observation'])
+                             retrieved_at_utc='2026-10-09T00:00:00Z', now_seconds=120, previous=first['observation'])
             self.assertEqual(result['status'], 'candidate')
 
 
