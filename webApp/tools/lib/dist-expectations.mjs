@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { distDir } from "./provenance.mjs";
 
 /** Test selection must describe the artifact, not silently select a different acceptance lane.
  * This is a mode preflight only; audit-dist remains responsible for verifying hashes and approval.
@@ -32,7 +34,7 @@ export function assertDistExpectations(provenance, env = process.env) {
 }
 
 export function checkDistExpectations(
-  path = new URL("../../dist/provenance.json", import.meta.url),
+  path = join(distDir, "provenance.json"),
   env = process.env,
 ) {
   let provenance;
