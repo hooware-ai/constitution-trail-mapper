@@ -132,7 +132,7 @@ object LocalTrailGuide {
                 "The detour lasts until construction is complete. Trail Mapper routes do not yet follow this detour; " +
                 "new routes avoid the mapped Phoenix-to-Uptown section, and saved routes through that section show a detour " +
                 "advisory. This exclusion does not establish access north of Vernon.",
-            "Closure, then signed detour · from September 21, 2026",
+            "Phoenix–Uptown restriction · initial Vernon status unverified",
             TrailResourceLink("Normal trail detour notice", "https://www.normalil.gov/m/newsflash/Home/Detail/3337"),
             reviewAfterEpochMillis = epoch("2026-10-16T05:00:00Z"),
         ),
