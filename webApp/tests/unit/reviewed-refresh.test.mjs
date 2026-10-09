@@ -10,6 +10,7 @@ import { sha256 } from "../../tools/lib/core.mjs";
 import {
   REVIEW_SCHEMA,
   snapshotIdentity,
+  packageChangesOf,
   reviewRefresh,
   writeReviewArtifact,
   verifyReviewArtifact,
@@ -321,6 +322,7 @@ test("reviewed refreshed geometry is admitted only with exact changed IDs; ID mi
   };
   update(args, (c) => {
     c.kind = "geometry";
+    c.packageChanges = packageChangesOf(args.baseline, args.target);
     c.target = snapshotIdentity(args.target);
     c.geometry = [{ id: feature.id, paths: feature.paths }];
   });
@@ -328,7 +330,7 @@ test("reviewed refreshed geometry is admitted only with exact changed IDs; ID mi
   assert.deepEqual(report.changedIds, [feature.id]);
   assert.notEqual(report.target.contentSha256, report.baseline.contentSha256);
   args.decisions[0].decision = "unresolved";
-  assert.throws(() => reviewRefresh(args), /unreviewed geometry/);
+  assert.throws(() => reviewRefresh(args), /unreviewed (geometry|package)/);
   update(args, (c) => {
     c.affectedIds.push("54:9002");
   });
@@ -359,7 +361,6 @@ test("accepted conflicting close and reopen candidates are rejected as ambiguous
 
 test("#105 envelope is bound to approved registry/parser and exact source diff", async () => {
   const args = await fixture();
-  delete args.policy.syntheticFixture;
   const records = { "notice-1": sha256(Buffer.from("source-record")) };
   const identity = {
     sourceId: "official-notices",
@@ -537,7 +538,6 @@ function additiveDetection() {
 }
 test("latest #105 additive provenance and component/source times bind the current transition separately", async () => {
   const args = await fixture();
-  delete args.policy.syntheticFixture;
   const { detection, source } = additiveDetection();
   args.policy.detectionSources = [source];
   update(args, (c) => {
@@ -600,4 +600,476 @@ test("provenance tampering, stale run results and missing latest-contract proven
     );
   });
   assert.throws(() => reviewRefresh(args), /contract requires provenance/);
+});
+
+async function genuineDetectorReview(runIndex = 2) {
+  const fixtureData = JSON.parse(
+    await readFile(
+      new URL("../support/detector-admission.fixture.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const run = fixtureData.runs[runIndex];
+  const args = await fixture();
+  delete args.policy.syntheticFixture;
+  const candidate = run.result.candidate;
+  const source = {
+    sourceId: candidate.sourceId,
+    url: candidate.identity.sourceUrl,
+    registrySha256: candidate.identity.registrySha256,
+    parserVersion: candidate.identity.parserVersion,
+    sourceSchemaVersion: candidate.identity.sourceSchemaVersion,
+    requireProvenance: true,
+    baselineDataset: snapshotIdentity(args.baseline),
+    previousObservationSha256:
+      run.previousObservationText === null
+        ? null
+        : sha256(Buffer.from(run.previousObservationText)),
+  };
+  args.policy.detectionSources = [source];
+  update(args, (c) => {
+    c.kind = "information";
+    c.routingEffect = "none";
+    c.detection = {
+      observation: candidate,
+      observationText: run.candidateText,
+      previousObservationText: run.previousObservationText,
+      sourceRecordIds: [
+        ...run.result.runDiff.added,
+        ...run.result.runDiff.changed,
+        ...run.result.runDiff.removed,
+      ].sort(),
+      transition: {
+        status: run.result.status,
+        staleEvidence: run.result.staleEvidence,
+        parentCandidateId: run.result.parentCandidateId,
+        runDiff: run.result.runDiff,
+      },
+    };
+  });
+  return { args, fixtureData, run };
+}
+test("genuine pinned Python detector A→B→A feeds JS admission with numeric and non-ASCII canonical bytes", async () => {
+  const { args, fixtureData, run } = await genuineDetectorReview();
+  assert.equal(
+    fixtureData.producer.commit,
+    "1c56268ec60a9f58498f4c01aa9574b844c4dffc",
+  );
+  assert.equal(run.candidateText, fixtureData.runs[0].candidateText);
+  assert.notDeepEqual(run.result.runDiff, run.result.candidate.diff);
+  assert.match(run.candidateText, /1\.0/);
+  assert.match(run.candidateText, /1e-07/);
+  assert.match(run.candidateText, /réouverture 🚴/);
+  const report = reviewRefresh(args);
+  assert.equal(report.release.approved, false);
+  assert.deepEqual(
+    report.reviews[0].candidate.detection.transition.runDiff,
+    run.result.runDiff,
+  );
+  const normalized = JSON.stringify(run.result.candidate);
+  update(args, (c) => {
+    c.detection.observationText = normalized;
+  });
+  assert.throws(() => reviewRefresh(args), /provenance hash mismatch/);
+});
+test("genuine first observation binds an explicit empty previous baseline to exact dataset", async () => {
+  const { args } = await genuineDetectorReview(0);
+  assert.equal(reviewRefresh(args).reviews.length, 1);
+  update(args, (c, a) => {
+    a.policy.detectionSources[0].baselineDataset = {
+      ...c.baseline,
+      version: "wrong",
+    };
+  });
+  assert.throws(() => reviewRefresh(args), /exact dataset/);
+});
+test("genuine transition parent, previous bytes and recomputed record diff independently fail closed", async () => {
+  let { args } = await genuineDetectorReview();
+  update(args, (c) => {
+    c.detection.transition.parentCandidateId = sha256(
+      Buffer.from("wrong parent"),
+    );
+  });
+  assert.throws(() => reviewRefresh(args), /parent.*retained baseline/);
+  ({ args } = await genuineDetectorReview());
+  update(args, (c) => {
+    c.detection.previousObservationText += " ";
+  });
+  assert.throws(() => reviewRefresh(args), /baseline hash mismatch/);
+  ({ args } = await genuineDetectorReview());
+  update(args, (c) => {
+    c.detection.transition.runDiff = {
+      added: [],
+      changed: ["notice-é"],
+      removed: [],
+    };
+    c.detection.sourceRecordIds = ["notice-é"];
+  });
+  assert.throws(() => reviewRefresh(args), /runDiff.*baseline records/);
+  ({ args } = await genuineDetectorReview());
+  update(args, (c) => {
+    delete c.detection.previousObservationText;
+  });
+  assert.throws(() => reviewRefresh(args), /baseline text/);
+});
+
+async function countySnapshot(county = makeCounty(), options = {}) {
+  const manifestBytes = Buffer.from(JSON.stringify(county.manifest));
+  const built = await buildPackage({
+    inputText: JSON.stringify(county.input),
+    manifest: county.manifest,
+    manifestBytes,
+    approval: county.approval,
+    ...options,
+  });
+  return {
+    ...built,
+    manifestBytes,
+    parts: Object.fromEntries(built.accessFiles.map((p) => [p.file, p.body])),
+    ...(options.access
+      ? { accessManifestBytes: options.access.manifestBytes }
+      : {}),
+    ...(options.supplement
+      ? { osmManifestBytes: options.supplement.manifestBytes }
+      : {}),
+    ...(options.proposed
+      ? { proposedManifestBytes: options.proposed.manifestBytes }
+      : {}),
+  };
+}
+function emptyReview(baseline, target = baseline) {
+  return {
+    baseline,
+    target,
+    ledger: {
+      schema: REVIEW_SCHEMA,
+      dataset: snapshotIdentity(baseline),
+      closures: [],
+    },
+    candidates: [],
+    decisions: [],
+    policy: { syntheticFixture: true, reviewers: ["fixture-reviewer"] },
+    evidence: {},
+  };
+}
+async function changedNetwork(snapshot, mutate) {
+  const { reconstructComposition } = await import(
+    "../../tools/lib/composition.mjs"
+  );
+  const network = JSON.parse(snapshot.body);
+  mutate(network);
+  const body = Buffer.from(JSON.stringify(network)),
+    record = clone(snapshot.record);
+  record.content.sha256 = sha256(body);
+  record.content.bytes = body.length;
+  record.content.file = `trails.${record.content.sha256.slice(0, 12)}.json`;
+  record.version = `2026-01-01.${record.content.sha256.slice(0, 12)}`;
+  record.composition = reconstructComposition({
+    record,
+    body,
+    network,
+    manifestBytes: snapshot.manifestBytes,
+    readPart: (name) => snapshot.parts?.[name],
+  });
+  return { ...snapshot, record, body };
+}
+test("layer attribution and ordering cannot drift behind unchanged feature objects", async () => {
+  const baseline = await countySnapshot();
+  const target = await changedNetwork(baseline, (n) => {
+    n.layers[0].id = 999;
+  });
+  assert.throws(
+    () => reviewRefresh(emptyReview(baseline, target)),
+    /layer attribution\/order/,
+  );
+  const renamed = await changedNetwork(baseline, (n) => {
+    n.layers[0].name = "different source layer";
+  });
+  assert.throws(
+    () => reviewRefresh(emptyReview(baseline, renamed)),
+    /unreviewed package/,
+  );
+});
+test("manifest/source metadata changes need an exact separately accepted package-input review", async () => {
+  const args = await fixture();
+  const county = makeCounty();
+  county.manifest.sourceContract.changes += " Synthetic metadata revision.";
+  county.input.sources.changes = county.manifest.sourceContract.changes;
+  args.target = await countySnapshot(county);
+  args.candidates = [];
+  args.decisions = [];
+  assert.throws(() => reviewRefresh(args), /unreviewed package/);
+  const source = await fixture();
+  args.candidates = source.candidates;
+  update(args, (c) => {
+    c.kind = "package";
+    c.target = snapshotIdentity(args.target);
+    c.affectedIds = JSON.parse(args.target.body).layers.flatMap((layer) =>
+      layer.features.map((f) => f.id),
+    );
+    c.packageChanges = packageChangesOf(args.baseline, args.target);
+    delete c.geometry;
+  });
+  assert.ok(
+    reviewRefresh(args).changedPackageInputs.some(
+      (c) => c.id === "county-manifest",
+    ),
+  );
+  update(args, (c) => {
+    c.packageChanges.pop();
+  });
+  assert.throws(() => reviewRefresh(args), /exact complete package input/);
+});
+test("new access graph, OSM manifest and Proposed manifest cannot bypass exact source-ID review", async () => {
+  const { makeAccessExtract, makeAccessManifest } = await import(
+    "../support/access-fixture.mjs"
+  );
+  const { makeSupplement } = await import("../support/osm-fixture.mjs");
+  const baseline = await countySnapshot();
+  const inputText = JSON.stringify(makeAccessExtract());
+  const access = {
+    inputText,
+    manifestBytes: Buffer.from(JSON.stringify(makeAccessManifest(inputText))),
+  };
+  const withAccess = await countySnapshot(makeCounty(), { access });
+  assert.throws(
+    () => reviewRefresh(emptyReview(baseline, withAccess)),
+    /auxiliary source\/part refresh/,
+  );
+  const s = makeSupplement();
+  const supplement = {
+    inputText: JSON.stringify(s.input),
+    manifest: s.manifest,
+    manifestBytes: Buffer.from(JSON.stringify(s.manifest)),
+  };
+  const withOsm = await countySnapshot(makeCounty(), { supplement });
+  assert.throws(
+    () => reviewRefresh(emptyReview(baseline, withOsm)),
+    /auxiliary source\/part refresh/,
+  );
+  assert.throws(
+    () =>
+      reviewRefresh(
+        emptyReview(baseline, {
+          ...baseline,
+          proposedManifestBytes: Buffer.from("{}"),
+        }),
+      ),
+    /unexpected auxiliary manifest/,
+  );
+});
+test("reserved network/part filenames and unreferenced parts are rejected before artifact output", async () => {
+  const args = await fixture(),
+    report = reviewRefresh(args),
+    outDir = await mkdtemp(join(tmpdir(), "collision-controls-"));
+  try {
+    for (const name of [
+      "dataset.json",
+      "manifest.json",
+      "ledger.json",
+      "accessManifestBytes.json",
+    ]) {
+      const baseline = {
+        ...args.baseline,
+        parts: { [name]: Buffer.from("collision") },
+      };
+      await assert.rejects(
+        writeReviewArtifact({
+          outDir,
+          report,
+          baseline,
+          target: args.target,
+          baselineLedger: args.ledger,
+          evidence: args.evidence,
+        }),
+        /reserved or colliding/,
+      );
+    }
+    const baseline = {
+      ...args.baseline,
+      parts: { "unused.json": Buffer.from("{}") },
+    };
+    await assert.rejects(
+      writeReviewArtifact({
+        outDir,
+        report,
+        baseline,
+        target: args.target,
+        baselineLedger: args.ledger,
+        evidence: args.evidence,
+      }),
+      /unexpected unreferenced/,
+    );
+    const badRecord = {
+      ...args.baseline.record,
+      content: { ...args.baseline.record.content, file: "manifest.json" },
+    };
+    await assert.rejects(
+      writeReviewArtifact({
+        outDir,
+        report,
+        baseline: { ...args.baseline, record: badRecord },
+        target: args.target,
+        baselineLedger: args.ledger,
+        evidence: args.evidence,
+      }),
+      /reserved or incompatible/,
+    );
+    assert.deepEqual(
+      await import("node:fs/promises").then((fs) => fs.readdir(outDir)),
+      [],
+    );
+  } finally {
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+test("artifact verification re-admits rollback manifests even when a corrupt archive is rehashed", async () => {
+  const args = await fixture(),
+    report = reviewRefresh(args),
+    outDir = await mkdtemp(join(tmpdir(), "rehash-controls-"));
+  try {
+    const result = await writeReviewArtifact({
+      outDir,
+      report,
+      baseline: args.baseline,
+      target: args.target,
+      baselineLedger: args.ledger,
+      evidence: args.evidence,
+    });
+    const bytes = Buffer.from("{}");
+    await writeFile(join(result.dir, "rollback/manifest.json"), bytes);
+    const index = clone(result.index),
+      entry = index.files.find((f) => f.file === "rollback/manifest.json");
+    entry.sha256 = sha256(bytes);
+    entry.bytes = bytes.length;
+    await writeFile(join(result.dir, "artifact.json"), JSON.stringify(index));
+    await assert.rejects(
+      selectRollback(result.dir, canonicalSha256(index)),
+      /manifest|version|reviewed/,
+    );
+  } finally {
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+test("rollback reconstructs every access part and preserves current closure evidence without authorizing activation", async () => {
+  const args = await fixture();
+  const { makeAccessExtract, makeAccessManifest } = await import(
+    "../support/access-fixture.mjs"
+  );
+  const inputText = JSON.stringify(makeAccessExtract());
+  args.baseline = args.target = await countySnapshot(makeCounty(), {
+    access: {
+      inputText,
+      manifestBytes: Buffer.from(JSON.stringify(makeAccessManifest(inputText))),
+    },
+  });
+  args.ledger.dataset = snapshotIdentity(args.baseline);
+  update(args, (c) => {
+    c.baseline = c.target = snapshotIdentity(args.baseline);
+  });
+  const report = reviewRefresh(args),
+    outDir = await mkdtemp(join(tmpdir(), "rollback-evidence-"));
+  try {
+    const result = await writeReviewArtifact({
+      outDir,
+      report,
+      baseline: args.baseline,
+      target: args.target,
+      baselineLedger: args.ledger,
+      evidence: args.evidence,
+    });
+    const selected = await selectRollback(result.dir, result.artifactSha256);
+    assert.equal(selected.baselineLedger.closures.length, 0);
+    assert.equal(selected.currentClosureEvidence.closures.length, 1);
+    assert.equal(selected.activationAllowed, false);
+    assert.equal(selected.requiresHigherReleaseSequence, true);
+    assert.equal(selected.requiresCurrentCompleteClosureEvidence, true);
+    assert.deepEqual(selected.manifestBytes, args.baseline.manifestBytes);
+    assert.deepEqual(
+      selected.accessManifestBytes,
+      args.baseline.accessManifestBytes,
+    );
+    assert.ok(Object.keys(selected.parts).length > 1);
+    for (const [name, bytes] of Object.entries(args.baseline.parts))
+      assert.deepEqual(selected.parts[name], Buffer.from(bytes));
+    await writeFile(join(result.dir, "unindexed.json"), "{}");
+    await assert.rejects(
+      verifyReviewArtifact(result.dir, result.artifactSha256),
+      /unexpected unindexed/,
+    );
+  } finally {
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+test("repeated vertices and duplicate source paths cannot select a different native closure interval", async () => {
+  for (const duplicatePath of [false, true]) {
+    const args = await fixture(),
+      county = makeCounty();
+    const f = county.input.layers[0].features[0],
+      original = clone(f.paths[0]);
+    f.paths = duplicatePath
+      ? [original, clone(original)]
+      : [[...original, ...clone(original)]];
+    f.provenance.geometrySha256 = canonicalSha256(f.paths);
+    county.manifest.features[0].geometrySha256 = f.provenance.geometrySha256;
+    args.baseline = args.target = await countySnapshot(county);
+    args.ledger.dataset = snapshotIdentity(args.baseline);
+    update(args, (c) => {
+      c.baseline = c.target = snapshotIdentity(args.baseline);
+      c.geometry = [
+        {
+          id: f.id,
+          pathIndex: duplicatePath ? 1 : 0,
+          fromVertex: duplicatePath ? 0 : 2,
+          toVertex: duplicatePath ? 1 : 3,
+          coordinates: original,
+        },
+      ];
+    });
+    assert.throws(
+      () => reviewRefresh(args),
+      /ambiguous compiled endpoint interval/,
+    );
+  }
+});
+test("compiled closedPath and sourceLine must bind the same complete reviewed interval", async () => {
+  const args = await fixture();
+  update(args, (c) => {
+    c.activeFromUtc = "2026-01-01T00:00:00Z";
+    c.compiledClosure = {
+      id: c.closureId,
+      featureId: c.affectedIds[0],
+      noticeUrl: c.evidence.url,
+      title: "Synthetic closure",
+      guidance: "Synthetic exact interval",
+      closedFrom: {
+        longitude: c.geometry[0].coordinates[0][0],
+        latitude: c.geometry[0].coordinates[0][1],
+      },
+      closedTo: {
+        longitude: c.geometry[0].coordinates[1][0],
+        latitude: c.geometry[0].coordinates[1][1],
+      },
+      activeFromEpochMillis: Date.parse(c.activeFromUtc),
+      boundsProjected: false,
+      isCrossing: false,
+      closedPath: c.geometry[0].coordinates.map(([longitude, latitude]) => ({
+        latitude,
+        longitude,
+      })),
+      sourceLine: [],
+    };
+  });
+  assert.equal(reviewRefresh(args).ledger.closures.length, 1);
+  update(args, (c) => {
+    c.compiledClosure.closedPath[1].longitude += 0.001;
+  });
+  assert.throws(() => reviewRefresh(args), /compiled closure does not match/);
+  update(args, (c) => {
+    c.compiledClosure.closedPath = c.geometry[0].coordinates.map(
+      ([longitude, latitude]) => ({ latitude, longitude }),
+    );
+    c.compiledClosure.sourceLine = clone(c.compiledClosure.closedPath);
+  });
+  assert.throws(() => reviewRefresh(args), /compiled closure does not match/);
 });

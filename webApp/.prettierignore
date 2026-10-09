@@ -1,2 +1,5 @@
 src/data/
 package-lock.json
+
+# Byte-reproducible fixture emitted by the pinned Python canonical producer.
+tests/support/detector-admission.fixture.json

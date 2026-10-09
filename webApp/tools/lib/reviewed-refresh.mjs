@@ -1,8 +1,17 @@
 // Offline review only. No fetching, scheduling, mutation of release approvals or publication.
-import { canonical, sha256Text, canonicalSha256 } from "./canonical-json.mjs";
+import {
+  canonical,
+  sha256Text,
+  canonicalSha256,
+  parseWithNumbers,
+  toPlain,
+  codePointOrder,
+} from "./canonical-json.mjs";
 import { checkPackage } from "./dataset-package.mjs";
+import { SUPPLEMENT_LAYER_ID } from "./osm-supplement.mjs";
+import { PROPOSED_LAYER_ID } from "./proposed-layer.mjs";
 import { sha256 } from "./core.mjs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 export const REVIEW_SCHEMA = "trail-mapper.refresh-review/1";
@@ -60,15 +69,61 @@ export function verifySnapshot(snapshot) {
     [".", ".."].includes(record.content.file)
   )
     fail("unsafe content filename");
+  const reserved = new Set([
+    "dataset.json",
+    "ledger.json",
+    "manifest.json",
+    "osmManifestBytes.json",
+    "proposedManifestBytes.json",
+    "accessManifestBytes.json",
+  ]);
+  if (
+    !/^trails\.[0-9a-f]{12}\.json$/.test(record.content.file) ||
+    reserved.has(record.content.file)
+  )
+    fail("reserved or incompatible network filename");
+  for (const name of Object.keys(parts))
+    if (
+      !/^[a-zA-Z0-9_.-]+$/.test(name) ||
+      reserved.has(name) ||
+      name === record.content.file ||
+      [".", ".."].includes(name)
+    )
+      fail("reserved or colliding package part name");
+  for (const [key, present] of [
+    ["osmManifestBytes", Boolean(record.supplements?.length)],
+    ["proposedManifestBytes", Boolean(record.proposedLayer)],
+    ["accessManifestBytes", Boolean(record.access)],
+  ])
+    if (Boolean(snapshot[key]) !== present)
+      fail("missing or unexpected auxiliary manifest");
+  const usedParts = new Set();
   const network = checkPackage(
     record,
     body,
     manifestBytes,
     osmManifestBytes,
-    (name) => parts[name],
+    (name) => {
+      if (Object.hasOwn(parts, name)) usedParts.add(name);
+      return parts[name];
+    },
     proposedManifestBytes,
     accessManifestBytes,
   );
+  if (Object.keys(parts).some((name) => !usedParts.has(name)))
+    fail("unexpected unreferenced package parts");
+  const expectedLayers = [
+    8,
+    ...(record.supplements?.length ? [SUPPLEMENT_LAYER_ID] : []),
+    ...(record.proposedLayer ? [PROPOSED_LAYER_ID] : []),
+  ];
+  if (
+    !same(
+      network.layers.map((layer) => layer.id),
+      expectedLayers,
+    )
+  )
+    fail("incompatible layer attribution/order");
   const ids = network.layers.flatMap((layer) =>
     layer.features.map((f) => f.id),
   );
@@ -106,6 +161,87 @@ export function snapshotIdentity(snapshot) {
   };
 }
 
+const routingProjections = (network) =>
+  new Map(
+    network.layers.flatMap((layer, layerIndex) => {
+      const { features, ...metadata } = layer;
+      return features.map((feature, featureIndex) => [
+        feature.id,
+        { feature, layer: metadata, layerIndex, featureIndex },
+      ]);
+    }),
+  );
+/** Every admitted package input, beyond derived version/network filenames, is bound to review. */
+export function packageChangesOf(baseline, target) {
+  const inputs = (snapshot) => {
+    const tree = parseWithNumbers(snapshot.body.toString("utf8"));
+    const metadata = { ...snapshot.record };
+    delete metadata.content;
+    delete metadata.version;
+    const networkMetadata = {
+      ...tree,
+      layers: tree.layers.map((layer) => {
+        const { features, ...meta } = layer;
+        return meta;
+      }),
+    };
+    const hashes = {
+      "county-manifest": sha256(snapshot.manifestBytes),
+      "record-metadata": canonicalSha256(metadata),
+      "network-metadata": sha256Text(canonical(networkMetadata)),
+    };
+    for (const key of [
+      "osmManifestBytes",
+      "proposedManifestBytes",
+      "accessManifestBytes",
+    ])
+      hashes[key] = snapshot[key] ? sha256(snapshot[key]) : null;
+    for (const [name, bytes] of Object.entries(snapshot.parts ?? {}))
+      hashes[`part:${name}`] = sha256(bytes);
+    return hashes;
+  };
+  const old = inputs(baseline),
+    next = inputs(target);
+  return [...new Set([...Object.keys(old), ...Object.keys(next)])]
+    .sort(codePointOrder)
+    .filter((id) => (old[id] ?? null) !== (next[id] ?? null))
+    .map((id) => ({
+      id,
+      beforeSha256: old[id] ?? null,
+      afterSha256: next[id] ?? null,
+    }));
+}
+const meters = (a, b) => {
+  const radians = Math.PI / 180,
+    dLat = (b[1] - a[1]) * radians,
+    dLon = (b[0] - a[0]) * radians;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a[1] * radians) *
+      Math.cos(b[1] * radians) *
+      Math.sin(dLon / 2) ** 2;
+  return 6371008.8 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+};
+function requireUniqueInterval(feature, geometry) {
+  const from = geometry.coordinates[0],
+    to = geometry.coordinates.at(-1),
+    fromMatches = [],
+    toMatches = [];
+  feature.paths.forEach((path, pathIndex) =>
+    path.forEach((p, index) => {
+      if (meters(p, from) <= 1.0) fromMatches.push([pathIndex, index]);
+      if (meters(p, to) <= 1.0) toMatches.push([pathIndex, index]);
+    }),
+  );
+  if (
+    fromMatches.length !== 1 ||
+    toMatches.length !== 1 ||
+    !same(fromMatches[0], [geometry.pathIndex, geometry.fromVertex]) ||
+    !same(toMatches[0], [geometry.pathIndex, geometry.toVertex])
+  )
+    fail("ambiguous compiled endpoint interval across source paths/vertices");
+}
+
 /** PR109 (#105) envelope stays intact; routing mapping is a separate reviewer-owned field. */
 export function verifyDetection(candidate, policy) {
   const detection = candidate.detection;
@@ -121,11 +257,22 @@ export function verifyDetection(candidate, policy) {
     d.sourceId !== d.identity?.sourceId
   )
     fail("incompatible detection envelope");
+  let sourceTree = null;
+  if (detection.observationText !== undefined) {
+    text(detection.observationText, "retained detector candidate text");
+    sourceTree = parseWithNumbers(detection.observationText);
+    if (!same(toPlain(sourceTree), d))
+      fail("detector candidate object/text mismatch");
+  }
+  if (policy.syntheticFixture !== true && !sourceTree)
+    fail("retained exact detector candidate text required");
+  const sourceHash = (value) =>
+    sourceTree ? sha256Text(canonical(value)) : canonicalSha256(value);
   const hasProvenance = Object.hasOwn(d, "provenanceSha256");
   if (hasProvenance) {
     digest(d.provenanceSha256, "detection provenance");
-    const { provenanceSha256, ...provenance } = d;
-    if (canonicalSha256(provenance) !== provenanceSha256)
+    const { provenanceSha256, ...provenance } = sourceTree ?? d;
+    if (sourceHash(provenance) !== provenanceSha256)
       fail("detection provenance hash mismatch");
   }
   if (d.identity?.componentHashes !== undefined) {
@@ -141,7 +288,7 @@ export function verifyDetection(candidate, policy) {
       fail("invalid detection component provenance");
   }
   const transition = detection.transition;
-  if (hasProvenance && !transition)
+  if ((hasProvenance || policy.syntheticFixture !== true) && !transition)
     fail("current detection runDiff/parent transition required");
   if (
     transition &&
@@ -156,7 +303,7 @@ export function verifyDetection(candidate, policy) {
   )
     digest(transition.parentCandidateId, "current transition parent");
   digest(d.candidateId, "detection candidate ID");
-  if (canonicalSha256(d.identity) !== d.candidateId)
+  if (sourceHash(sourceTree?.identity ?? d.identity) !== d.candidateId)
     fail("detection identity hash mismatch");
   const approvedSource = policy.detectionSources?.find(
     (source) =>
@@ -198,7 +345,7 @@ export function verifyDetection(candidate, policy) {
       if (
         !Array.isArray(ids) ||
         ids.some((id) => typeof id !== "string" || !id) ||
-        !same(ids, [...new Set(ids)].sort())
+        !same(ids, [...new Set(ids)].sort(codePointOrder))
       )
         fail("invalid detection diff IDs");
       if (
@@ -213,9 +360,93 @@ export function verifyDetection(candidate, policy) {
     }
     if (new Set(all).size !== all.length)
       fail("overlapping detection diff IDs");
-    return all.sort();
+    return all.sort(codePointOrder);
   };
   checkedDiff(d.diff); // Stored immutable first-observation provenance is verified, never repurposed as today's transition.
+  if (
+    transition &&
+    (policy.syntheticFixture !== true ||
+      detection.previousObservationText !== undefined ||
+      approvedSource.previousObservationSha256 !== undefined)
+  ) {
+    if (
+      !Object.hasOwn(approvedSource, "previousObservationSha256") ||
+      !same(approvedSource.baselineDataset, candidate.baseline)
+    )
+      fail("trusted detector baseline must be pinned to exact dataset");
+    let previousRecords = {},
+      previousId = null;
+    if (detection.previousObservationText !== null) {
+      text(
+        detection.previousObservationText,
+        "retained detector baseline text",
+      );
+      digest(
+        approvedSource.previousObservationSha256,
+        "trusted baseline observation",
+      );
+      if (
+        sha256Text(detection.previousObservationText) !==
+        approvedSource.previousObservationSha256
+      )
+        fail("retained detector baseline hash mismatch");
+      const tree = parseWithNumbers(detection.previousObservationText),
+        previous = toPlain(tree);
+      if (
+        previous.sourceId !== d.sourceId ||
+        !previous.records ||
+        typeof previous.records !== "object" ||
+        Array.isArray(previous.records) ||
+        Object.entries(previous.records).some(
+          ([id, h]) => !id || !/^[a-f0-9]{64}$/.test(h),
+        )
+      )
+        fail("incompatible retained detector baseline");
+      const identity = {};
+      for (const key of [
+        "sourceId",
+        "sourceUrl",
+        "registrySha256",
+        "contentSha256",
+        "parsedSha256",
+        "parserVersion",
+        "sourceSchemaVersion",
+      ]) {
+        if (!Object.hasOwn(tree, key))
+          fail("incomplete retained detector baseline identity");
+        identity[key] = tree[key];
+      }
+      for (const key of ["componentHashes", "sourceTimes"])
+        if (Object.hasOwn(tree, key)) identity[key] = tree[key];
+      previousId = sha256Text(canonical(identity));
+      if (
+        previousId !== previous.candidateId ||
+        sha256Text(canonical(tree.records)) !== previous.parsedSha256
+      )
+        fail("retained detector baseline identity/records mismatch");
+      previousRecords = previous.records;
+    } else if (approvedSource.previousObservationSha256 !== null)
+      fail("missing pinned detector baseline observation");
+    if (transition.parentCandidateId !== previousId)
+      fail("current transition parent does not match retained baseline");
+    const expectedDiff = {
+      added: Object.keys(d.records)
+        .filter((id) => !Object.hasOwn(previousRecords, id))
+        .sort(codePointOrder),
+      removed: Object.keys(previousRecords)
+        .filter((id) => !Object.hasOwn(d.records, id))
+        .sort(codePointOrder),
+      changed: Object.keys(d.records)
+        .filter(
+          (id) =>
+            Object.hasOwn(previousRecords, id) &&
+            d.records[id] !== previousRecords[id],
+        )
+        .sort(codePointOrder),
+    };
+    if (!same(transition.runDiff, expectedDiff))
+      fail("current runDiff does not match retained baseline records");
+  }
   const currentDiff = transition ? transition.runDiff : d.diff;
   const affected = checkedDiff(currentDiff);
   if (!Array.isArray(sourceRecordIds) || !same(sourceRecordIds, affected))
@@ -255,8 +486,33 @@ export function reviewRefresh({
   policy,
   evidence,
 }) {
-  const old = features(verifySnapshot(baseline));
-  const next = features(verifySnapshot(target));
+  const oldNetwork = verifySnapshot(baseline),
+    nextNetwork = verifySnapshot(target);
+  const old = features(oldNetwork),
+    next = features(nextNetwork);
+  const oldProjections = routingProjections(oldNetwork),
+    nextProjections = routingProjections(nextNetwork);
+  if (
+    ["schema", "kind", "id"].some(
+      (key) => baseline.record[key] !== target.record[key],
+    )
+  )
+    fail("dataset identity migration requires separate admission contract");
+  const changedPackageInputs = packageChangesOf(baseline, target);
+  if (
+    changedPackageInputs.some(
+      (change) =>
+        [
+          "osmManifestBytes",
+          "proposedManifestBytes",
+          "accessManifestBytes",
+        ].includes(change.id) || change.id.startsWith("part:"),
+    )
+  )
+    fail(
+      "auxiliary source/part refresh requires separate exact source-ID admission contract",
+    );
+  let packageReviewed = changedPackageInputs.length === 0;
   if (
     ledger.schema !== REVIEW_SCHEMA ||
     !same(ledger.dataset, snapshotIdentity(baseline)) ||
@@ -288,7 +544,10 @@ export function reviewRefresh({
   )
     fail("duplicate or orphan decision");
   const changedIds = [...new Set([...old.keys(), ...next.keys()])]
-    .filter((id) => !same(old.get(id) ?? null, next.get(id) ?? null))
+    .filter(
+      (id) =>
+        !same(oldProjections.get(id) ?? null, nextProjections.get(id) ?? null),
+    )
     .sort();
   const admittedIds = new Set();
   const reviews = [];
@@ -297,7 +556,9 @@ export function reviewRefresh({
     text(c.id, "candidate ID");
     if (
       c.schema !== "trail-mapper.refresh-candidate/1" ||
-      !["closure", "reopening", "geometry", "information"].includes(c.kind)
+      !["closure", "reopening", "geometry", "package", "information"].includes(
+        c.kind,
+      )
     )
       fail("incompatible candidate schema/kind");
     if (
@@ -332,6 +593,14 @@ export function reviewRefresh({
         fail(
           "ambiguous, withdrawn or failed-fetch candidate cannot be accepted",
         );
+      if (
+        ["geometry", "package"].includes(c.kind) &&
+        changedPackageInputs.length
+      ) {
+        if (!same(c.packageChanges, changedPackageInputs))
+          fail("exact complete package input changes require explicit review");
+        packageReviewed = true;
+      }
       if (c.kind === "geometry") {
         if (!same([...c.affectedIds].sort(), changedIds))
           fail("geometry review must name exactly all changed IDs");
@@ -347,6 +616,17 @@ export function reviewRefresh({
         )
           fail("geometry is not exact admitted source geometry");
         c.affectedIds.forEach((id) => admittedIds.add(id));
+      } else if (c.kind === "package") {
+        if (
+          changedIds.length ||
+          !same(
+            [...c.affectedIds].sort(codePointOrder),
+            [...new Set([...old.keys(), ...next.keys()])].sort(codePointOrder),
+          )
+        )
+          fail(
+            "package metadata review must cover exactly the complete routing ID scope without geometry changes",
+          );
       } else if (c.kind === "information") {
         if (c.routingEffect !== "none")
           fail("informational road works cannot exclude trails");
@@ -398,6 +678,7 @@ export function reviewRefresh({
             )
               fail("closure geometry not exact source interval");
           }
+          c.geometry.forEach((g) => requireUniqueInterval(next.get(g.id), g));
           if (c.compiledClosure) {
             const compiled = c.compiledClosure;
             const g = c.geometry[0];
@@ -415,7 +696,15 @@ export function reviewRefresh({
                 longitude: from[0],
               }) ||
               !same(compiled.closedTo, { latitude: to[1], longitude: to[0] }) ||
-              compiled.activeFromEpochMillis !== instant(c.activeFromUtc)
+              compiled.activeFromEpochMillis !== instant(c.activeFromUtc) ||
+              !same(
+                compiled.closedPath,
+                g.coordinates.map(([longitude, latitude]) => ({
+                  latitude,
+                  longitude,
+                })),
+              ) ||
+              !same(compiled.sourceLine, [])
             )
               fail(
                 "compiled closure does not match exact reviewed source interval/activation",
@@ -442,6 +731,7 @@ export function reviewRefresh({
     }
     reviews.push({ candidate: c, decision: d });
   }
+  if (!packageReviewed) fail("unreviewed package inputs/source metadata");
   if (changedIds.some((id) => !admittedIds.has(id)))
     fail("unreviewed geometry/attribute changes");
   if (
@@ -479,6 +769,7 @@ export function reviewRefresh({
       fail("baseline closure has no reviewed geometry");
     for (const g of closure.geometry) {
       const path = next.get(g.id)?.paths?.[g.pathIndex];
+      requireUniqueInterval(next.get(g.id), g);
       if (
         !path ||
         !Number.isInteger(g.pathIndex) ||
@@ -497,16 +788,18 @@ export function reviewRefresh({
   const nextLedger = {
     schema: REVIEW_SCHEMA,
     dataset: snapshotIdentity(target),
-    closures: [...closures.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    closures: [...closures.values()].sort((a, b) => codePointOrder(a.id, b.id)),
   };
   return structuredClone({
     schema: REVIEW_SCHEMA,
-    version: `refresh.${canonicalSha256({ target: snapshotIdentity(target), nextLedger, reviews }).slice(0, 16)}`,
+    version: `refresh.${canonicalSha256({ target: snapshotIdentity(target), nextLedger, reviews, policy }).slice(0, 16)}`,
     baseline: snapshotIdentity(baseline),
     target: snapshotIdentity(target),
     ledger: nextLedger,
     reviews,
     changedIds,
+    changedPackageInputs,
+    reviewPolicy: policy,
     notices: {
       source: target.record.source,
       supplements: target.record.supplements ?? [],
@@ -519,6 +812,9 @@ export function reviewRefresh({
     rollback: {
       dataset: snapshotIdentity(baseline),
       ledgerSha256: canonicalSha256(ledger),
+      purpose: "baseline-evidence-only",
+      requiresHigherReleaseSequence: true,
+      requiresCurrentCompleteClosureEvidence: true,
     },
     // Separate release owner must bind compiled closure catalog + representative real-router controls to this report.
     release: {
@@ -531,26 +827,57 @@ export function reviewRefresh({
   });
 }
 
+function addFile(files, file, bytes) {
+  if (Object.hasOwn(files, file)) fail(`artifact filename collision: ${file}`);
+  files[file] = bytes;
+}
 function snapshotFiles(snapshot, prefix) {
-  const files = {
-    [`${prefix}/dataset.json`]: Buffer.from(canonical(snapshot.record)),
-    [`${prefix}/${snapshot.record.content.file}`]: snapshot.body,
-    [`${prefix}/manifest.json`]: snapshot.manifestBytes,
-  };
-  for (const [name, bytes] of Object.entries(snapshot.parts ?? {})) {
-    if (!/^[a-zA-Z0-9_.-]+$/.test(name) || name === "." || name === "..")
-      fail("unsafe package part name");
-    files[`${prefix}/${name}`] = bytes;
-  }
+  const files = Object.create(null);
+  addFile(
+    files,
+    `${prefix}/dataset.json`,
+    Buffer.from(canonical(snapshot.record)),
+  );
+  addFile(files, `${prefix}/${snapshot.record.content.file}`, snapshot.body);
+  addFile(files, `${prefix}/manifest.json`, snapshot.manifestBytes);
+  for (const [name, bytes] of Object.entries(snapshot.parts ?? {}))
+    addFile(files, `${prefix}/${name}`, bytes);
   for (const key of [
     "osmManifestBytes",
     "proposedManifestBytes",
     "accessManifestBytes",
   ])
-    if (snapshot[key]) files[`${prefix}/${key}.json`] = snapshot[key];
+    if (snapshot[key]) addFile(files, `${prefix}/${key}.json`, snapshot[key]);
   return files;
 }
-/** Immutable directory, with both candidate and last accepted package. Existing outputs are never overwritten. */
+function reproduceReport(report, baseline, target, baselineLedger, evidence) {
+  if (!report.reviewPolicy || !Array.isArray(report.reviews))
+    fail("artifact lacks complete replayable review inputs");
+  const replay = reviewRefresh({
+    baseline,
+    target,
+    ledger: baselineLedger,
+    candidates: report.reviews.map((r) => r.candidate),
+    decisions: report.reviews.map((r) => r.decision),
+    policy: report.reviewPolicy,
+    evidence,
+  });
+  if (!same(replay, report))
+    fail("artifact review report does not reproduce from retained inputs");
+}
+function checkRouterReport(routerAdmission, report) {
+  if (
+    routerAdmission.schema !== "trail-mapper.router-admission/1" ||
+    routerAdmission.approved !== false ||
+    routerAdmission.reviewSha256 !== canonicalSha256(report) ||
+    !same(routerAdmission.dataset, report.target)
+  )
+    fail("router admission/report mismatch");
+  digest(routerAdmission.core?.inputsSha256, "router core inputs");
+  digest(routerAdmission.core?.outputsSha256, "router core outputs");
+  digest(routerAdmission.catalogSha256, "router catalog");
+}
+/** Immutable private evidence bundle. No result of this API authorizes runtime activation. */
 export async function writeReviewArtifact({
   outDir,
   report,
@@ -560,48 +887,51 @@ export async function writeReviewArtifact({
   evidence,
   routerAdmission = null,
 }) {
-  if (
-    !same(report.baseline, snapshotIdentity(baseline)) ||
-    !same(report.target, snapshotIdentity(target)) ||
-    report.rollback.ledgerSha256 !== canonicalSha256(baselineLedger)
-  )
-    fail("artifact/report mismatch");
   verifySnapshot(baseline);
   verifySnapshot(target);
-  const files = {
+  reproduceReport(report, baseline, target, baselineLedger, evidence);
+  const files = Object.create(null);
+  for (const [name, bytes] of Object.entries({
     ...snapshotFiles(baseline, "rollback"),
     ...snapshotFiles(target, "candidate"),
-    "review.json": Buffer.from(canonical(report)),
-    "rollback/ledger.json": Buffer.from(canonical(baselineLedger)),
-  };
+  }))
+    addFile(files, name, bytes);
+  addFile(files, "review.json", Buffer.from(canonical(report)));
+  addFile(
+    files,
+    "rollback/ledger.json",
+    Buffer.from(canonical(baselineLedger)),
+  );
   if (routerAdmission) {
-    if (
-      routerAdmission.schema !== "trail-mapper.router-admission/1" ||
-      routerAdmission.approved !== false ||
-      routerAdmission.reviewSha256 !== canonicalSha256(report) ||
-      !same(routerAdmission.dataset, report.target)
-    )
-      fail("router admission/report mismatch");
-    files["router-admission.json"] = Buffer.from(canonical(routerAdmission));
+    checkRouterReport(routerAdmission, report);
+    addFile(
+      files,
+      "router-admission.json",
+      Buffer.from(canonical(routerAdmission)),
+    );
   }
   for (const r of report.reviews) {
     const h = r.candidate.evidence.sha256;
     if (!evidence[h] || sha256(evidence[h]) !== h)
       fail("artifact evidence mismatch");
-    files[`evidence/${h}.txt`] = evidence[h];
+    const name = `evidence/${h}.txt`;
+    if (Object.hasOwn(files, name)) {
+      if (sha256(files[name]) !== h) fail("evidence filename collision");
+    } else addFile(files, name, evidence[h]);
   }
   const index = {
     schema: "trail-mapper.refresh-artifact/1",
     version: report.version,
     files: Object.entries(files)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => codePointOrder(a, b))
       .map(([file, bytes]) => ({
         file,
         sha256: sha256(bytes),
         bytes: bytes.length,
       })),
   };
-  // Reserve a fresh immutable version. A partial write has no index and cannot verify.
+  if (!/^refresh\.[0-9a-f]{16}$/.test(report.version))
+    fail("unsafe artifact version");
   const dir = join(outDir, report.version);
   await mkdir(outDir, { recursive: true });
   await mkdir(dir);
@@ -610,9 +940,62 @@ export async function writeReviewArtifact({
     await writeFile(join(dir, file), bytes, { flag: "wx" });
   }
   await writeFile(join(dir, "artifact.json"), canonical(index), { flag: "wx" });
-  return { dir, index, artifactSha256: canonicalSha256(index) };
+  const artifactSha256 = canonicalSha256(index);
+  await verifyReviewArtifact(dir, artifactSha256); // Complete package and review replay, not only file hashes.
+  return { dir, index, artifactSha256 };
 }
-export async function verifyReviewArtifact(dir, expectedSha256) {
+async function artifactSnapshot(files, prefix) {
+  const get = (name) => {
+    const bytes = files.get(`${prefix}/${name}`);
+    if (!bytes) fail(`incomplete artifact snapshot: ${prefix}/${name}`);
+    return bytes;
+  };
+  const record = JSON.parse(get("dataset.json").toString("utf8"));
+  if (!/^trails\.[0-9a-f]{12}\.json$/.test(record.content?.file ?? ""))
+    fail("reserved or incompatible artifact network filename");
+  const snapshot = {
+    record,
+    body: get(record.content.file),
+    manifestBytes: get("manifest.json"),
+    parts: Object.create(null),
+  };
+  const consumed = new Set([
+    "dataset.json",
+    record.content.file,
+    "manifest.json",
+    ...(prefix === "rollback" ? ["ledger.json"] : []),
+  ]);
+  for (const key of [
+    "osmManifestBytes",
+    "proposedManifestBytes",
+    "accessManifestBytes",
+  ])
+    if (files.has(`${prefix}/${key}.json`)) {
+      snapshot[key] = get(`${key}.json`);
+      consumed.add(`${key}.json`);
+    }
+  for (const [file, bytes] of files)
+    if (file.startsWith(`${prefix}/`)) {
+      const name = file.slice(prefix.length + 1);
+      if (!consumed.has(name)) snapshot.parts[name] = bytes;
+    }
+  verifySnapshot(snapshot);
+  return snapshot;
+}
+async function onDiskFiles(dir, prefix = "") {
+  const names = [];
+  for (const entry of await readdir(join(dir, prefix), {
+    withFileTypes: true,
+  })) {
+    const name = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isSymbolicLink()) fail("artifact symlinks are unsupported");
+    if (entry.isDirectory()) names.push(...(await onDiskFiles(dir, name)));
+    else if (entry.isFile()) names.push(name);
+    else fail("unsupported artifact filesystem entry");
+  }
+  return names;
+}
+async function loadReviewArtifact(dir, expectedSha256) {
   digest(expectedSha256, "pinned artifact");
   const index = JSON.parse(await readFile(join(dir, "artifact.json"), "utf8"));
   if (
@@ -621,43 +1004,86 @@ export async function verifyReviewArtifact(dir, expectedSha256) {
     !Array.isArray(index.files)
   )
     fail("artifact index mismatch");
-  const seen = new Set();
+  const files = new Map();
   for (const entry of index.files) {
     if (
-      !/^(candidate|rollback|evidence)\/[a-zA-Z0-9_.-]+$/.test(entry.file) &&
-      !["review.json", "router-admission.json"].includes(entry.file)
+      (!/^(candidate|rollback|evidence)\/[a-zA-Z0-9_.-]+$/.test(entry.file) &&
+        !["review.json", "router-admission.json"].includes(entry.file)) ||
+      entry.file.split("/").some((part) => [".", ".."].includes(part))
     )
       fail("unsafe artifact path");
-    if (seen.has(entry.file)) fail("duplicate artifact file");
-    seen.add(entry.file);
+    if (files.has(entry.file)) fail("duplicate artifact file");
     const bytes = await readFile(join(dir, entry.file));
     if (sha256(bytes) !== entry.sha256 || bytes.length !== entry.bytes)
       fail("artifact bytes mismatch");
+    files.set(entry.file, bytes);
   }
-  for (const required of [
+  if (
+    !same(
+      (await onDiskFiles(dir)).sort(codePointOrder),
+      ["artifact.json", ...files.keys()].sort(codePointOrder),
+    )
+  )
+    fail("unexpected unindexed artifact files");
+  for (const name of [
+    "review.json",
+    "rollback/ledger.json",
     "candidate/dataset.json",
     "rollback/dataset.json",
-    "rollback/ledger.json",
-    "review.json",
   ])
-    if (!seen.has(required)) fail("incomplete artifact");
-  return JSON.parse(await readFile(join(dir, "review.json"), "utf8"));
-}
-
-/** Read-only rollback selection. Deployment remains an explicit integration-owner action. */
-export async function selectRollback(dir, expectedSha256) {
-  const report = await verifyReviewArtifact(dir, expectedSha256);
-  const record = JSON.parse(
-    await readFile(join(dir, "rollback/dataset.json"), "utf8"),
+    if (!files.has(name)) fail("incomplete artifact");
+  const report = JSON.parse(files.get("review.json").toString("utf8"));
+  if (index.version !== report.version)
+    fail("artifact version/report mismatch");
+  const baseline = await artifactSnapshot(files, "rollback"),
+    target = await artifactSnapshot(files, "candidate");
+  const baselineLedger = JSON.parse(
+    files.get("rollback/ledger.json").toString("utf8"),
   );
-  const ledger = JSON.parse(
-    await readFile(join(dir, "rollback/ledger.json"), "utf8"),
-  );
-  const body = await readFile(join(dir, "rollback", record.content.file));
   if (
-    !same(report.rollback.dataset, snapshotIdentity({ record, body })) ||
-    canonicalSha256(ledger) !== report.rollback.ledgerSha256
+    !same(report.baseline, snapshotIdentity(baseline)) ||
+    !same(report.target, snapshotIdentity(target)) ||
+    report.rollback.ledgerSha256 !== canonicalSha256(baselineLedger)
   )
-    fail("rollback identity mismatch");
-  return { record, ledger, body };
+    fail("artifact snapshot/review/rollback identity mismatch");
+  const evidence = Object.create(null),
+    wanted = new Set(
+      report.reviews.map((r) => `evidence/${r.candidate.evidence.sha256}.txt`),
+    );
+  for (const name of wanted) {
+    if (!files.has(name)) fail("missing retained artifact evidence");
+    evidence[name.slice("evidence/".length, -".txt".length)] = files.get(name);
+  }
+  if (
+    [...files.keys()].some(
+      (name) => name.startsWith("evidence/") && !wanted.has(name),
+    )
+  )
+    fail("unreferenced artifact evidence");
+  reproduceReport(report, baseline, target, baselineLedger, evidence);
+  if (files.has("router-admission.json"))
+    checkRouterReport(
+      JSON.parse(files.get("router-admission.json").toString("utf8")),
+      report,
+    );
+  return { report, baseline, target, baselineLedger };
+}
+export async function verifyReviewArtifact(dir, expectedSha256) {
+  return (await loadReviewArtifact(dir, expectedSha256)).report;
+}
+/** Returns reconstructed baseline evidence. It never authorizes restoring an old core/closure catalog. */
+export async function selectRollback(dir, expectedSha256) {
+  const { report, baseline, baselineLedger } = await loadReviewArtifact(
+    dir,
+    expectedSha256,
+  );
+  return {
+    ...baseline,
+    baselineLedger,
+    currentClosureEvidence: report.ledger,
+    purpose: "baseline-evidence-only",
+    activationAllowed: false,
+    requiresHigherReleaseSequence: true,
+    requiresCurrentCompleteClosureEvidence: true,
+  };
 }

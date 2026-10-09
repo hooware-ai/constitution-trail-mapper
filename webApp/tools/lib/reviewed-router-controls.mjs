@@ -89,7 +89,7 @@ export async function runReviewedRouterControls({
       kind: record.kind,
       id: record.id,
       version: record.version,
-      contentSha256: record.content.sha256,
+      contentSha256: record.access?.combinedSha256 ?? record.content.sha256,
     },
     access: accessLoader ? await accessLoader.baseText() : undefined,
     trustSerializedRoutes: false,

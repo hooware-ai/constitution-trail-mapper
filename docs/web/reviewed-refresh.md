@@ -30,12 +30,15 @@ not the stored candidate's first-observation `diff`. In repeated-content runs,
 the immutable first retrieval/diff stays intact and is never presented as today's
 change; current removals still cannot authorize reopening.
 
-Pin `requireProvenance:true` on reviewer-owned `policy.detectionSources` entries
-using the latest detector format; this rejects stripped provenance/transition
-fields. Legacy schema-1 inputs remain supported only when that policy does not
-require the additive format. A candidate carrying provenance always requires a
-current transition, regardless of the policy's legacy setting.
-
+Retain the exact producer JSON as `detection.observationText`, including numeric
+spelling and Unicode, and the preceding observation as
+`detection.previousObservationText` (explicit null for the first observation).
+The reviewer-owned source policy independently pins `baselineDataset` and
+`previousObservationSha256` (null for an initial observation). Admission computes
+the preceding candidate ID and current diff from retained records and rejects a
+parent, baseline identity or diff mismatch. Production candidates require this
+binding; an immutable candidate's original diff cannot substitute for the current
+transition. `requireProvenance:true` additionally refuses stripped provenance.
 
 Synthetic tests may use `policy.syntheticFixture:true` without detection. This is
 never production approval. No production source policy or review owner is invented.
@@ -43,7 +46,7 @@ never production approval. No production source policy or review owner is invent
 ## Reviewer contract
 
 Review candidate schema is `trail-mapper.refresh-candidate/1`. Required fields:
-`id`, `kind` (closure/reopening/geometry/information), `baseline`, `target` (from
+`id`, `kind` (closure/reopening/geometry/package/information), `baseline`, `target` (from
 `snapshotIdentity`), exact distinct canonical `affectedIds`, `confidence`
 (verified/ambiguous/unverified), `status` (present/withdrawn/fetch-failed), and
 `evidence`. Evidence includes approved `authorityId`, exact approved `url`, retained
@@ -60,7 +63,19 @@ missing candidates, withdrawn notices and failed fetches never reopen anything.
 Information requires `routingEffect:'none'`; road works cannot become exclusions.
 Geometry requires `geometry:[{id,paths}]` exactly matching all changed features
 (including changed attributes). IDs must persist. Additions/removals/migrations
-are refused pending a separate reviewed migration contract.
+are refused pending a separate reviewed migration contract. Endpoints must each
+match exactly one source vertex within the native one-metre tolerance across all
+paths. Repeated vertices and multiple possible intervals are refused. A new compiled
+vertex rule's `closedPath` must equal the complete interval and `sourceLine` must
+be empty; alternative source frames require a separate reviewed contract.
+
+`packageChangesOf(baseline,target)` identifies exact manifest, record, network/layer
+metadata and auxiliary input changes. Geometry reviews bind this complete list
+when package inputs change. A metadata-only `package` review names every routing
+ID and the exact list. Unreviewed source/layer metadata changes are rejected.
+Changed OSM/Proposed/access manifests or parts are conservatively refused pending
+an exact auxiliary source-ID refresh contract. Unchanged admitted auxiliaries remain
+supported. Dataset IDs, schemas and kinds cannot migrate through this interface.
 
 Separate decisions are `{candidateId,candidateSha256,reviewer,reviewedAtUtc,
 decision,reason}`. Decisions are accept/reject/unresolved. Approved reviewer IDs in
@@ -104,12 +119,18 @@ indexes exact hashes and lengths. Save returned `artifactSha256` independently.
 Outputs cannot overwrite an existing version. Partial writes have no final index.
 Identical inputs reproduce identical reports and index bytes.
 
-`verifyReviewArtifact(dir, expectedSha256)` verifies the pinned index and files.
-`selectRollback(dir, expectedSha256)` returns retained baseline record, bytes and
-closure ledger; it performs no deployment. The integration owner restores the
-complete previous site/core/dataset artifact together, retaining immutable network
-and access files. Existing saved-route revalidation checks routes opened against
-that older dataset and may require recalculation; rollback never rewrites saved IDs.
+`verifyReviewArtifact(dir, expectedSha256)` verifies the pinned inventory, re-admits
+both complete snapshots and reproduces the review from retained policy, decisions
+and evidence. Reserved filenames, collisions, unreferenced parts, unindexed files
+and symlinks are refused. Artifact writing also performs this complete round trip.
+
+`selectRollback(dir, expectedSha256)` returns the complete reconstructed baseline,
+including every auxiliary manifest/part, `baselineLedger` and separately retained
+`currentClosureEvidence`. Its purpose is baseline evidence only; activation remains
+false. Production rollback requires a higher release sequence, current complete
+closure evidence and a separately reviewed compatible core/package. Restoring an
+older ledger/core must never drop a newly known closure. Saved-route revalidation
+and canonical IDs remain mandatory; no deployment is performed by this tool.
 
 ## Outstanding integration gates
 
@@ -174,3 +195,15 @@ JVM suites passed: 391 shared and 63 bridge tests, including 12 real-data timed
 closure tests, with no skips or failures. Production admission still requires the
 actual new licensed source package and reviewer decisions; no synthetic report
 supplies that approval.
+
+The genuine detector fixture is emitted by the pinned Python producer, not a JS
+facsimile. It exercises A→B→A immutable reuse, current removals, Unicode ordering,
+1.0, -0.0 and exponent spelling. Regenerate offline against PR109 commit
+`1c56268ec60a9f58498f4c01aa9574b844c4dffc`:
+
+```sh
+python webApp/tests/support/generate-detector-admission-fixture.py --detector-dir /path/to/pinned-checkout/tools --out webApp/tests/support/detector-admission.fixture.json
+```
+
+The driver verifies the producer file digest before importing it, injects only
+self-authored transport bytes, and never fetches or activates a schedule.
