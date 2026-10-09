@@ -820,7 +820,14 @@ for (const kind of ["report", "feedback"] as const) {
       }, outcome === "failure");
       await page.setViewportSize({ width: 320, height: 640 });
       await page.goto("/");
-      await page.addStyleTag({ content: "html {font-size:200% !important;}" });
+      // CSSOM font preference emulation works with production style-src self; do not inject a blocked inline sheet.
+      await page.evaluate(() =>
+        document.documentElement.style.setProperty(
+          "font-size",
+          "200%",
+          "important",
+        ),
+      );
       expect(
         await page.evaluate(
           () => getComputedStyle(document.documentElement).fontSize,
