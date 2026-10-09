@@ -389,6 +389,7 @@ export function RideMap({
       <div
         ref={root}
         className="ride-map-canvas"
+        data-ready={ready}
         role="region"
         aria-label="Route map. Drag to explore, then tap Recenter to follow your location."
       />
