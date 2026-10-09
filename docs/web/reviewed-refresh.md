@@ -8,7 +8,7 @@ from release. This is admission preparation, not a production release mechanism.
 
 ## Detection interface
 
-Based on PR109 head `1c56268ec60a9f58498f4c01aa9574b844c4dffc` and its
+Based on PR109 head `4dea6720411fbc46d56496fd994fcfc969a39fd3` and its
 `docs/web/source-candidate-contract.md`. Keep the entire detection envelope under
 `candidate.detection.observation`. Put the sorted exact union of its added, removed
 and changed source record IDs under `candidate.detection.sourceRecordIds`. Routing
@@ -37,7 +37,13 @@ The reviewer-owned source policy independently pins `baselineDataset` and
 `previousObservationSha256` (null for an initial observation). Admission computes
 the preceding candidate ID and current diff from retained records and rejects a
 parent, baseline identity or diff mismatch. Production candidates require this
-binding; an immutable candidate's original diff cannot substitute for the current
+binding. Also retain the verified serialized wrapper's `transitionId` and exact
+`currentTransitionText` from `load_transition`, plus `previousCandidateText`
+(explicit null initially). Admission independently checks the durable journal hash,
+both snapshot identities/provenance, source association, current diff, classification
+and retrieval time. Reviews cannot predate the current transition. Provenance-only
+`observationOnly` results cannot serve as fresh admission evidence; they never
+reopen routes or advance accepted dates. An immutable candidate's original diff cannot substitute for the current
 transition. `requireProvenance:true` additionally refuses stripped provenance.
 
 Synthetic tests may use `policy.syntheticFixture:true` without detection. This is
@@ -198,12 +204,13 @@ supplies that approval.
 
 The genuine detector fixture is emitted by the pinned Python producer, not a JS
 facsimile. It exercises A→B→A immutable reuse, current removals, Unicode ordering,
-1.0, -0.0 and exponent spelling. Regenerate offline against PR109 commit
-`1c56268ec60a9f58498f4c01aa9574b844c4dffc`:
+1.0, -0.0 and exponent spelling, and observation-only provenance churn. It uses
+`run_serialized` and rereads each journal with the real `load_transition`. Regenerate offline against PR109 commit
+`4dea6720411fbc46d56496fd994fcfc969a39fd3`:
 
 ```sh
 python webApp/tests/support/generate-detector-admission-fixture.py --detector-dir /path/to/pinned-checkout/tools --out webApp/tests/support/detector-admission.fixture.json
 ```
 
-The driver verifies the producer file digest before importing it, injects only
+The driver verifies both producer and state-wrapper file digests before importing it, injects only
 self-authored transport bytes, and never fetches or activates a schedule.

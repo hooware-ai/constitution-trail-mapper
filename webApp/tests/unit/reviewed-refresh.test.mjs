@@ -634,6 +634,9 @@ async function genuineDetectorReview(runIndex = 2) {
       observation: candidate,
       observationText: run.candidateText,
       previousObservationText: run.previousObservationText,
+      previousCandidateText: run.previousCandidateText,
+      currentTransitionText: run.currentTransitionText,
+      transitionId: run.result.transitionId,
       sourceRecordIds: [
         ...run.result.runDiff.added,
         ...run.result.runDiff.changed,
@@ -647,13 +650,14 @@ async function genuineDetectorReview(runIndex = 2) {
       },
     };
   });
+  args.decisions[0].reviewedAtUtc = "2026-01-06T00:00:00Z";
   return { args, fixtureData, run };
 }
 test("genuine pinned Python detector A→B→A feeds JS admission with numeric and non-ASCII canonical bytes", async () => {
   const { args, fixtureData, run } = await genuineDetectorReview();
   assert.equal(
     fixtureData.producer.commit,
-    "1c56268ec60a9f58498f4c01aa9574b844c4dffc",
+    "4dea6720411fbc46d56496fd994fcfc969a39fd3",
   );
   assert.equal(run.candidateText, fixtureData.runs[0].candidateText);
   assert.notDeepEqual(run.result.runDiff, run.result.candidate.diff);
@@ -1072,4 +1076,63 @@ test("compiled closedPath and sourceLine must bind the same complete reviewed in
     c.compiledClosure.sourceLine = clone(c.compiledClosure.closedPath);
   });
   assert.throws(() => reviewRefresh(args), /compiled closure does not match/);
+});
+
+test("genuine durable transition integrity, both snapshot provenance and observation-only classification fail closed", async () => {
+  let { args } = await genuineDetectorReview();
+  update(args, (c) => {
+    const journal = JSON.parse(c.detection.currentTransitionText);
+    journal.diff.removed = [];
+    c.detection.currentTransitionText = JSON.stringify(journal);
+  });
+  assert.throws(
+    () => reviewRefresh(args),
+    /durable current transition integrity/,
+  );
+  ({ args } = await genuineDetectorReview());
+  update(args, (c) => {
+    delete c.detection.currentTransitionText;
+  });
+  assert.throws(() => reviewRefresh(args), /durable current transition text/);
+  ({ args } = await genuineDetectorReview());
+  update(args, (c) => {
+    const parent = JSON.parse(c.detection.previousCandidateText);
+    parent.retrievedAtUtc = "2026-01-01T00:00:00Z";
+    c.detection.previousCandidateText = JSON.stringify(parent);
+  });
+  assert.throws(() => reviewRefresh(args), /parent candidate provenance/);
+  ({ args } = await genuineDetectorReview());
+  args.decisions[0].reviewedAtUtc = "2026-01-03T00:00:00Z";
+  assert.throws(() => reviewRefresh(args), /review predates current durable/);
+  ({ args } = await genuineDetectorReview(3));
+  assert.throws(() => reviewRefresh(args), /observation-only provenance/);
+});
+
+test("a correctly rehashed durable journal cannot change its bound snapshot, diff or classification", async () => {
+  for (const [key, value] of Object.entries({
+    candidateProvenanceSha256: "0".repeat(64),
+    parentProvenanceSha256: "0".repeat(64),
+    diff: { added: [], changed: [], removed: [] },
+    changeKind: "initial",
+    observationOnly: true,
+    sourceId: "different-source",
+  })) {
+    const { args } = await genuineDetectorReview();
+    update(args, (c) => {
+      const { transitionId, ...journal } = JSON.parse(
+        c.detection.currentTransitionText,
+      );
+      journal[key] = value;
+      const id = canonicalSha256(journal);
+      c.detection.transitionId = id;
+      c.detection.currentTransitionText = JSON.stringify({
+        ...journal,
+        transitionId: id,
+      });
+    });
+    assert.throws(
+      () => reviewRefresh(args),
+      /durable current transition differs from bound snapshots/,
+    );
+  }
 });

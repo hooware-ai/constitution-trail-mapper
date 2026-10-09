@@ -446,6 +446,76 @@ export function verifyDetection(candidate, policy) {
     };
     if (!same(transition.runDiff, expectedDiff))
       fail("current runDiff does not match retained baseline records");
+    if (
+      policy.syntheticFixture !== true ||
+      detection.currentTransitionText !== undefined
+    ) {
+      text(
+        detection.currentTransitionText,
+        "retained durable current transition text",
+      );
+      digest(detection.transitionId, "durable current transition ID");
+      const journalTree = parseWithNumbers(detection.currentTransitionText),
+        journal = toPlain(journalTree);
+      const { transitionId: journalId, ...payload } = journalTree;
+      if (
+        journalId !== detection.transitionId ||
+        sha256Text(canonical(payload)) !== journalId
+      )
+        fail("durable current transition integrity mismatch");
+      let parent = null;
+      if (previousId !== null) {
+        text(detection.previousCandidateText, "retained parent candidate text");
+        const parentTree = parseWithNumbers(detection.previousCandidateText);
+        parent = toPlain(parentTree);
+        const { provenanceSha256, ...parentPayload } = parentTree;
+        if (
+          parent.schemaVersion !== 1 ||
+          parent.requiresReview !== true ||
+          parent.sourceId !== d.sourceId ||
+          parent.candidateId !== previousId ||
+          sha256Text(canonical(parentTree.identity)) !== previousId ||
+          sha256Text(canonical(parentPayload)) !== provenanceSha256 ||
+          sha256Text(canonical(parentTree.records)) !==
+            parent.identity.parsedSha256 ||
+          !same(parent.records, previousRecords)
+        )
+          fail("retained parent candidate provenance mismatch");
+      } else if (detection.previousCandidateText !== null)
+        fail("initial durable transition needs explicit null parent candidate");
+      const kind =
+        parent === null
+          ? "initial"
+          : d.candidateId === parent.candidateId
+            ? "no-change"
+            : Object.values(expectedDiff).some((ids) => ids.length)
+              ? "records"
+              : ["registrySha256", "parserVersion", "sourceSchemaVersion"].some(
+                    (key) => d.identity[key] !== parent.identity[key],
+                  )
+                ? "contract"
+                : "provenance-only";
+      if (
+        journal.schemaVersion !== 1 ||
+        journal.sourceId !== d.sourceId ||
+        journal.candidateId !== d.candidateId ||
+        journal.parentCandidateId !== previousId ||
+        journal.candidateProvenanceSha256 !== d.provenanceSha256 ||
+        journal.parentProvenanceSha256 !== (parent?.provenanceSha256 ?? null) ||
+        !same(journal.diff, expectedDiff) ||
+        journal.status !== transition.status ||
+        journal.changeKind !== kind ||
+        journal.observationOnly !== (kind === "provenance-only") ||
+        typeof journal.attemptedAtSeconds !== "number" ||
+        !Number.isFinite(journal.attemptedAtSeconds) ||
+        journal.attemptedAtSeconds < 0
+      )
+        fail("durable current transition differs from bound snapshots");
+      if (instant(journal.retrievedAtUtc) < instant(d.retrievedAtUtc))
+        fail("durable transition predates immutable candidate");
+      if (journal.observationOnly)
+        fail("observation-only provenance is not fresh admission evidence");
+    }
   }
   const currentDiff = transition ? transition.runDiff : d.diff;
   const affected = checkedDiff(currentDiff);
@@ -582,6 +652,12 @@ export function reviewRefresh({
       fail("decision is not bound to exact candidate");
     if (instant(d.reviewedAtUtc) < instant(e.retrievedAtUtc))
       fail("review predates retrieval");
+    if (
+      c.detection?.currentTransitionText &&
+      instant(d.reviewedAtUtc) <
+        instant(JSON.parse(c.detection.currentTransitionText).retrievedAtUtc)
+    )
+      fail("review predates current durable transition retrieval");
     text(d.reason, "decision reason");
     if (
       !["verified", "ambiguous", "unverified"].includes(c.confidence) ||

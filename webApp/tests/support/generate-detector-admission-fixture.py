@@ -5,23 +5,27 @@ Producer must match the pinned implementation; no network transport or schedule 
 """
 import argparse
 import hashlib
-import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import sys
 
-PRODUCER_COMMIT = "1c56268ec60a9f58498f4c01aa9574b844c4dffc"
+PRODUCER_COMMIT = "4dea6720411fbc46d56496fd994fcfc969a39fd3"
 parser = argparse.ArgumentParser()
 parser.add_argument("--detector-dir", type=Path, required=True)
 parser.add_argument("--out", type=Path, required=True)
 args = parser.parse_args()
 module_path = args.detector_dir / "source_candidates.py"
-EXPECTED_PRODUCER_SHA256 = "6ca6a1cc30858109c6b2400480b6236d937df03ce3470b1d9ba5ce0a5490b7cc"
+EXPECTED_PRODUCER_SHA256 = "10da2ac2d74b0a08d317328aba0c23786e60dce5f6cda5b57af1235ed94a1743"
 if hashlib.sha256(module_path.read_bytes()).hexdigest() != EXPECTED_PRODUCER_SHA256:
     raise SystemExit("Producer differs from the pinned reviewed detector implementation")
-spec = importlib.util.spec_from_file_location("actual_source_candidates", module_path)
-detector = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(detector)
+state_path=args.detector_dir / 'source_candidate_state.py'
+EXPECTED_STATE_SHA256='91dd78eaf24341aa1b4606191abb7af8df0e32585ad4b724fca9799c770ce347'
+if hashlib.sha256(state_path.read_bytes()).hexdigest()!=EXPECTED_STATE_SHA256:
+    raise SystemExit('State producer differs from pinned implementation')
+sys.path.insert(0,str(args.detector_dir))
+import source_candidates as detector
+import source_candidate_state as state_store
 
 class Response:
     status = 200
@@ -50,28 +54,31 @@ records_b = {"notice-é": detector.digest({"state": "B", **controls}), "notice-r
 
 def parse(raw):
     body = json.loads(raw)
-    return {"records": records_a if body["state"] == "A" else records_b,
+    return {"records": records_a if body["state"] in ("A", "P") else records_b,
             "sourcePublishedAtUtc": "2026-01-01T00:00:00Z",
-            "componentHashes": {"synthetic-notice": hashlib.sha256(raw).hexdigest()},
             "sourceTimes": {"notice": {"publishedAtUtc": "2026-01-01T00:00:00Z"}, "canonicalControls": controls}}
 
 with tempfile.TemporaryDirectory(prefix="genuine-detector-fixture-") as directory:
     results = []
     previous = None
-    for index, state in enumerate(["A", "B", "A"], 2):
+    for index, state in enumerate(["A", "B", "A", "P"], 2):
         raw = detector.canonical({"state": state, **controls})
-        result = detector.observe(source, transport=lambda *unused, raw=raw: Response(raw), parser=parse,
+        result = state_store.run_serialized(source, store=directory, transport=lambda *unused, raw=raw: Response(raw), parser=parse,
             parser_version="synthetic-adapter/1", schema_version=1.0,
             retrieved_at_utc=f"2026-01-0{index}T00:00:00Z", now_seconds=index,
-            previous=previous, directory=directory)
+            )
         assert result["status"] == "candidate", result
-        text = (Path(directory) / (result["candidate"]["candidateId"] + ".json")).read_text()
-        results.append({"result": result, "candidateText": text,
+        text = (Path(directory) / "candidates" / (result["candidate"]["candidateId"] + ".json")).read_text()
+        loaded=state_store.load_transition(Path(directory),result['transitionId'])
+        assert loaded==result['transition']
+        transition_text=(Path(directory)/'transitions'/(result['transitionId']+'.json')).read_text()
+        previous_text=None if previous is None else (Path(directory)/'candidates'/(previous['candidateId']+'.json')).read_text()
+        results.append({"result": result, "candidateText": text, "currentTransitionText":transition_text, "previousCandidateText":previous_text,
                         "previousObservationText": None if previous is None else (detector.canonical(previous).decode() + "\n")})
         previous = result["observation"]
     assert results[0]["candidateText"] == results[2]["candidateText"]
     assert results[2]["result"]["runDiff"] != results[2]["result"]["candidate"]["diff"]
     output = {"schema": "trail-mapper.detector-admission-fixture/1",
-              "producer": {"commit": PRODUCER_COMMIT, "path": "tools/source_candidates.py", "sha256": hashlib.sha256(module_path.read_bytes()).hexdigest()},
+              "producer": {"commit": PRODUCER_COMMIT, "path": "tools/source_candidates.py", "sha256": hashlib.sha256(module_path.read_bytes()).hexdigest(), "stateSha256": hashlib.sha256(state_path.read_bytes()).hexdigest()},
               "source": source, "runs": results}
     args.out.write_bytes(detector.canonical(output) + b"\n")
