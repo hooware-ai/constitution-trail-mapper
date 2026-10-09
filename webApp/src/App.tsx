@@ -2551,59 +2551,62 @@ export function App() {
                 </div>
               </div>
               <div className="ride-dock">
-                {!online && (
-                  <p className="ride-safety ride-offline" role="status">
-                    Offline · live map tiles and offline navigation unavailable.
-                  </p>
-                )}
-                {__TRAIL_ASSUME_ESTIMATED__ && (
-                  <p className="ride-safety" role="status">
-                    PRIVATE TEST MODE
-                    {preview?.assumedConnections &&
-                      " · Estimated connection: stop and verify it on the ground."}
-                  </p>
-                )}
-                {nav.phase === "off-route" && (
-                  <div className="reroute-actions">
-                    <p>Stop before changing your route.</p>
-                    {preview?.kind === "ExerciseLoop" ? (
-                      <>
+                <div className="ride-dock-content">
+                  {!online && (
+                    <p className="ride-safety ride-offline" role="status">
+                      Offline · live map tiles and offline navigation
+                      unavailable.
+                    </p>
+                  )}
+                  {__TRAIL_ASSUME_ESTIMATED__ && (
+                    <p className="ride-safety" role="status">
+                      PRIVATE TEST MODE
+                      {preview?.assumedConnections &&
+                        " · Estimated connection: stop and verify it on the ground."}
+                    </p>
+                  )}
+                  {nav.phase === "off-route" && (
+                    <div className="reroute-actions">
+                      <p>Stop before changing your route.</p>
+                      {preview?.kind === "ExerciseLoop" ? (
+                        <>
+                          <button
+                            className="primary wide"
+                            disabled={busy}
+                            onClick={() => void reroute("rejoin")}
+                          >
+                            Rejoin the loop
+                          </button>
+                          <button
+                            className="wide"
+                            disabled={busy}
+                            onClick={() => void reroute("return")}
+                          >
+                            Return to start
+                          </button>
+                        </>
+                      ) : (
                         <button
                           className="primary wide"
                           disabled={busy}
-                          onClick={() => void reroute("rejoin")}
+                          onClick={() => void reroute("destination")}
                         >
-                          Rejoin the loop
+                          Reroute
                         </button>
-                        <button
-                          className="wide"
-                          disabled={busy}
-                          onClick={() => void reroute("return")}
-                        >
-                          Return to start
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        className="primary wide"
-                        disabled={busy}
-                        onClick={() => void reroute("destination")}
-                      >
-                        Reroute
-                      </button>
-                    )}
+                      )}
+                    </div>
+                  )}
+                  <div className="ride-progress">
+                    <strong>
+                      {nav.guidance
+                        ? `${miles(nav.guidance.remainingMeters)} mi`
+                        : "—"}
+                    </strong>
+                    <span>remaining</span>
+                    <button onClick={() => setPopup("directions")}>
+                      Directions
+                    </button>
                   </div>
-                )}
-                <div className="ride-progress">
-                  <strong>
-                    {nav.guidance
-                      ? `${miles(nav.guidance.remainingMeters)} mi`
-                      : "—"}
-                  </strong>
-                  <span>remaining</span>
-                  <button onClick={() => setPopup("directions")}>
-                    Directions
-                  </button>
                 </div>
                 <div className="ride-actions">
                   <details className="ride-details">
