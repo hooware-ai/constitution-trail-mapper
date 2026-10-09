@@ -751,7 +751,7 @@ test("Trail updates lists the October notices with official links that open safe
     page.getByRole("heading", { name: "Trail updates" }),
   ).toBeVisible();
   await expect(page.locator(".freshness")).toContainText(
-    "selected entries updated October 9, 2026",
+    "selected conditions reviewed October 9, 2026 and updated October 9, 2026",
   );
   const card = (title: string) =>
     page.locator(".updates-list article", { hasText: title });
