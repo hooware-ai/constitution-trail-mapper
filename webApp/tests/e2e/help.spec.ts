@@ -963,3 +963,40 @@ for (const kind of ["report", "feedback"] as const) {
     await expect(dialog.getByRole("status")).toContainText("copied");
   });
 }
+
+test("Help shows the project mailto contact and preserves voluntary public GitHub feedback", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await helpButton(page).click();
+  const help = helpDialog(page);
+  const contact = help.getByRole("link", {
+    name: "hoowareapps@gmail.com",
+    exact: true,
+  });
+  await expect(contact).toBeVisible();
+  await expect(contact).toHaveAttribute("href", "mailto:hoowareapps@gmail.com");
+  await expect(contact).toHaveAttribute("target", "_blank");
+  await expect(contact).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(help).toContainText("nothing is sent automatically");
+  // Inspect the destination without launching a mail client or sending any message.
+  for (const [button, title] of [
+    ["Write ride feedback", "Ride feedback"],
+    ["Write a problem report", "Report a problem"],
+  ]) {
+    await page.getByRole("button", { name: button, exact: true }).click();
+    const form = page.getByRole("dialog", { name: title, exact: true });
+    await expect(form).toContainText("Nothing is sent from this page");
+    await expect(form).toContainText(
+      "anything you post is public and needs a GitHub account",
+    );
+    await expect(
+      form.getByRole("link", { name: /public issue form/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://github.com/hooware-ai/constitution-trail-mapper/issues/new",
+    );
+    await expect(form.getByRole("checkbox")).not.toBeChecked();
+    await page.getByRole("button", { name: "Back to help" }).click();
+  }
+});

@@ -44,6 +44,7 @@ export function HelpDialog({
   const mode = network?.mode;
   // Road access exists only when the loaded dataset record says so; it is never assumed from the build.
   const access = network?.datasetRecord?.access ?? null;
+  const dataHref = (file: string) => `${import.meta.env.BASE_URL}data/${file}`;
   const heading = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
   // Feedback belongs to one visit to one view: every view change starts a new session and late results are dropped.
@@ -112,6 +113,7 @@ export function HelpDialog({
                 ["help-build", "About this build"],
                 ["help-report", "Report a problem"],
                 ["help-feedback", "Share ride feedback"],
+                ["help-contact", "Project contact"],
               ].map(([id, label]) => (
                 <li key={id}>
                   <a
@@ -317,6 +319,85 @@ export function HelpDialog({
             ) : (
               <p>Trail data has not loaded yet.</p>
             )}
+            {mode === "county" && network?.datasetRecord && (
+              <details>
+                <summary>Routing data downloads and license details</summary>
+                <p>
+                  This build supplies its complete normalized routing inputs.
+                  OpenStreetMap-derived data and modifications are available
+                  under{" "}
+                  <SafeLink href="https://opendatacommons.org/licenses/odbl/1-0/">
+                    ODbL 1.0
+                  </SafeLink>
+                  . County source contents retain their{" "}
+                  <SafeLink href="https://creativecommons.org/licenses/by/4.0/">
+                    CC BY 4.0
+                  </SafeLink>{" "}
+                  terms; Census TIGER/Line data is public domain. Source
+                  credits, filtering and normalization changes are recorded in
+                  the data file list.
+                </p>
+                <ul>
+                  <li>
+                    <a
+                      href={dataHref("dataset.json")}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Data file list and source notices
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href={dataHref(network.datasetRecord.content.file)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Trail geometry
+                    </a>
+                  </li>
+                  {access && (
+                    <>
+                      <li>
+                        <a
+                          href={dataHref(access.base.file)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Base road data
+                        </a>
+                      </li>
+                      <li>
+                        <a
+                          href={dataHref(access.index.file)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Service-road tile index
+                        </a>{" "}
+                        lists every tile filename and hash; all listed tiles are
+                        available alongside this file.
+                      </li>
+                    </>
+                  )}
+                  {build.dirty === false &&
+                    /^[0-9a-f]{12}$/.test(build.commit) && (
+                      <li>
+                        <SafeLink
+                          href={`https://github.com/hooware-ai/constitution-trail-mapper/tree/${build.commit}`}
+                        >
+                          Extraction, normalization and graph-construction
+                          source for this build
+                        </SafeLink>
+                      </li>
+                    )}
+                </ul>
+                <p>
+                  Downloads contain routing data, not your saved rides or
+                  location history.
+                </p>
+              </details>
+            )}
             <p>
               Street map images, when turned on, are ©{" "}
               <SafeLink href="https://www.openstreetmap.org/copyright">
@@ -373,6 +454,24 @@ export function HelpDialog({
             <button onClick={() => switchView("feedback")}>
               Write ride feedback
             </button>
+          </section>
+          <section aria-labelledby="help-contact">
+            <h3 id="help-contact" tabIndex={-1}>
+              Project contact
+            </h3>
+            <p>
+              <a
+                href="mailto:hoowareapps@gmail.com"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                hoowareapps@gmail.com
+              </a>
+            </p>
+            <p>
+              Opens your email app. Review what you include before sending;
+              nothing is sent automatically.
+            </p>
           </section>
         </div>
       ) : (
@@ -549,9 +648,8 @@ function ReportView({
         </a>
       </div>
       <p className="caption">
-        There is no private support inbox yet. The link opens the project&apos;s
-        issue tracker on GitHub, where anything you post is public and needs a
-        GitHub account.
+        The link opens the project&apos;s issue tracker on GitHub, where
+        anything you post is public and needs a GitHub account.
       </p>
     </div>
   );

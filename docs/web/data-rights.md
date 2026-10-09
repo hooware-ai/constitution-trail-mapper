@@ -39,7 +39,7 @@ IDs retain the app's canonical `54:OBJECTID` / `16:OBJECTID` form so existing cl
 
 `--source-json PATH` can replay an existing JSON bundle with `licenseItem`, `licensedMetadata`, `licensedQuery`, and `selectionSources` (layer IDs mapping to `metadata` and `query`). All verification still applies. Offline replay verifies the saved evidence, not the current upstream license or trail status. `generatedAtUtc` records normalization time, while `reviewedOn` records manifest review; neither is a source edit date.
 
-## Current owner-private review package (October 4)
+## Historical owner-private v4 review package (October 4)
 
 The private v4 review artifact's `data/dataset.json` records network SHA-256
 `903e43cf077acf79988920eb114b02e0f90bab022180aca88f5205c7a1ed882d`:
@@ -62,6 +62,25 @@ and committed approval record both remain `approved: false`, with no approved
 composition, approver, or approval date. Public ODbL compliance, exact artifact
 approval, hosting, and physical-device acceptance remain open.
 
+## Current v12 package and narrowed public gaps (October 9)
+
+The verified v12 package retains the same trail network hash above: 254 county
+trails and four OSM paths. Fresh reviewed road input contains 3,424 TIGER/Line
+roads and **9,344 OSM service roads**, totaling **12,768** access roads; it uses
+440 hash-indexed tiles. This supersedes the v4 access counts, not its history.
+Existing Help/export notices already identify these sources. Every normalized
+geometry file is shipped, and the public repository supplies extraction and graph
+construction methods. These provide substantial evidence for the ODbL complete-data
+or method offer. Help links the exact build's complete inputs, source and terms.
+No confirmed licensing violation or mandatory ZIP/extra permission was established.
+Separate layers alone do not resolve an interacting graph's classification.
+
+See [exact evidence, obligations and proposed smallest implementation](public-release-readiness.md).
+That record also separates physical GPS/navigation acceptance from a possible
+planning-only beta. It grants no license, sharing or capability change. The
+included county subset remains explicitly CC BY 4.0; excluded proposed geometries
+do not become a blocker for that subset merely because their future rights are open.
+
 ## Six proposed segments: unresolved release gate
 
 The current app and web map have blank licenseInfo, and the operational layers name McGIS and members as copyright holders without supplying an explicit redistribution grant:
@@ -80,7 +99,7 @@ Before public redistribution of this reviewed subset, re-extract from the specif
 
 ## OpenStreetMap geometry and tile service are separate
 
-OSM geometry is available under ODbL, with attribution. Public use of a derivative database can trigger share-alike and an offer of the database or complete modifications in machine-readable form. Keeping county and OSM source assets separate preserves provenance but does not by itself decide whether a merged routing graph is a derivative database. Before publicly distributing or serving such a merged graph, resolve that classification and source-license compatibility and satisfy applicable ODbL obligations. These rules concern data; they do not automatically license application code under ODbL.
+OSM geometry is available under ODbL, with attribution. Public use of a derivative database can trigger share-alike and an offer of the database or complete modifications in machine-readable form. Keeping county and OSM source assets separate preserves provenance but does not by itself decide whether a merged routing graph is a derivative database. Retain the applicable notices and complete-data/method offer when distributing or serving such a graph. The current shipped inputs and public construction methods are evidence for that offer; uncertainty about classification alone is not a confirmed violation or a requirement for fresh permission. These rules concern data; they do not automatically license application code under ODbL.
 
 - OSM copyright: https://www.openstreetmap.org/copyright
 - ODbL, especially sections 4.4–4.6: https://opendatacommons.org/licenses/odbl/1-0/
