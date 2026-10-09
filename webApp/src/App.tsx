@@ -2612,6 +2612,13 @@ export function App() {
                       Keep this page open and visible. Guidance pauses if the
                       screen locks or you leave this page.
                     </p>
+                    <button
+                      className="wide"
+                      aria-haspopup="dialog"
+                      onClick={() => setPopup("help")}
+                    >
+                      Help and about
+                    </button>
                     <p>
                       {miles(nav.creditedDistanceMeters)} mi observed this ride
                       {nav.fix
