@@ -158,12 +158,20 @@ for (const fontSize of ["100%", "150%"] as const) {
       document.documentElement.style.fontSize = size;
     }, fontSize);
     await page.getByText("Layers and map key", { exact: true }).click();
+    const liveRegion = page.locator("#explore-basemap-notice");
+    await expect(liveRegion).toHaveText("");
+    await expect(liveRegion).toHaveAttribute("role", "status");
+    await liveRegion.evaluate((e) =>
+      e.setAttribute("data-original-region", "yes"),
+    );
     await toggle(page).check();
     const status = page.getByText(
       "Street map unavailable. Trail geometry remains visible.",
       { exact: true },
     );
     await expect(status).toBeVisible();
+    await expect(status).toBeInViewport();
+    await expect(status).toHaveAttribute("data-original-region", "yes");
     expect(await status.evaluate((e) => Boolean(e.closest(".panel")))).toBe(
       true,
     );
@@ -175,7 +183,7 @@ for (const fontSize of ["100%", "150%"] as const) {
           r.x + r.width / 2,
           r.y + r.height / 2,
         );
-        return hit === e || Boolean(hit?.closest("label"));
+        return hit === e || hit?.closest("label") === e.closest("label");
       }),
     ).toBe(true);
     await page
@@ -198,6 +206,12 @@ for (const fontSize of ["100%", "150%"] as const) {
     await toggle(page).uncheck();
     await expect(status).toHaveCount(0);
     await expect(toggle(page)).not.toBeChecked();
+    await expect(liveRegion).toHaveText("");
+    await toggle(page).check();
+    await expect(status).toBeInViewport();
+    await expect(status).toHaveAttribute("data-original-region", "yes");
+    await toggle(page).uncheck();
+    await expect(liveRegion).toHaveText("");
     expect(errors).toEqual([]);
   });
 }

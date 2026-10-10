@@ -218,6 +218,7 @@ export interface AppProps {
 }
 export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
+  const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
     () => new URL(location.href).searchParams.get("data") === "local",
@@ -2021,6 +2022,10 @@ export function App({ refresh }: AppProps = {}) {
                 .length ?? 0,
           })
         : null;
+  useEffect(() => {
+    if (screen === "explore" && basemap && basemapError)
+      basemapNoticeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [screen, basemap, basemapError]);
   const directionSteps = itineraryDistances(preview?.instructions ?? []);
   const directionGroups = useMemo(
     () => directionGroupStarts(preview),
@@ -3149,11 +3154,6 @@ export function App({ refresh }: AppProps = {}) {
               >
                 Choose a ride point
               </button>
-              {basemap && basemapError && (
-                <p className="explore-basemap-error" role="status">
-                  Street map unavailable. Trail geometry remains visible.
-                </p>
-              )}
               <p className="caption" id="explore-layer-state">
                 Closure areas {showClosures ? "shown" : "hidden"} · Proposed
                 trails{" "}
@@ -3164,6 +3164,7 @@ export function App({ refresh }: AppProps = {}) {
                     ? "shown"
                     : "hidden"
                   : "unavailable in this data"}
+                {basemap && basemapError ? " · Street map unavailable" : ""}
               </p>
               <details className="explore-layers">
                 <summary aria-describedby="explore-layer-state">
@@ -3179,23 +3180,39 @@ export function App({ refresh }: AppProps = {}) {
                 <label className="checkbox">
                   <input
                     type="checkbox"
+                    aria-describedby="explore-closure-caveat"
                     checked={showClosures}
                     onChange={(e) => setShowClosures(e.target.checked)}
                   />
                   <span>Reported closure areas</span>
                 </label>
                 {!fixtureData && (
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={basemap}
-                      onChange={(event) => {
-                        setBasemapError(false);
-                        setBasemap(event.target.checked);
-                      }}
-                    />
-                    <span>Street basemap (online)</span>
-                  </label>
+                  <>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        aria-describedby="explore-basemap-notice"
+                        checked={basemap}
+                        onChange={(event) => {
+                          setBasemapError(false);
+                          setBasemap(event.target.checked);
+                        }}
+                      />
+                      <span>Street basemap (online)</span>
+                    </label>
+                    <p
+                      className="explore-basemap-error"
+                      id="explore-basemap-notice"
+                      ref={basemapNoticeRef}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {basemap && basemapError
+                        ? "Street map unavailable. Trail geometry remains visible."
+                        : ""}
+                    </p>
+                  </>
                 )}
                 <Legend
                   verified={network.features.some((f) =>
@@ -3203,7 +3220,10 @@ export function App({ refresh }: AppProps = {}) {
                   )}
                 />
               </details>
-              <p className="caption explore-closure-caveat">
+              <p
+                className="caption explore-closure-caveat"
+                id="explore-closure-caveat"
+              >
                 Dashed amber lines are approximate work corridors, not exact
                 closure limits. Tap a marker for the official notice.
               </p>

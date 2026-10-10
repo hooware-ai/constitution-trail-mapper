@@ -2118,6 +2118,9 @@ dialog::backdrop {
 }
 
 .explore-basemap-error {
+  margin: 0;
+}
+.explore-basemap-error:not(:empty) {
   background: #fdebd8;
   padding: 10px;
 }
