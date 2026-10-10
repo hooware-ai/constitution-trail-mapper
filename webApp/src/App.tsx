@@ -311,6 +311,7 @@ export function App({ refresh }: AppProps = {}) {
     } | null>(null),
     finishLoopRef = useRef<(record: RouteRecord) => void>(() => {}),
     operation = useRef(0),
+    startupChoice = useRef(0),
     directionPendingRef = useRef(false),
     proofRunning = useRef(false),
     selectedRef = useRef<RouteRecord | null>(null),
@@ -427,7 +428,7 @@ export function App({ refresh }: AppProps = {}) {
       setStorageError(
         "The previous screen could not be recovered. Its browser data has been preserved.",
       );
-    const bootOperation = operation.current;
+    const bootChoice = startupChoice.current;
     client
       .call<Network>({ op: "boot", local })
       .then(async (data) => {
@@ -530,7 +531,7 @@ export function App({ refresh }: AppProps = {}) {
           );
         // Home/Back can be chosen before the worker is ready. That intent owns the screen;
         // keep stored rides intact, but never resume one over the rider's newer choice.
-        if (operation.current !== bootOperation) return;
+        if (startupChoice.current !== bootChoice) return;
         if (restored.state) {
           const token = ++operation.current;
           const ride = restored.state;
@@ -731,10 +732,11 @@ export function App({ refresh }: AppProps = {}) {
           // Back to Home is still a choice when startup has not restored a screen yet.
           if (
             direction === "back" &&
-            target.screen === "plan" &&
-            popContext.current.screen === "plan"
+            popContext.current.screen === "plan" &&
+            !target.overlay &&
+            target.screen !== "navigation"
           )
-            ++operation.current;
+            ++startupChoice.current;
           sync.replace(popContext.current.screen);
         } else if (action.screen !== popContext.current.screen) {
           fromPop.current = true;
@@ -830,6 +832,7 @@ export function App({ refresh }: AppProps = {}) {
     setField(field);
   }
   function go(next: Screen) {
+    ++startupChoice.current;
     cancelLocation();
     setGapFocus(null);
     if (controllerRef.current?.state.record && next !== "navigation")

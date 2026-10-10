@@ -80,33 +80,37 @@ async function plan(page: Page) {
   ).toBeVisible();
 }
 export function startupOwnershipTests() {
-  test("[engine] Back to the current home before boot cancels stale planner restoration", async ({
-    page,
-  }) => {
-    await page.addInitScript(() => {
-      history.replaceState({ tm: 0, screen: "plan" }, "");
-      history.pushState({ tm: 1, screen: "plan" }, "");
+  for (const priorScreen of ["plan", "preview"])
+    test(`[engine] Back from ${priorScreen} before boot cancels stale planner restoration`, async ({
+      page,
+    }) => {
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.addInitScript((priorScreen) => {
+        history.replaceState({ tm: 0, screen: priorScreen }, "");
+        history.pushState({ tm: 1, screen: "plan" }, "");
+      }, priorScreen);
+      await delayedBoot(page, true);
+      await page.goto("/");
+      await expect
+        .poll(() => page.evaluate(() => (window as any).__startupHeld.length))
+        .toBeGreaterThan(0);
+      await page.goBack();
+      await expect.poll(() => page.evaluate(() => history.state.tm)).toBe(0);
+      await release(page);
+      await expect(
+        page.getByRole("button", { name: /Go somewhere/ }),
+      ).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key)!).screen,
+            sessionKey,
+          ),
+        )
+        .toBe("plan");
+      expect(errors).toEqual([]);
     });
-    await delayedBoot(page, true);
-    await page.goto("/");
-    await expect
-      .poll(() => page.evaluate(() => (window as any).__startupHeld.length))
-      .toBeGreaterThan(0);
-    await page.goBack();
-    await expect.poll(() => page.evaluate(() => history.state.tm)).toBe(0);
-    await release(page);
-    await expect(
-      page.getByRole("button", { name: /Go somewhere/ }),
-    ).toBeVisible();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (key) => JSON.parse(localStorage.getItem(key)!).screen,
-          sessionKey,
-        ),
-      )
-      .toBe("plan");
-  });
   for (const leave of [false, true]) {
     test(
       leave
