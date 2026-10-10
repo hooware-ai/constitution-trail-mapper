@@ -218,6 +218,7 @@ export interface AppProps {
 }
 export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
+  const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
     () => new URL(location.href).searchParams.get("data") === "local",
@@ -274,6 +275,7 @@ export function App({ refresh }: AppProps = {}) {
     [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
     [showClosures, setShowClosures] = useState(true),
     [basemap, setBasemap] = useState(false),
+    [basemapError, setBasemapError] = useState(false),
     [fitSignal, setFitSignal] = useState(0),
     [retryPlan, setRetryPlan] = useState(false),
     [error, setError] = useState(""),
@@ -2020,6 +2022,10 @@ export function App({ refresh }: AppProps = {}) {
                 .length ?? 0,
           })
         : null;
+  useEffect(() => {
+    if (screen === "explore" && basemap && basemapError)
+      basemapNoticeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [screen, basemap, basemapError]);
   const directionSteps = itineraryDistances(preview?.instructions ?? []);
   const directionGroups = useMemo(
     () => directionGroupStarts(preview),
@@ -2142,6 +2148,10 @@ export function App({ refresh }: AppProps = {}) {
           county={network?.mode === "county"}
           tilesEnabled={basemap}
           onTilesChange={setBasemap}
+          onTileError={setBasemapError}
+          showTileError={screen !== "explore"}
+          showTileControl={screen !== "explore"}
+          showCaption={screen !== "explore"}
           osm={
             Boolean(network?.datasetRecord?.supplements?.length) ||
             (network?.datasetRecord?.access?.index.localFeatureCount ?? 0) > 0
@@ -3127,6 +3137,11 @@ export function App({ refresh }: AppProps = {}) {
           )}
           {network && screen === "explore" && (
             <>
+              <p className="caption">
+                {fixtureData
+                  ? "Synthetic review network · not real trails"
+                  : "Bloomington–Normal · Constitution Trail"}
+              </p>
               <p className="eyebrow">Explore the network</p>
               <h1>Trails around you</h1>
               <p>
@@ -3139,32 +3154,79 @@ export function App({ refresh }: AppProps = {}) {
               >
                 Choose a ride point
               </button>
-              <ProposedChoice
-                network={network}
-                checked={draft.proposed}
-                onChange={(proposed) => setDraft({ ...draft, proposed })}
-                label="Show proposed trails"
-                description="Planned paths may not be built or usable."
-              />
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={showClosures}
-                  onChange={(e) => setShowClosures(e.target.checked)}
+              <p className="caption" id="explore-layer-state">
+                Closure areas {showClosures ? "shown" : "hidden"} · Proposed
+                trails{" "}
+                {network.features.some(
+                  (feature) => feature.status === "Proposed",
+                )
+                  ? draft.proposed
+                    ? "shown"
+                    : "hidden"
+                  : "unavailable in this data"}
+                {basemap && basemapError ? " · Street map unavailable" : ""}
+              </p>
+              <details className="explore-layers">
+                <summary aria-describedby="explore-layer-state">
+                  Layers and map key
+                </summary>
+                <ProposedChoice
+                  network={network}
+                  checked={draft.proposed}
+                  onChange={(proposed) => setDraft({ ...draft, proposed })}
+                  label="Show proposed trails"
+                  description="Planned paths may not be built or usable."
                 />
-                <span>
-                  Reported closure areas
-                  <small>
-                    Dashed amber lines are approximate work corridors, not exact
-                    closure limits. Tap a marker for the official notice.
-                  </small>
-                </span>
-              </label>
-              <Legend
-                verified={network.features.some((f) =>
-                  f.id.startsWith("verified-osm:way:"),
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    aria-describedby="explore-closure-caveat"
+                    checked={showClosures}
+                    onChange={(e) => setShowClosures(e.target.checked)}
+                  />
+                  <span>Reported closure areas</span>
+                </label>
+                {!fixtureData && (
+                  <>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        aria-describedby="explore-basemap-notice"
+                        checked={basemap}
+                        onChange={(event) => {
+                          setBasemapError(false);
+                          setBasemap(event.target.checked);
+                        }}
+                      />
+                      <span>Street basemap (online)</span>
+                    </label>
+                    <p
+                      className="explore-basemap-error"
+                      id="explore-basemap-notice"
+                      ref={basemapNoticeRef}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {basemap && basemapError
+                        ? "Street map unavailable. Trail geometry remains visible."
+                        : ""}
+                    </p>
+                  </>
                 )}
-              />
+                <Legend
+                  verified={network.features.some((f) =>
+                    f.id.startsWith("verified-osm:way:"),
+                  )}
+                />
+              </details>
+              <p
+                className="caption explore-closure-caveat"
+                id="explore-closure-caveat"
+              >
+                Dashed amber lines are approximate work corridors, not exact
+                closure limits. Tap a marker for the official notice.
+              </p>
               <div className="actions">
                 <button onClick={() => setFitSignal((n) => n + 1)}>
                   Show all trails

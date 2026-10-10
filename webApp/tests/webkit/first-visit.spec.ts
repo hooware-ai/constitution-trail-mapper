@@ -116,6 +116,7 @@ test("[engine] Explore shows the trail map, closures are not hidden, and propose
   await expect(
     page.getByRole("region", { name: "Trail network map", exact: true }),
   ).toBeVisible();
+  await page.getByText("Layers and map key", { exact: true }).click();
   const proposed = page.getByRole("checkbox", { name: /Show proposed trails/ });
   await expect(proposed).not.toBeChecked();
   await proposed.check();

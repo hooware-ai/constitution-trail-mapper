@@ -162,6 +162,7 @@ test("[engine] a confirmed Explore pin changes only the chosen endpoint and uses
   await expect(
     page.getByRole("heading", { name: "Trails around you", exact: true }),
   ).toBeFocused();
+  await page.getByText("Layers and map key", { exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: /Show proposed trails/ }),
   ).toBeChecked();
@@ -180,6 +181,7 @@ test("[engine] Explore selection is accessible at large text and keeps empty end
     .getByRole("navigation")
     .getByRole("button", { name: "Explore", exact: true })
     .click();
+  await page.getByText("Layers and map key", { exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: /Show proposed trails/ }),
   ).not.toBeChecked();

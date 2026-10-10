@@ -41,6 +41,10 @@ export function MapView({
   onManualPan,
   tilesEnabled,
   onTilesChange,
+  onTileError,
+  showTileError = true,
+  showTileControl = true,
+  showCaption = true,
 }: {
   features: Feature[];
   route: RouteResult | null;
@@ -71,6 +75,11 @@ export function MapView({
   onManualPan?: () => void;
   tilesEnabled?: boolean;
   onTilesChange?: (enabled: boolean) => void;
+  /** Explore places optional-tile errors beside its controls rather than over the map. */
+  onTileError?: (failed: boolean) => void;
+  showTileError?: boolean;
+  showTileControl?: boolean;
+  showCaption?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
@@ -83,7 +92,9 @@ export function MapView({
     manualPan = useRef(onManualPan),
     [localTiles, setLocalTiles] = useState(false),
     [tileError, setTileError] = useState(false);
+  useEffect(() => onTileError?.(tileError), [tileError, onTileError]);
   const tiles = tilesEnabled ?? localTiles;
+  useEffect(() => setTileError(false), [tiles]);
   const setTiles = onTilesChange ?? setLocalTiles;
   pick.current = onPick;
   manualPan.current = onManualPan;
@@ -592,7 +603,7 @@ export function MapView({
       />
       <div className="map-tools">
         <button onClick={fit}>Fit {route ? "route" : "network"}</button>
-        {!fixture && (
+        {!fixture && showTileControl && (
           <label className="tile-toggle">
             <input
               type="checkbox"
@@ -606,11 +617,13 @@ export function MapView({
           </label>
         )}
       </div>
-      <div className="map-caption">
-        {fixture
-          ? "Synthetic review network · not real trails"
-          : "Bloomington–Normal · Constitution Trail"}
-      </div>
+      {showCaption && (
+        <div className="map-caption">
+          {fixture
+            ? "Synthetic review network · not real trails"
+            : "Bloomington–Normal · Constitution Trail"}
+        </div>
+      )}
       {picking && (
         <div className="map-picker">
           <p>Tap a point, or pan with arrow keys.</p>
@@ -624,7 +637,7 @@ export function MapView({
           </button>
         </div>
       )}
-      {tileError && (
+      {tileError && showTileError && (
         <p className="map-error" role="status">
           Street map unavailable. Trail geometry remains visible.
         </p>

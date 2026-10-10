@@ -132,3 +132,86 @@ test("every link in the map credit opens in a new tab without handing over the p
     expect(link.rel, link.text ?? "").toMatch(/noreferrer/);
   }
 });
+
+for (const fontSize of ["100%", "150%"] as const) {
+  test(`Explore tile failure preserves map controls and attribution at ${fontSize} text`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 640, height: 320 });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("https://tile.openstreetmap.org/**", (route) =>
+      route.abort(),
+    );
+    await page.goto("/");
+    await expect(
+      page.getByRole("button", { name: /Go somewhere/ }),
+    ).toBeVisible();
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Explore", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Trails around you" }),
+    ).toBeVisible();
+    await page.evaluate((size) => {
+      document.documentElement.style.fontSize = size;
+    }, fontSize);
+    await page.getByText("Layers and map key", { exact: true }).click();
+    const liveRegion = page.locator("#explore-basemap-notice");
+    await expect(liveRegion).toHaveText("");
+    await expect(liveRegion).toHaveAttribute("role", "status");
+    await liveRegion.evaluate((e) =>
+      e.setAttribute("data-original-region", "yes"),
+    );
+    await toggle(page).check();
+    const status = page.getByText(
+      "Street map unavailable. Trail geometry remains visible.",
+      { exact: true },
+    );
+    await expect(status).toBeVisible();
+    await expect(status).toBeInViewport();
+    await expect(status).toHaveAttribute("data-original-region", "yes");
+    expect(await status.evaluate((e) => Boolean(e.closest(".panel")))).toBe(
+      true,
+    );
+    await toggle(page).scrollIntoViewIfNeeded();
+    expect(
+      await toggle(page).evaluate((e) => {
+        const r = e.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.x + r.width / 2,
+          r.y + r.height / 2,
+        );
+        return hit === e || hit?.closest("label") === e.closest("label");
+      }),
+    ).toBe(true);
+    await page
+      .getByRole("button", { name: "Fit network", exact: true })
+      .click();
+    const attribution = credit(page);
+    await expect(attribution).toBeInViewport();
+    expect(
+      await attribution.evaluate((e) => {
+        const r = e.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.x + r.width / 2,
+          r.y + r.height / 2,
+        );
+        return (
+          hit === e || Boolean(hit?.closest(".leaflet-control-attribution"))
+        );
+      }),
+    ).toBe(true);
+    await toggle(page).uncheck();
+    await expect(status).toHaveCount(0);
+    await expect(toggle(page)).not.toBeChecked();
+    await expect(liveRegion).toHaveText("");
+    await toggle(page).check();
+    await expect(status).toBeInViewport();
+    await expect(status).toHaveAttribute("data-original-region", "yes");
+    await toggle(page).uncheck();
+    await expect(liveRegion).toHaveText("");
+    expect(errors).toEqual([]);
+  });
+}

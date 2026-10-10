@@ -2048,3 +2048,79 @@ dialog::backdrop {
     padding-top: 2.5em;
   }
 }
+
+/* Explore retains the map while its controls and source metadata scroll independently. */
+.app.explore {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.explore > header,
+.explore > .main-nav,
+.explore > .offline-banner {
+  flex: none;
+}
+.explore .workspace {
+  flex: 1;
+  min-height: 100px;
+  height: auto;
+}
+.explore .panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scroll-padding: 12px;
+}
+.explore .map-wrap,
+.explore .map {
+  min-height: 0;
+}
+.explore-layers {
+  margin: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.explore-layers > summary {
+  padding: 12px 4px;
+}
+.explore-layers .legend {
+  opacity: 1;
+}
+@media (max-width: 760px) {
+  .explore .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 360px;
+    grid-template-rows: minmax(240px, 34%) minmax(120px, 1fr);
+    grid-template-areas: "map" "panel";
+  }
+  .explore .map-wrap {
+    height: auto;
+  }
+  .explore .panel {
+    margin-top: 0;
+    border-radius: 0;
+  }
+}
+@media (max-height: 500px) and (min-width: 500px) {
+  .explore .workspace {
+    display: grid;
+    min-height: 100px;
+    grid-template-columns: minmax(0, 48%) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "panel map";
+  }
+  .explore .panel {
+    padding: 12px 16px 24px;
+    margin-top: 0;
+    border-radius: 0;
+  }
+}
+
+.explore-basemap-error {
+  margin: 0;
+}
+.explore-basemap-error:not(:empty) {
+  background: #fdebd8;
+  padding: 10px;
+}
