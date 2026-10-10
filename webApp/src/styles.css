@@ -614,7 +614,7 @@ nav button[aria-current="page"] {
 .directions li {
   margin: 12px 0;
 }
-.directions li > button {
+.direction-row > button {
   margin-top: 6px;
 }
 .maneuver-icon {
@@ -639,6 +639,23 @@ nav button[aria-current="page"] {
   }
   .modal.directions-dialog .directions li {
     margin: 8px 0;
+  }
+  .modal.directions-dialog .direction-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .modal.directions-dialog .direction-text {
+    flex: 1 1 18rem;
+    min-width: 0;
+  }
+  .modal.directions-dialog .direction-row > button {
+    flex: 0 1 auto;
+    max-width: 100%;
+    margin-top: 0;
+    padding: 8px;
+    font-size: 0.9rem;
   }
 }
 .instruction-marker {
@@ -1251,7 +1268,7 @@ dialog::backdrop {
   font-size: 0.8rem;
   color: #5a2a00;
 }
-.directions li > span {
+.directions .direction-distance {
   display: block;
   font-size: 0.85rem;
   color: #4c5a56;
