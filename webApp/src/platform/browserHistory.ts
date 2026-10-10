@@ -52,6 +52,7 @@ export function resolvePop(
   let desired = target.screen;
   // Transient screens return to the planner they came from.
   if (desired === "searching" || desired === "map-picker") desired = "planner";
+  if (desired === "explore-picker") desired = "explore";
   if (desired === "preview" && !context.hasPreview) {
     if (direction === "forward") return { type: "stay" };
     desired = "plan";

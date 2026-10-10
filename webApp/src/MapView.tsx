@@ -27,6 +27,7 @@ export function MapView({
   proposed,
   picking,
   onPick,
+  pickedPoint,
   position,
   closures = [],
   fixture,
@@ -49,6 +50,8 @@ export function MapView({
   proposed: boolean;
   picking?: boolean;
   onPick?: (p: Point) => void;
+  /** A resolved Explore pin awaiting the user's endpoint confirmation. */
+  pickedPoint?: Point | null;
   position?: Point;
   closures?: Closure[];
   fixture: boolean;
@@ -130,6 +133,25 @@ export function MapView({
       m.off("click", clicked);
     };
   }, [picking]);
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !pickedPoint) return;
+    const marker = L.marker(xy(pickedPoint), {
+      keyboard: false,
+      interactive: false,
+      icon: L.divIcon({
+        className: "explore-point-marker",
+        html: plain("●"),
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      }),
+    }).addTo(m);
+    marker.getElement()?.setAttribute("role", "img");
+    marker.getElement()?.setAttribute("aria-label", "Selected ride point");
+    return () => {
+      marker.remove();
+    };
+  }, [pickedPoint]);
   useEffect(() => {
     const m = map.current;
     if (!m) return;

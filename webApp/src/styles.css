@@ -294,6 +294,16 @@ header .quiet {
 .picking .map {
   cursor: crosshair;
 }
+.explore-point-marker {
+  display: grid;
+  place-items: center;
+  color: var(--green);
+  background: white;
+  border: 3px solid var(--green);
+  border-radius: 50%;
+  font-size: 24px;
+  box-shadow: 0 2px 7px #26483b40;
+}
 .leaflet-control-attribution {
   font-size: 10px !important;
 }
