@@ -237,3 +237,96 @@ test("[engine] short large-text directions reveal the selected maneuver on retur
   await expect(dialog).not.toBeVisible();
   await expect(page.locator(".map")).toHaveAttribute("data-center", center!);
 });
+
+test("[engine] itinerary distances follow real loop instruction legs and regenerate on reverse", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    const Original = window.Worker;
+    window.Worker = class extends Original {
+      constructor(...args: ConstructorParameters<typeof Worker>) {
+        super(...args);
+        this.addEventListener("message", ({ data }) => {
+          if (data.result?.instructions) {
+            (window as any).__itineraryResult = data.result;
+            (window as any).__itineraryCount =
+              ((window as any).__itineraryCount ?? 0) + 1;
+          }
+        });
+      }
+    } as typeof Worker;
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await page.getByRole("button", { name: /^Start:/ }).click();
+  await page
+    .getByRole("textbox", { name: "Search places" })
+    .fill("Review trailhead · East");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Review trailhead · East/ })
+    .click();
+  await page.getByRole("button", { name: "5 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  async function checkItinerary() {
+    const result = await page.evaluate(() => (window as any).__itineraryResult);
+    expect(result.instructions.length).toBeGreaterThan(2);
+    const total = result.instructions.reduce(
+      (sum: number, step: any) => sum + step.distance,
+      0,
+    );
+    // This fixture has several legs: the final leg is not the distance from start.
+    expect(total - result.instructions.at(-1).distance).toBeGreaterThan(160);
+    await page.getByRole("button", { name: "Directions", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Directions" });
+    await expect(dialog.locator("ol li > span").last()).toHaveText(
+      `${(total / 1609.344).toFixed(1)} mi from start · Last step`,
+    );
+    let cumulative = 0;
+    for (let index = 0; index < result.instructions.length; index++) {
+      cumulative += result.instructions[index].distance;
+      const format = (meters: number) =>
+        meters < 160.9344
+          ? `${Math.round(meters * 3.28084)} ft`
+          : `${(meters / 1609.344).toFixed(1)} mi`;
+      const next =
+        index + 1 < result.instructions.length
+          ? `${format(result.instructions[index + 1].distance)} to next step`
+          : "Last step";
+      const distance = `${format(cumulative)} from start · ${next}`;
+      await expect(dialog.locator("ol li > span").nth(index)).toHaveText(
+        distance,
+      );
+      const button = dialog.getByRole("button", {
+        name: `Show step ${index + 1} on map`,
+        exact: true,
+      });
+      await expect(button).toHaveAccessibleDescription(
+        `${result.instructions[index].text} ${distance}`,
+      );
+    }
+    await page.getByRole("button", { name: "Close Directions" }).click();
+    return result.instructions;
+  }
+  const before = await checkItinerary();
+  const countBefore = await page.evaluate(
+    () => (window as any).__itineraryCount,
+  );
+  await page
+    .getByRole("button", { name: "Reverse direction", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__itineraryCount))
+    .toBeGreaterThan(countBefore);
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  const after = await checkItinerary();
+  expect(after).not.toEqual(before);
+  expect(errors).toEqual([]);
+});

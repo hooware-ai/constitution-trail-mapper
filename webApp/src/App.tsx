@@ -6,6 +6,7 @@ import {
   type PopContext,
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
+import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
 import { DataSources } from "./DataSources";
 import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
@@ -1979,6 +1980,7 @@ export function App({ refresh }: AppProps = {}) {
                 .length ?? 0,
           })
         : null;
+  const directionSteps = itineraryDistances(preview?.instructions ?? []);
   const shownRecent = library.recent.slice(0, 3),
     share = privateRouteShare(location.href, preview?.distance);
   return (
@@ -3184,7 +3186,7 @@ export function App({ refresh }: AppProps = {}) {
                     {instruction.text}
                   </strong>
                   <span id={`${directionsId}-distance-${index}`}>
-                    {miles(instruction.distance)} mi from start
+                    {itineraryDistanceLabel(directionSteps[index])}
                   </span>
                   {screen === "preview" && instruction.point && (
                     <button
