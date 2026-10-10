@@ -3269,26 +3269,33 @@ export function App({ refresh }: AppProps = {}) {
             <ol className="directions" ref={directionsRef}>
               {preview.instructions.map((instruction, index) => (
                 <li key={index}>
-                  <strong id={`${directionsId}-step-${index}`}>
-                    <ManeuverIcon maneuver={instruction.maneuver} />
-                    {instruction.text}
-                  </strong>
-                  <span id={`${directionsId}-distance-${index}`}>
-                    {itineraryDistanceLabel(directionSteps[index])}
-                  </span>
-                  {screen === "preview" && instruction.point && (
-                    <button
-                      type="button"
-                      aria-describedby={`${directionsId}-step-${index} ${directionsId}-distance-${index}`}
-                      onClick={() => {
-                        setInstructionFocus({ route: preview, index });
-                        setGapFocus(null);
-                        setPopup(null);
-                      }}
-                    >
-                      Show step {index + 1} on map
-                    </button>
-                  )}
+                  <div className="direction-row">
+                    <div className="direction-text">
+                      <strong id={`${directionsId}-step-${index}`}>
+                        <ManeuverIcon maneuver={instruction.maneuver} />
+                        {instruction.text}
+                      </strong>
+                      <span
+                        className="direction-distance"
+                        id={`${directionsId}-distance-${index}`}
+                      >
+                        {itineraryDistanceLabel(directionSteps[index])}
+                      </span>
+                    </div>
+                    {screen === "preview" && instruction.point && (
+                      <button
+                        type="button"
+                        aria-describedby={`${directionsId}-step-${index} ${directionsId}-distance-${index}`}
+                        onClick={() => {
+                          setInstructionFocus({ route: preview, index });
+                          setGapFocus(null);
+                          setPopup(null);
+                        }}
+                      >
+                        Show step {index + 1} on map
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ol>

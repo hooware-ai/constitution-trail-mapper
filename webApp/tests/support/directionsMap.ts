@@ -238,7 +238,7 @@ test("[engine] short large-text directions reveal the selected maneuver on retur
   await expect(page.locator(".map")).toHaveAttribute("data-center", center!);
 });
 
-test("[engine] itinerary distances follow real loop instruction legs and regenerate on reverse", async ({
+test("[engine] itinerary distances and landscape density follow a real loop and survive reversal", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -302,7 +302,7 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
         "false",
       );
     }
-    await expect(dialog.locator("ol li > span").last()).toHaveText(
+    await expect(dialog.locator(".direction-distance").last()).toHaveText(
       `${(total / 1609.344).toFixed(1)} mi from start · Last step`,
     );
     let cumulative = 0;
@@ -317,7 +317,7 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
           ? `${format(result.instructions[index + 1].distance)} to next step`
           : "Last step";
       const distance = `${format(cumulative)} from start · ${next}`;
-      await expect(dialog.locator("ol li > span").nth(index)).toHaveText(
+      await expect(dialog.locator(".direction-distance").nth(index)).toHaveText(
         distance,
       );
       const button = dialog.getByRole("button", {
@@ -369,8 +369,33 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
   expect(geometry.inViewport).toBe(true);
   expect(geometry.scrollable).toBe(true);
   expect(geometry.horizontalOverflow).toBe(false);
-  expect(geometry.fullRows).toBeGreaterThanOrEqual(2);
+  expect(geometry.fullRows).toBeGreaterThanOrEqual(3);
   expect(geometry.nestedScrollers).toBe(0);
+  await expect(landscape.getByRole("listitem")).toHaveCount(before.length);
+  const originalFont = await page.evaluate(
+    () => document.documentElement.style.fontSize,
+  );
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "150%";
+  });
+  const largeText = await landscape.evaluate((dialog) => ({
+    overflow: dialog.scrollWidth > dialog.clientWidth,
+    controls: [...dialog.querySelectorAll("ol button")].map((button) => {
+      const box = button.getBoundingClientRect(),
+        bounds = dialog.getBoundingClientRect();
+      return {
+        width: box.width,
+        height: box.height,
+        insideWidth: box.left >= bounds.left && box.right <= bounds.right,
+      };
+    }),
+  }));
+  expect(largeText.overflow).toBe(false);
+  for (const control of largeText.controls) {
+    expect(control.width).toBeGreaterThanOrEqual(44);
+    expect(control.height).toBeGreaterThanOrEqual(44);
+    expect(control.insideWidth).toBe(true);
+  }
   await landscape
     .getByRole("button", { name: /^Show step/ })
     .last()
@@ -385,6 +410,9 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
     });
   expect(lastVisible).toBe(true);
   await page.getByRole("button", { name: "Close Directions" }).click();
+  await page.evaluate((font) => {
+    document.documentElement.style.fontSize = font;
+  }, originalFont);
   await page.setViewportSize(originalViewport);
   const countBefore = await page.evaluate(
     () => (window as any).__itineraryCount,
