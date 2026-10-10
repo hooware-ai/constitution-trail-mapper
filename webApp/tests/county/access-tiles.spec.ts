@@ -247,6 +247,7 @@ test("Explore draws the reported closure with its official notice link, and its 
     .getByRole("navigation")
     .getByRole("button", { name: "Explore", exact: true })
     .click();
+  await page.getByText("Layers and map key", { exact: true }).click();
   const closures = page.getByRole("checkbox", {
     name: /Reported closure areas/,
   });

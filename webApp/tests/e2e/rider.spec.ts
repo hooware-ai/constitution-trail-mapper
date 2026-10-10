@@ -171,6 +171,7 @@ test("exercise validation, recent route retention UI, proposed opt in and map se
     .getByRole("navigation")
     .getByRole("button", { name: "Explore", exact: true })
     .click();
+  await page.getByText("Layers and map key", { exact: true }).click();
   const proposed = page.getByRole("checkbox", { name: /Show proposed trails/ });
   await expect(proposed).not.toBeChecked();
   await proposed.check();
@@ -2430,6 +2431,7 @@ test("Explore offers native's map controls: closure areas switch, Show all trail
     .getByRole("navigation")
     .getByRole("button", { name: "Explore", exact: true })
     .click();
+  await page.getByText("Layers and map key", { exact: true }).click();
   const closures = page.getByRole("checkbox", {
     name: /Reported closure areas/,
   });

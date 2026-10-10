@@ -3139,32 +3139,36 @@ export function App({ refresh }: AppProps = {}) {
               >
                 Choose a ride point
               </button>
-              <ProposedChoice
-                network={network}
-                checked={draft.proposed}
-                onChange={(proposed) => setDraft({ ...draft, proposed })}
-                label="Show proposed trails"
-                description="Planned paths may not be built or usable."
-              />
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={showClosures}
-                  onChange={(e) => setShowClosures(e.target.checked)}
+              <details className="explore-layers">
+                <summary>Layers and map key</summary>
+                <ProposedChoice
+                  network={network}
+                  checked={draft.proposed}
+                  onChange={(proposed) => setDraft({ ...draft, proposed })}
+                  label="Show proposed trails"
+                  description="Planned paths may not be built or usable."
                 />
-                <span>
-                  Reported closure areas
-                  <small>
-                    Dashed amber lines are approximate work corridors, not exact
-                    closure limits. Tap a marker for the official notice.
-                  </small>
-                </span>
-              </label>
-              <Legend
-                verified={network.features.some((f) =>
-                  f.id.startsWith("verified-osm:way:"),
-                )}
-              />
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={showClosures}
+                    onChange={(e) => setShowClosures(e.target.checked)}
+                  />
+                  <span>
+                    Reported closure areas
+                    <small>
+                      Dashed amber lines are approximate work corridors, not
+                      exact closure limits. Tap a marker for the official
+                      notice.
+                    </small>
+                  </span>
+                </label>
+                <Legend
+                  verified={network.features.some((f) =>
+                    f.id.startsWith("verified-osm:way:"),
+                  )}
+                />
+              </details>
               <div className="actions">
                 <button onClick={() => setFitSignal((n) => n + 1)}>
                   Show all trails
