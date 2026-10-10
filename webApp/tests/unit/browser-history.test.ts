@@ -72,6 +72,31 @@ test("transient search and picker entries return to the planner, and overlays ar
     type: "stay",
   });
 });
+test("Explore picker history returns to Explore without re-entering an unconfirmed selection", () => {
+  for (const direction of ["back", "forward"] as const) {
+    assert.deepEqual(
+      resolvePop(
+        context({ screen: "planner" }),
+        entry("explore-picker"),
+        direction,
+      ),
+      {
+        type: "go",
+        screen: "explore",
+      },
+    );
+    assert.deepEqual(
+      resolvePop(
+        context({ screen: "explore" }),
+        entry("explore-picker"),
+        direction,
+      ),
+      {
+        type: "stay",
+      },
+    );
+  }
+});
 test("a preview entry without a preview (after reload) falls back instead of showing nothing", () => {
   assert.deepEqual(
     resolvePop(context({ screen: "planner" }), entry("preview"), "back"),

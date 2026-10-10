@@ -119,7 +119,8 @@ type Screen =
   | "saved"
   | "explore"
   | "updates"
-  | "map-picker";
+  | "map-picker"
+  | "explore-picker";
 type Popup = "directions" | "share" | "clear" | "rename" | "help" | null;
 const EMPTY_LIBRARY: RouteLibrary = {
   version: 1,
@@ -223,6 +224,8 @@ export function App({ refresh }: AppProps = {}) {
     [pickField, setPickField] = useState<"start" | "destination">("start"),
     [popup, setPopup] = useState<Popup>(null),
     [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
+  const [explorePoint, setExplorePoint] = useState<Endpoint | null>(null);
+  const [exploreReceipt, setExploreReceipt] = useState("");
   const popupOpen = useRef(false),
     dialogEpoch = useRef(0),
     shownPopup = useRef<Popup>(null),
@@ -813,9 +816,11 @@ export function App({ refresh }: AppProps = {}) {
     const savedScreen: BrowserSession["screen"] =
       screen === "navigation"
         ? "preview"
-        : screen === "searching" || screen === "map-picker"
-          ? "planner"
-          : screen;
+        : screen === "explore-picker"
+          ? "explore"
+          : screen === "searching" || screen === "map-picker"
+            ? "planner"
+            : screen;
     const persist = () => {
       const result = sessionRef.current?.write({
         version: 1,
@@ -863,6 +868,8 @@ export function App({ refresh }: AppProps = {}) {
     cancelLocation();
     setGapFocus(null);
     setInstructionFocus(null);
+    setExplorePoint(null);
+    setExploreReceipt("");
     if (controllerRef.current?.state.record && next !== "navigation")
       controllerRef.current.stop();
     const token = ++operation.current;
@@ -899,6 +906,11 @@ export function App({ refresh }: AppProps = {}) {
     if (!clientRef.current) return;
     const token = ++operation.current;
     setBusy(true);
+    setError("");
+    if (screen === "explore-picker") {
+      setExplorePoint(null);
+      setExploreReceipt("");
+    }
     try {
       const resolved = await clientRef.current.call<{
         point: Point;
@@ -906,6 +918,11 @@ export function App({ refresh }: AppProps = {}) {
         receipt: string | null;
       }>({ op: "mapPoint", point, proposed: draft.proposed, now: Date.now() });
       if (token !== operation.current) return;
+      if (screen === "explore-picker") {
+        setExplorePoint({ ...resolved.point, label: resolved.label });
+        setExploreReceipt(resolved.receipt ?? "");
+        return;
+      }
       setDraft((value) => ({
         ...value,
         [pickField]: { ...resolved.point, label: resolved.label },
@@ -917,6 +934,15 @@ export function App({ refresh }: AppProps = {}) {
     } finally {
       if (token === operation.current) setBusy(false);
     }
+  }
+  function planFromExplore(target: "start" | "destination") {
+    if (!explorePoint || busy) return;
+    setDraft((value) => ({ ...value, mode: "point", [target]: explorePoint }));
+    setPreview(null);
+    setSelected(null);
+    setReverseOf(null);
+    setOrigin("planner");
+    go("planner");
   }
   function currentLocation(target = field) {
     if (!target) return;
@@ -1947,7 +1973,11 @@ export function App({ refresh }: AppProps = {}) {
       stopNavigation();
       return;
     }
-    // Leaving the map picker (search or picker) returns to the planner with its draft untouched.
+    if (screen === "explore-picker") {
+      go("explore");
+      return;
+    }
+    // Leaving the planner's search or picker returns with its draft untouched.
     if (screen === "searching" || screen === "map-picker") {
       go("planner");
       return;
@@ -2079,13 +2109,15 @@ export function App({ refresh }: AppProps = {}) {
               : null
           }
           proposed={draft.proposed}
-          picking={screen === "map-picker"}
+          picking={screen === "map-picker" || screen === "explore-picker"}
+          pickedPoint={screen === "explore-picker" ? explorePoint : null}
           onPick={chooseMap}
           position={
             screen === "navigation" ? undefined : (nav.fix ?? undefined)
           }
           closures={
-            screen === "explore" && !showClosures
+            (screen === "explore" || screen === "explore-picker") &&
+            !showClosures
               ? []
               : (network?.closures ?? [])
           }
@@ -2113,7 +2145,7 @@ export function App({ refresh }: AppProps = {}) {
               ←{" "}
               {screen === "searching"
                 ? "Cancel search"
-                : screen === "map-picker"
+                : screen === "map-picker" || screen === "explore-picker"
                   ? "Cancel map selection"
                   : "Back"}
             </button>
@@ -2391,6 +2423,50 @@ export function App({ refresh }: AppProps = {}) {
                 and use its center.
               </p>
               <button onClick={() => go("planner")}>
+                Cancel map selection
+              </button>
+              <Legend />
+            </>
+          )}
+          {screen === "explore-picker" && (
+            <>
+              <h1>Choose a ride point</h1>
+              <p>Tap a point on the map, or move the map and use its center.</p>
+              <p className="caption">
+                Choosing a point does not verify trail access. The planner will
+                check connections and closures before you can start navigation.
+              </p>
+              <p role="status" aria-live="polite" aria-atomic="true">
+                {busy
+                  ? "Checking map point…"
+                  : explorePoint
+                    ? `Selected: ${explorePoint.label}`
+                    : "No point selected."}
+              </p>
+              {explorePoint && (
+                <section aria-label="Selected ride point">
+                  <h2>Selected point</h2>
+                  {exploreReceipt && (
+                    <p className="caption">{exploreReceipt}</p>
+                  )}
+                  <div className="actions">
+                    <button
+                      className="primary"
+                      onClick={() => planFromExplore("start")}
+                    >
+                      Plan from here
+                    </button>
+                    <button onClick={() => planFromExplore("destination")}>
+                      Plan to here
+                    </button>
+                  </div>
+                  <p className="caption">
+                    Opens a start-to-destination ride and keeps your other
+                    endpoint. Proposed-trail choice stays as shown.
+                  </p>
+                </section>
+              )}
+              <button onClick={() => go("explore")}>
                 Cancel map selection
               </button>
               <Legend />
@@ -3043,6 +3119,12 @@ export function App({ refresh }: AppProps = {}) {
                 See the trails, connectors and shared roadways used by the route
                 planner.
               </p>
+              <button
+                className="primary wide"
+                onClick={() => go("explore-picker")}
+              >
+                Choose a ride point
+              </button>
               <ProposedChoice
                 network={network}
                 checked={draft.proposed}
