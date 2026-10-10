@@ -16,6 +16,7 @@ import {
   type AddressIndexSource,
 } from "./addressSearch";
 import type { PlaceRecord, RouteRecord } from "./platform/storage";
+import { mapLineStyles, mapStroke, type MapLineKind } from "./mapLineStyle";
 export interface DialogNotice {
   kind: "error" | "success";
   message: string;
@@ -343,38 +344,57 @@ export function RouteRow({
   );
 }
 export function Legend({ verified = false }: { verified?: boolean }) {
+  const entries: [MapLineKind, string][] = [
+    ["trail", "Trail"],
+    ["park", "Park connector"],
+    ["access", "Street access"],
+    ["shared", "Shared roadway"],
+    ...(verified
+      ? [["verified", "Verified addition"] as [MapLineKind, string]]
+      : []),
+    ["proposed", "Proposed · not built"],
+    ["closed", "Trail closed"],
+  ];
   return (
-    <div className="legend" aria-label="Map key">
-      <span>
-        <i className="trail" />
-        Trail
-      </span>
-      <span>
-        <i className="park" />
-        Park connector
-      </span>
-      <span>
-        <i className="access" />
-        Street access
-      </span>
-      <span>
-        <i className="shared" />
-        Shared roadway
-      </span>
-      {verified && (
-        <span>
-          <i className="verified" />
-          Verified addition
+    <div className="legend" role="group" aria-label="Map key">
+      {entries.map(([kind, label]) => (
+        <span key={kind} data-map-line={kind}>
+          <svg
+            className="legend-line"
+            width="72"
+            height="16"
+            viewBox="0 0 72 16"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M2 8 H70"
+              stroke={mapLineStyles[kind].color}
+              strokeWidth="4"
+              strokeLinecap={mapStroke(kind).lineCap}
+              strokeDasharray={mapLineStyles[kind].dashArray}
+              fill="none"
+            />
+            {kind === "closed" && (
+              <g>
+                <circle
+                  cx="36"
+                  cy="8"
+                  r="7"
+                  fill={mapLineStyles.closed.color}
+                  stroke="white"
+                  strokeWidth="1"
+                />
+                <path d="M32 8 H40" stroke="white" strokeWidth="2" />
+              </g>
+            )}
+          </svg>
+          <span>
+            <span>{label}</span>{" "}
+            <small className="legend-cue">{mapLineStyles[kind].cue}</small>
+          </span>
         </span>
-      )}
-      <span>
-        <i className="proposed" />
-        Proposed · not built
-      </span>
-      <span>
-        <i className="closed" />
-        Trail closed
-      </span>
+      ))}
     </div>
   );
 }

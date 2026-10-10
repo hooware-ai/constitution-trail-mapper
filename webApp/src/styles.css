@@ -399,39 +399,7 @@ header .quiet {
   font-size: 0.76rem;
   color: var(--muted);
 }
-.legend li {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.legend i {
-  display: inline-block;
-  width: 20px;
-  border-top: 4px solid var(--green);
-}
-.legend .park {
-  border-color: #63a375;
-}
-.legend .road {
-  border-color: #68718b;
-  border-top-style: dotted;
-}
-.legend .access {
-  border-color: #4d6888;
-  border-top-style: dashed;
-}
-.legend .closed {
-  border-color: #b45309;
-  border-top-width: 3px;
-  border-top-style: dashed;
-}
-.legend .verified {
-  border-color: #b01767;
-}
-.legend .proposed {
-  border-color: #7851a9;
-  border-top-style: dashed;
-}
+
 nav {
   display: flex;
   align-items: stretch;
@@ -1156,10 +1124,6 @@ dialog::backdrop {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.legend .shared {
-  border-color: #68718b;
-  border-top-style: dotted;
 }
 .section-heading {
   display: flex;
@@ -2123,4 +2087,14 @@ dialog::backdrop {
 .explore-basemap-error:not(:empty) {
   background: #fdebd8;
   padding: 10px;
+}
+
+/* The key samples use the same stroke patterns as network geometry. */
+.legend-line {
+  flex: 0 0 72px;
+}
+.legend-cue {
+  display: block;
+  font-size: inherit;
+  color: inherit;
 }

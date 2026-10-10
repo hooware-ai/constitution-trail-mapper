@@ -204,3 +204,49 @@ test("control: the same journey on the county build WITHOUT the supplement canno
   if (await start.count()) await expect(start).toBeDisabled();
   await context.close();
 });
+
+// SYNTHETIC admitted OSM provenance drives this visual identity, not inferred geometry.
+test("verified additions have a distinct noncolor pattern matching the map key", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = CanvasRenderingContext2D.prototype.stroke;
+    const records: number[][] = [];
+    Object.assign(window, { verifiedStrokeRecords: records });
+    CanvasRenderingContext2D.prototype.stroke = function (path?: Path2D) {
+      if (this.strokeStyle === "#b01767") records.push(this.getLineDash());
+      return Reflect.apply(original, this, path ? [path] : []);
+    };
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Explore", exact: true })
+    .click();
+  await page.getByText("Layers and map key", { exact: true }).click();
+  await expect(
+    page.locator('[data-map-line="verified"] .legend-cue'),
+  ).toHaveText("dash and short tick");
+  await expect(
+    page.locator('[data-map-line="verified"] .legend-line > path'),
+  ).toHaveAttribute("stroke-dasharray", "12 3 2 3");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { verifiedStrokeRecords: number[][] })
+            .verifiedStrokeRecords.length,
+      ),
+    )
+    .toBeGreaterThan(0);
+  expect(
+    await page.evaluate(() =>
+      (
+        window as unknown as { verifiedStrokeRecords: number[][] }
+      ).verifiedStrokeRecords.every((d) => JSON.stringify(d) === "[12,3,2,3]"),
+    ),
+  ).toBe(true);
+});

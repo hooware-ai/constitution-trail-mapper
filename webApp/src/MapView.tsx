@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Feature, Point, RouteResult, Closure, MapCues } from "./types";
+import { featureLineKind, mapStroke } from "./mapLineStyle";
 import { ChevronLayer } from "./chevrons";
 import { lengthMeters, riddenPolylines } from "./ridden";
 import { connectionsToCheck, gapDistance } from "./gapDistance";
@@ -186,23 +187,12 @@ export function MapView({
       .filter((f) => proposed || f.status !== "Proposed")
       .forEach((f) =>
         f.paths.forEach((path) => {
-          const proposed = f.status === "Proposed",
-            shared = f.roles.includes("SharedRoadways"),
-            park = f.roles.includes("ParkConnectors"),
-            verified = f.id.startsWith("verified-osm:way:");
+          const kind = featureLineKind(f);
           L.polyline(path.map(xy), {
-            color: proposed
-              ? "#7851a9"
-              : verified
-                ? "#b01767"
-                : shared
-                  ? "#68718b"
-                  : park
-                    ? "#63a375"
-                    : "#08725f",
+            ...mapStroke(kind),
+            className: `map-line--${kind}`,
             weight: route ? 2 : 4,
             opacity: route ? 0.5 : 0.85,
-            dashArray: proposed ? "6 7" : shared ? "3 5" : undefined,
           })
             .bindTooltip(plain(f.name ?? "Trail"))
             .addTo(g);
@@ -213,10 +203,10 @@ export function MapView({
     closures.forEach((closure) => {
       if (!closure.points || closure.points.length < 2) return;
       const path = L.polyline(closure.points.map(xy), {
-        color: "#b45309",
+        ...mapStroke("closed"),
+        className: "map-line--closed",
         weight: 3,
         opacity: 0.85,
-        dashArray: "3 7",
         interactive: false,
       }).addTo(g);
       closureMarkers.push({ closure, anchor: path.getCenter() });
@@ -229,28 +219,24 @@ export function MapView({
     drawn.forEach((s) => {
       const roles =
         s.roles ?? (s as { routeRoles?: string[] }).routeRoles ?? [];
-      const access = s.type === "Access",
-        prop = roles.includes("ProposedTrails"),
-        shared = roles.includes("SharedRoadways"),
-        park = roles.includes("ParkConnectors");
-      const color = prop
-        ? "#7851a9"
-        : access
-          ? "#4d6888"
-          : shared
-            ? "#68718b"
-            : park
-              ? "#63a375"
-              : "#08725f";
+      const kind = roles.includes("ProposedTrails")
+        ? "proposed"
+        : s.type === "Access"
+          ? "access"
+          : roles.includes("SharedRoadways")
+            ? "shared"
+            : roles.includes("ParkConnectors")
+              ? "park"
+              : "trail";
       L.polyline(s.points.map(xy), {
         color: "#fff",
         weight: 10,
         opacity: 0.9,
       }).addTo(g);
       L.polyline(s.points.map(xy), {
-        color,
+        ...mapStroke(kind),
+        className: `route-line--${kind}`,
         weight: 6,
-        dashArray: access ? "8 7" : prop ? "6 7" : shared ? "3 5" : undefined,
       }).addTo(g);
     });
     chevrons.current?.setPieces(cues?.pieces ?? []);
