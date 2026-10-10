@@ -151,6 +151,8 @@ test("the remaining unverified map marker works by keyboard without a notificati
   await marker.press("Enter");
   await expect(marker).toBeFocused();
   await expect(page.locator(".leaflet-popup")).toBeVisible();
+  // Leaflet fades this popup in. Audit the readable state, rather than sampling blended colors mid-animation.
+  await expect(page.locator(".leaflet-popup")).toHaveCSS("opacity", "1");
   await page.screenshot({
     path: `output/playwright/interior-connection-focus-${info.project.name}.png`,
     fullPage: true,
