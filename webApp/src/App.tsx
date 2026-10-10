@@ -17,6 +17,7 @@ import { MapView } from "./MapView";
 import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
 import { directionGroupStarts } from "./directionGroups";
 import { ManeuverIcon } from "./ManeuverIcon";
+import { TrailUpdates } from "./TrailUpdates";
 import { DataSources } from "./DataSources";
 import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
@@ -3276,18 +3277,7 @@ export function App({ refresh }: AppProps = {}) {
               <button className="wide" onClick={() => setPopup("help")}>
                 Help, privacy and sources
               </button>
-              <div className="updates-list">
-                {network.updates.map((update) => (
-                  <article key={update.id}>
-                    <p className="update-status">{update.status}</p>
-                    <h2>{update.title}</h2>
-                    <p>{update.details}</p>
-                    <SafeLink href={update.source?.url ?? update.sourceUrl}>
-                      {update.source?.title ?? "Read official source"}
-                    </SafeLink>
-                  </article>
-                ))}
-              </div>
+              <TrailUpdates updates={network.updates} />
             </>
           )}
         </section>

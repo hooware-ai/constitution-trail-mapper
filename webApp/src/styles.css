@@ -2098,3 +2098,35 @@ dialog::backdrop {
   font-size: inherit;
   color: inherit;
 }
+
+.update-category-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.update-category-jumps button {
+  min-height: 48px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.update-category > h2,
+.update-category > h3 {
+  scroll-margin-top: 12px;
+}
+.update-category {
+  margin-top: 24px;
+}
+.update-references {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.updates-list article h3,
+.updates-list article h4 {
+  font-size: 1.08rem;
+  margin: 8px 0;
+}
+.updates-list article {
+  overflow-wrap: anywhere;
+}
