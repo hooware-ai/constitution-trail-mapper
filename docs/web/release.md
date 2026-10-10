@@ -1,6 +1,8 @@
 # Web release check
 
-This is the reproducible, clean-source path from a checkout to a verified web artifact. It **prepares and verifies**; it does not publish anything, create cloud resources or choose a provider. By default the artifact it produces is the synthetic **fixture** review build; with `--dataset county` it is the **county review candidate** (254 reviewed existing trail features, `approved: false`; see [county-dataset.md](county-dataset.md)). Either way it is labelled not publishable until an approved dataset exists (see [Dataset identity](#dataset-identity-the-47-contract)); a county build can support a private pilot only after the owner closes the pilot gates in [launch-acceptance.md](launch-acceptance.md).
+This is the reproducible, clean-source path from a checkout to a verified web artifact. It prepares and verifies; it does not deploy. The default is a synthetic fixture review build and is not publishable as a real product. The committed county composition is now approved under Jesse’s [October 9 public-launch decision](public-launch-20261009.md): 254 existing county features, four reviewed OSM paths and the existing access-road package; six proposed geometries remain excluded. The existing Site is public. Historical unapproved-candidate measurements remain evidence of those earlier candidates, not current approval state.
+
+After the applicable exact-head release gates pass and the county package/core are verified, `npm run build:public` builds the strict approved county artifact from clean source, with public channel and the private estimated-connection override disabled. It rechecks provenance, every artifact file and public eligibility. It does not run all release tests, deploy or authorize new data/services. See [hosting-runbook.md](hosting-runbook.md) for exact source/archive publication and rollback.
 
 ## One command
 
@@ -9,7 +11,7 @@ From a clean checkout with no prebuilt Kotlin output:
     cd webApp
     npm run release:check
 
-(`node tools/release.mjs` is the same thing and needs no `npm ci` first.) Options: `--skip-install`, `--skip-e2e`, `--allow-dirty` (local only; the artifact is recorded as non-releasable), `--public` (also require an approved dataset - this **fails today by design**) and `--dataset county` (build the packaged county candidate instead of the fixture; see [county-dataset.md](county-dataset.md)).
+(`node tools/release.mjs` is the same thing and needs no `npm ci` first.) Options: `--skip-install`, `--skip-e2e`, `--allow-dirty` (local only; the artifact is recorded as non-releasable), `--public` (require an approved dataset; the default fixture still fails this check) and `--dataset county` (build the packaged county artifact instead of the fixture; see [county-dataset.md](county-dataset.md)).
 
 It runs, in order, and stops at the first failure:
 
@@ -64,7 +66,7 @@ The file is served as-is, so a deployed site can be matched to the commit, core 
 
 ## Dataset identity (the #47 contract)
 
-For a fixture build, `webApp/release/dataset.json` declares which dataset the artifact ships. A county build (`TRAIL_DATASET=county`) instead ships `data/dataset.json` + a hash-named `data/trails.<sha12>.json`, and the audit takes the dataset from those shipped files plus the committed `release/dataset.county.json` approval record (details in [county-dataset.md](county-dataset.md)). Today the default is the synthetic fixture (`kind: "fixture"`, `approved: false`), so **`publicRelease.allowed` is false** and `--public` fails.
+For a fixture build, `webApp/release/dataset.json` declares which dataset the artifact ships. A county build (`TRAIL_DATASET=county`) instead ships `data/dataset.json` + a hash-named `data/trails.<sha12>.json`, and the audit takes the dataset from those shipped files plus the committed `release/dataset.county.json` approval record (details in [county-dataset.md](county-dataset.md)). The default remains the synthetic fixture (`kind: "fixture"`, `approved: false`), so its `publicRelease.allowed` is false and `--public` fails for that fixture. The approved county package can pass the strict public gate; approval is bound to the exact committed composition, not arbitrary replacement data.
 
 `tools/audit-dist.mjs` never trusts what `provenance.json` says about itself: it recomputes the file hashes, the core hashes, the dataset identity and the **public-release verdict** from the evidence and rejects any difference (a hand-edited `allowed: true`, or an approval flag added to an unchanged fixture, is refused). With `--public` the artifact must also be eligible _now_: the current clean commit equals the recorded one, and an approved dataset's content must be a file in the artifact with the declared hash (`content.distPath`).
 
@@ -78,7 +80,7 @@ A second, independent workflow, `.github/workflows/web-firestore-rules.yml` (**W
 
 ## What this does not certify
 
-Real data, physical iPhone/Android browsers, hosting or a public launch: #47 and #41 remain gates for the first launch, which is guest-first (route planning, foreground navigation and browser-local saves, no sign-in). Authentication and cloud sync (#31-#33, #51) are deferred to a later phase and are not first-launch dependencies. Built-artifact smoke tests use the fixture network (or, for `--dataset county`, check the county files, headers and provenance); automated runs never request map tiles. A real-data county artifact is produced by `python tools/fetch-web-review-data.py`, `npm run package:dataset` and `npm run release:check -- --dataset county`; see [county-dataset.md](county-dataset.md) for what it was measured to do.
+The current public launch is guest-first (route planning, foreground navigation and browser-local saves, no sign-in). Real-data composition and existing hosting were approved for that release. Physical iPhone/Android/GPS acceptance (#41) remains NOT RUN; Jesse chose public feedback to inform further testing rather than holding launch for it. Authentication and cloud sync (#31-#33, #51) are deferred to a later phase and are not first-launch dependencies. Built-artifact smoke tests use the fixture network (or, for `--dataset county`, check the county files, headers and provenance); automated runs never request map tiles. A real-data county artifact is produced by `python tools/fetch-web-review-data.py`, `npm run package:dataset` and `npm run release:check -- --dataset county`; see [county-dataset.md](county-dataset.md) for the historical measurements and packaging commands.
 
 ## Browser port preflight
 
