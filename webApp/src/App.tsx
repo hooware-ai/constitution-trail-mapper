@@ -284,6 +284,13 @@ export function App({ refresh }: AppProps = {}) {
     [renameValue, setRenameValue] = useState(""),
     [exactExport, setExactExport] = useState(false);
   const [gapFocus, setGapFocus] = useState<{ id: string } | null>(null);
+  const [instructionFocus, setInstructionFocus] = useState<{
+    route: RouteResult;
+    index: number;
+  } | null>(null);
+  useEffect(() => {
+    if (screen !== "preview") setInstructionFocus(null);
+  }, [screen]);
   const [locationRequest, setLocationRequest] = useState<{
     target: "start" | "destination";
     phase: "waiting" | "failure";
@@ -835,6 +842,7 @@ export function App({ refresh }: AppProps = {}) {
     ++startupChoice.current;
     cancelLocation();
     setGapFocus(null);
+    setInstructionFocus(null);
     if (controllerRef.current?.state.record && next !== "navigation")
       controllerRef.current.stop();
     const token = ++operation.current;
@@ -2042,6 +2050,13 @@ export function App({ refresh }: AppProps = {}) {
           features={network?.features ?? []}
           route={showRoute}
           gapFocus={gapFocus}
+          instructionFocus={
+            screen === "preview" &&
+            showRoute &&
+            instructionFocus?.route === showRoute
+              ? instructionFocus
+              : null
+          }
           proposed={draft.proposed}
           picking={screen === "map-picker"}
           onPick={chooseMap}
@@ -2435,7 +2450,10 @@ export function App({ refresh }: AppProps = {}) {
                     )}
                   <AccessConnections
                     gaps={preview.accessGaps ?? []}
-                    onShow={(id) => setGapFocus({ id })}
+                    onShow={(id) => {
+                      setInstructionFocus(null);
+                      setGapFocus({ id });
+                    }}
                   />
                   {stale && (
                     <div className="error stale-route" role="alert">
@@ -3145,6 +3163,18 @@ export function App({ refresh }: AppProps = {}) {
                 <li key={index}>
                   <strong>{instruction.text}</strong>
                   <span>{miles(instruction.distance)} mi from start</span>
+                  {screen === "preview" && instruction.point && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInstructionFocus({ route: preview, index });
+                        setGapFocus(null);
+                        setPopup(null);
+                      }}
+                    >
+                      Show step {index + 1} on map
+                    </button>
+                  )}
                 </li>
               ))}
             </ol>

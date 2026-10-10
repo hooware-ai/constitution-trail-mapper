@@ -23,6 +23,7 @@ export function MapView({
   features,
   route,
   gapFocus,
+  instructionFocus,
   proposed,
   picking,
   onPick,
@@ -43,6 +44,8 @@ export function MapView({
   features: Feature[];
   route: RouteResult | null;
   gapFocus?: { id: string } | null;
+  /** Preview-only selection; the parent binds this to the route that supplied the instruction. */
+  instructionFocus?: { index: number } | null;
   proposed: boolean;
   picking?: boolean;
   onPick?: (p: Point) => void;
@@ -430,6 +433,41 @@ export function MapView({
     marker?.getElement()?.focus({ preventScroll: true });
     marker?.openPopup();
   }, [gapFocus, route]);
+  useEffect(() => {
+    const instruction = instructionFocus
+      ? route?.instructions[instructionFocus.index]
+      : undefined;
+    const m = map.current;
+    if (!m || !instruction?.point || !instructionFocus) return;
+    const number = instructionFocus.index + 1;
+    const icon = document.createElement("span");
+    icon.textContent = String(number);
+    const marker = L.marker(xy(instruction.point), {
+      keyboard: false,
+      interactive: false,
+      icon: L.divIcon({
+        className: "instruction-marker",
+        html: icon,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      }),
+      title: `Step ${number}: ${instruction.text}`,
+    }).addTo(m);
+    const element = marker.getElement();
+    element?.setAttribute("role", "img");
+    element?.setAttribute("tabindex", "-1");
+    element?.setAttribute("aria-label", `Step ${number}: ${instruction.text}`);
+    m.setView(xy(instruction.point), 17, { animate: false });
+    // The dialog's close restores its opener first; focus the located maneuver afterwards.
+    const frame = requestAnimationFrame(() => {
+      root.current?.parentElement?.scrollIntoView({ block: "nearest" });
+      element?.focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      marker.remove();
+    };
+  }, [instructionFocus, route]);
   useEffect(() => {
     if (!map.current || !position) return;
     const marker = L.circleMarker(xy(position), {
