@@ -70,3 +70,19 @@ test("turnarounds never create return groups and a single trail stays flat", () 
   r.segments = [{ type: "Trail", points: [a, b, c, d] }];
   assert.equal(directionGroupStarts(r).size, 0);
 });
+
+test("malformed legacy metadata and absent gap metadata stay flat", () => {
+  for (const r of [
+    {},
+    { segments: null, instructions: [], accessGaps: [] },
+    { ...route(), accessGaps: undefined },
+    { ...route(), segments: [null] },
+    { ...route(), instructions: [null] },
+    { ...route(), segments: [{ type: "Access", points: null }] },
+    {
+      ...route(),
+      segments: route().segments.map((s) => ({ ...s, roles: {} })),
+    },
+  ])
+    assert.equal(directionGroupStarts(r as any).size, 0);
+});

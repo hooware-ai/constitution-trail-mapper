@@ -2031,8 +2031,20 @@ dialog::backdrop {
   }
 }
 
+.directions li:has(.direction-group) {
+  position: relative;
+  padding-top: 1.25em;
+}
 .direction-group {
-  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
   font-weight: 700;
-  margin-bottom: 4px;
+  font-size: 0.85em;
+  line-height: 1.2;
+}
+@media (max-width: 400px) {
+  .directions li:has(.direction-group) {
+    padding-top: 2.5em;
+  }
 }

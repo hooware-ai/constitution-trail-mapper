@@ -564,6 +564,33 @@ test("Directions groups proven access/trail boundaries while preserving every co
     dialog.getByRole("button", { name: `Show step ${n} on map`, exact: true }),
   ).toBeFocused();
   await page.setViewportSize({ width: 640, height: 320 });
+  await dialog.evaluate((e) => {
+    e.scrollTop = 0;
+  });
+  const groupedLayout = await dialog.evaluate((e) => {
+    const box = e.getBoundingClientRect();
+    const rows = [...e.querySelectorAll(".direction-row")].map((row) =>
+      row.getBoundingClientRect(),
+    );
+    const headers = [...e.querySelectorAll(".direction-group")].map((h) => ({
+      header: h.getBoundingClientRect().bottom,
+      row: h.nextElementSibling!.getBoundingClientRect().top,
+    }));
+    return {
+      fullRows: rows.filter((r) => r.top >= box.top && r.bottom <= box.bottom)
+        .length,
+      headers,
+    };
+  });
+  expect(groupedLayout.fullRows).toBeGreaterThanOrEqual(3);
+  groupedLayout.headers.forEach((h) =>
+    expect(h.header).toBeLessThanOrEqual(h.row),
+  );
+  await page.screenshot({
+    path:
+      process.env.TRAIL_GROUPING_SCREENSHOT ??
+      test.info().outputPath("grouped-directions.png"),
+  });
   await page.evaluate(() => (document.documentElement.style.fontSize = "24px"));
   const overflow = await dialog.evaluate(
     (e) => e.scrollWidth > e.clientWidth + 1,

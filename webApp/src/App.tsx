@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { RoutingClient, ROUTING_UNAVAILABLE_MESSAGE } from "./core";
 import {
   BrowserHistorySync,
@@ -2013,7 +2021,10 @@ export function App({ refresh }: AppProps = {}) {
           })
         : null;
   const directionSteps = itineraryDistances(preview?.instructions ?? []);
-  const directionGroups = directionGroupStarts(preview);
+  const directionGroups = useMemo(
+    () => directionGroupStarts(preview),
+    [preview],
+  );
   const shownRecent = library.recent.slice(0, 3),
     share = privateRouteShare(location.href, preview?.distance);
   return (

@@ -10,6 +10,8 @@ export function directionGroupStarts(
   const none = new Map<number, string>();
   if (
     !result ||
+    !Array.isArray(result.segments) ||
+    !Array.isArray(result.instructions) ||
     !Array.isArray(result.accessGaps) ||
     result.accessGaps.length ||
     !result.instructions.length
@@ -20,11 +22,16 @@ export function directionGroupStarts(
     !segments.length ||
     segments.some(
       (s) =>
+        !s ||
+        !Array.isArray(s.points) ||
+        (s.roles !== undefined &&
+          (!Array.isArray(s.roles) ||
+            s.roles.some((role) => typeof role !== "string"))) ||
         !["Access", "Trail"].includes(s.type) ||
         s.points.length < 2 ||
         !s.points.every(isPoint),
     ) ||
-    instructions.some((i) => !isPoint(i.point))
+    instructions.some((i) => !i || !isPoint(i.point))
   )
     return none;
   if (
