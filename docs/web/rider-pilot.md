@@ -1,6 +1,6 @@
 # Voluntary rider feedback
 
-This is preparation for #72, not collected demand evidence or public-launch approval. The current beta remains owner-private. Inviting riders, sending messages or changing its audience requires separate authorization. No analytics, visitor identifier or automatic GPS/history upload is part of this checklist.
+This is preparation for #72, not collected demand evidence. The existing Site is now public at https://constitution-trail-mapper.hooware.chatgpt.site under Jesse’s [October 9 launch decision](public-launch-20261009.md). This checklist does not authorize recruitment or outbound messages. No analytics, visitor identifier or automatic GPS/history upload is part of the feedback flow.
 
 Use the exact authorized release and record its build, data version and origin from Help. Record the browser/device only if the rider chooses to share it. Automated mobile emulation and simulated fixes do not establish physical GPS or outdoor acceptance.
 
