@@ -33,6 +33,7 @@ export type Closure = {
 };
 export type Instruction = {
   text: string;
+  /** Meters since the previous emitted instruction (not cumulative distance from start). */
   distance: number;
   point?: Point;
   maneuver?: string;

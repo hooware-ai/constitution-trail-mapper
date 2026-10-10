@@ -1,0 +1,40 @@
+# Web backlog reconciliation — October 10, 2026
+
+Baseline: verified public v18, application `acc3e3c5e4d73227d4bcb05331f643f991c293ff`, Site source `31e814b81dfab9e92f4cd521a1ae64a16204937b`, [PR124](https://github.com/hooware-ai/constitution-trail-mapper/pull/124). Five exact-head hosted gates and configured subscription Claude review passed. Anonymous verification matched all 454 payload files and provenance, with all 444 data files unchanged, and passed the full rider flow with simulated location. This record reconciles engineering acceptance; it does not claim physical GPS, TalkBack/VoiceOver speech, or physical phone performance. Native features remain frozen.
+
+## Completed engineering tickets
+
+| Issue | Delivered acceptance | Remaining work belongs elsewhere |
+| --- | --- | --- |
+| [#47](https://github.com/hooware-ai/constitution-trail-mapper/issues/47) | Exact approved county composition, versioned production delivery, provenance/source/license notices, fail-closed loading, real-router/closure/gap controls, saved-route revalidation and bounded update/rollback process. Public composition/guidance authorized October 9; see [launch decision](public-launch-20261009.md). Closed as completed engineering. | Physical supported-device download/startup/routing measurements are NOT RUN under #41. Future source execution/refresh activation remains #104/#105/#107. No coverage change. |
+| [#50](https://github.com/hooware-ai/constitution-trail-mapper/issues/50) | Help/privacy/source/build identity, honest chooser coverage and fallbacks, browser-local storage/export disclosure, voluntary minimized feedback and owner-selected project contact. Public artifact/source links, attribution and warnings verified. Closed as completed engineering. | Physical screen-reader/device acceptance remains #41; actual rider/support feedback is #72. Accounts/sync remain deferred #31–#34. |
+| [#108](https://github.com/hooware-ai/constitution-trail-mapper/issues/108) | PR117 completed the specific current-producer reproducibility, durable transition/admission/offline-binding proof and hosted runtime regression gaps. Revalidated by PR124 exact-source replay and Chromium/WebKit runtime gates. Closed as completed bounded regression engineering. | Production issuer/sequence/history/bootstrap/source-policy/endpoint/alert/activation dependencies remain #104/#105/#107; physical acceptance is #41. Default refresh and all source execution/schedules stay disabled. |
+
+## Delivered web behavior within the original mobile redesign
+
+Original Android/iOS acceptance is deferred while native features are frozen. Existing web implementation must not be treated as a missing native implementation, and native/device claims must not be inferred from browser controls.
+
+| Issue | Present web behavior and evidence | Genuine remaining scope |
+| --- | --- | --- |
+| #7 place selection | One chooser contract for Start/Destination/Places; explicit catalog/saved/current-location/map selection; honest unresolved coordinates; cancellation preserves drafts. Existing rider, chooser, browser-history and large-text controls. | Broader geocoder/provider capability needs an approved service/design. Original native provider UI and physical speech remain deferred. |
+| #8 preview | Map-first full route, fit affordance, route/access/repeated-pass/turnaround/closure cues, direction reversal, summary/Start, save/share and retained attribution. Real-router rider/ride-camera/layout controls. | Further layout acceptance may be evaluated from actual viewport evidence; original native screens and physical acceptance deferred. No routing/geometry change implied. |
+| #9 Directions | v17 selects a real maneuver point with one numbered marker and correct map/viewport focus; v18 reopens at the exact route-bound selected step with description and scroll reveal. Recalculation clears stale selection; navigation is read-only. Real-router Chromium/WebKit, short 150% text and four actual county touch controls; anonymous live verification. | Distance semantics/readability, maneuver icons/grouping and landscape itinerary density remain genuine web items. Physical speech remains #41; native UI deferred. See the bounded distance correction below. |
+| #10 ride UI | Full-screen ride camera, prominent next maneuver/distance, exceptional GPS/off-route/paused/complete states, Recenter/Stop and secondary Reverse; foreground/fresh-fix/repeated-pass/credit safeguards. Real-core rider/replay/WebKit/ride-camera controls. | Physical riding/readability/GPS acceptance remains #41/#18; original native redesign deferred. |
+| #12 Explore | Network map, optional basemap, Proposed off, explicit closure/source states, legend/noncolor cues, fit/network action, attribution and data identity. | Contextual route entry from a confirmed Explore pin is genuinely unfinished. Layer-sheet layout may be separately evaluated; no source/eligibility expansion implied. |
+| #13 Updates | Reviewed/non-live status, compact source-linked conditions, uncertainty and Vernon/Phoenix distinction, route-advisory details and retained official links. | Manual authoritative content re-review (#1) and exact initial Vernon evidence (#2) remain; no inferred reopening/geometry or unsolicited Town inquiry. Original native redesign/physical speech deferred. |
+| #16 sharing | Actual image/text preview, explicit private endpoint choice, generation/cancel/failure recovery, preserved result/draft, separate Save and attribution. Existing real-router share/privacy/history controls. | Original Android chooser/process-return acceptance remains native work; physical platform share behavior remains #41. |
+| #17 map-first/Recents | Successful plans open preview without save prompts; separate explicit Saved and browser-local capped/expiring Recents, individual/clear controls, revalidation and draft/result recovery. Existing storage/rider/history/startup ownership controls. | Original KMP/native adapters and physical speech remain deferred. Completed web behavior is not a new implementation task. |
+
+## Next bounded slice: truthful itinerary distances
+
+`TrailRouteTurnInstructionSijko.instructionsFor` emits distance **since the previous instruction**, resetting its accumulator after each emitted maneuver. `WebRoutingBridge.instructionJson` passes that value through unchanged. The core navigation snapshot accumulates those leg distances to resolve route-order positions. The web's original `instruction.distance` label, `mi from start`, incorrectly treats each leg as cumulative.
+
+The permitted presentation correction computes cumulative distance from the emitted legs and shows distance to the next step from the next emitted leg. It preserves instruction text/order/points and all route, closure, admission and navigation behavior; the itinerary remains a static plan, not a live GPS-distance display. A multi-instruction real loop and its reversed itinerary must prove the old label failure, the new totals and accessible descriptions. Existing point-route, selection/restoration, gap, read-only navigation, short large-text, actual county and anonymous artifact/live controls remain required. Invalid distances must not become invented values.
+
+## Held work and authority
+
+- #48: no supported static response-header mechanism or reviewed serving design; seven proposed headers remain absent on v18 anonymous readback. No security configuration or hosting migration.
+- #41/#18: physical phone, GPS, outdoor trace, sunlight/battery and speech observations are NOT RUN. Browser/mobile emulation is distinct.
+- #104/#105/#107: source execution, schedules, authority/issuer/endpoint/alert policies and runtime activation remain unapproved. No paid services/new credentials/outreach are implied.
+- #31–#36: accounts/cloud sync and native adapters remain deferred. #20/#60/#67 and original native redesign acceptance are held by the native freeze.
+- #72/#51: actual voluntary rider demand and future native investment decisions remain with Jesse. Cloud tests are not adoption evidence; no tracking or duplicate overnight notice.
