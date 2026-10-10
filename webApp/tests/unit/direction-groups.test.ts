@@ -47,7 +47,7 @@ test("gaps, deferred boundaries, revisits, missing points and unknown types reta
   r.instructions.splice(1, 1);
   cases.push(r);
   r = route();
-  r.segments[2].points.push(b);
+  r.segments[2].points.splice(1, 0, b);
   cases.push(r);
   r = route();
   delete r.instructions[1].point;
@@ -56,7 +56,7 @@ test("gaps, deferred boundaries, revisits, missing points and unknown types reta
   r.segments[1].type = "Unknown";
   cases.push(r);
   r = route();
-  r.instructions.push({ ...r.instructions[1] });
+  r.instructions.splice(2, 0, { ...r.instructions[1] });
   cases.push(r);
   cases.forEach((r) => assert.equal(directionGroupStarts(r).size, 0));
 });
