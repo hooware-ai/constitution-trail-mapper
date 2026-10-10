@@ -2063,7 +2063,7 @@ dialog::backdrop {
 }
 .explore .workspace {
   flex: 1;
-  min-height: 120px;
+  min-height: 100px;
   height: auto;
 }
 .explore .panel {
@@ -2106,7 +2106,7 @@ dialog::backdrop {
 @media (max-height: 500px) and (min-width: 500px) {
   .explore .workspace {
     display: grid;
-    min-height: 120px;
+    min-height: 100px;
     grid-template-columns: minmax(0, 48%) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "panel map";
