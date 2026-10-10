@@ -55,6 +55,15 @@ test("[engine] preview directions can locate a real maneuver without changing th
     "aria-label",
     `Step ${count}: ${lastText}`,
   );
+  await expect(marker).toBeInViewport();
+  // Check again after rendering settles: mobile focus can restore an old viewport on the next frame.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(marker).toBeInViewport();
   const lastPoint = await page.evaluate(
     (index) => (window as any).__directions[index].point,
     count - 1,
@@ -63,6 +72,19 @@ test("[engine] preview directions can locate a real maneuver without changing th
     "data-center",
     `${lastPoint.latitude.toFixed(4)},${lastPoint.longitude.toFixed(4)}`,
   );
+  // Once located, scrolling is still the user's choice; the reveal must not pull them back to the map.
+  if (
+    await page.evaluate(
+      () => document.documentElement.scrollHeight > window.innerHeight,
+    )
+  ) {
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    await page.keyboard.press("PageDown");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(scrollBefore);
+    await expect(marker).not.toBeInViewport();
+  }
   await page.getByRole("button", { name: "Directions", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Show step 1 on map", exact: true })
@@ -72,6 +94,14 @@ test("[engine] preview directions can locate a real maneuver without changing th
   await expect(marker).toHaveCount(1);
   await expect(marker).toBeVisible();
   await expect(marker).toBeFocused();
+  await expect(marker).toBeInViewport();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(marker).toBeInViewport();
   await expect(marker).toHaveAttribute("aria-label", /^Step 1:/);
   const point = await page.evaluate(
     () => (window as any).__directions[0].point,
