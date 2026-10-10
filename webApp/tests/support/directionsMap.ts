@@ -284,6 +284,24 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
     expect(total - result.instructions.at(-1).distance).toBeGreaterThan(160);
     await page.getByRole("button", { name: "Directions", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Directions" });
+    for (let index = 0; index < result.instructions.length; index++) {
+      const item = dialog.locator("ol li").nth(index);
+      await expect(item.locator("strong")).toHaveText(
+        result.instructions[index].text,
+      );
+      await expect(item.locator("svg.maneuver-icon")).toHaveAttribute(
+        "data-maneuver",
+        result.instructions[index].maneuver,
+      );
+      await expect(item.locator("svg.maneuver-icon")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      await expect(item.locator("svg.maneuver-icon")).toHaveAttribute(
+        "focusable",
+        "false",
+      );
+    }
     await expect(dialog.locator("ol li > span").last()).toHaveText(
       `${(total / 1609.344).toFixed(1)} mi from start · Last step`,
     );
@@ -314,6 +332,60 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
     return result.instructions;
   }
   const before = await checkItinerary();
+  const originalViewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 640, height: 320 });
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  const landscape = page.getByRole("dialog", { name: "Directions" });
+  const geometry = await landscape.evaluate((dialog) => {
+    const bounds = dialog.getBoundingClientRect();
+    const rows = [...dialog.querySelectorAll("ol li")].map((row) =>
+      row.getBoundingClientRect(),
+    );
+    return {
+      width: bounds.width,
+      viewportWidth: innerWidth,
+      inViewport:
+        bounds.left >= 0 &&
+        bounds.right <= innerWidth &&
+        bounds.top >= 0 &&
+        bounds.bottom <= innerHeight,
+      scrollable:
+        /auto|scroll/.test(getComputedStyle(dialog).overflowY) &&
+        dialog.scrollHeight > dialog.clientHeight,
+      horizontalOverflow: dialog.scrollWidth > dialog.clientWidth,
+      fullRows: rows.filter(
+        (row) => row.top >= bounds.top && row.bottom <= bounds.bottom,
+      ).length,
+      nestedScrollers: [...dialog.querySelectorAll("*")].filter((child) => {
+        const style = getComputedStyle(child);
+        return (
+          /auto|scroll/.test(style.overflowY) &&
+          child.scrollHeight > child.clientHeight
+        );
+      }).length,
+    };
+  });
+  expect(geometry.width).toBeGreaterThanOrEqual(geometry.viewportWidth - 25);
+  expect(geometry.inViewport).toBe(true);
+  expect(geometry.scrollable).toBe(true);
+  expect(geometry.horizontalOverflow).toBe(false);
+  expect(geometry.fullRows).toBeGreaterThanOrEqual(2);
+  expect(geometry.nestedScrollers).toBe(0);
+  await landscape
+    .getByRole("button", { name: /^Show step/ })
+    .last()
+    .focus();
+  const lastVisible = await landscape
+    .getByRole("button", { name: /^Show step/ })
+    .last()
+    .evaluate((button) => {
+      const row = button.getBoundingClientRect(),
+        bounds = button.closest("dialog")!.getBoundingClientRect();
+      return row.top >= bounds.top && row.bottom <= bounds.bottom;
+    });
+  expect(lastVisible).toBe(true);
+  await page.getByRole("button", { name: "Close Directions" }).click();
+  await page.setViewportSize(originalViewport);
   const countBefore = await page.evaluate(
     () => (window as any).__itineraryCount,
   );

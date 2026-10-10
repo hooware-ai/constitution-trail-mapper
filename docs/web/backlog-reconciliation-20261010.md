@@ -38,3 +38,9 @@ Original Android/iOS acceptance is deferred while native features are frozen. Ex
 - #104/#105/#107: source execution, schedules, authority/issuer/endpoint/alert policies and runtime activation remain unapproved. No paid services/new credentials/outreach are implied.
 - #31–#36: accounts/cloud sync and native adapters remain deferred. #20/#60/#67 and original native redesign acceptance are held by the native freeze.
 - #72/#51: actual voluntary rider demand and future native investment decisions remain with Jesse. Cloud tests are not adoption evidence; no tracking or duplicate overnight notice.
+
+## Directions legibility candidate
+
+The current #9 candidate adds decorative icons from the shared router maneuver enum; missing or unknown values leave the authoritative instruction text alone. Short landscape Directions uses a wider dialog with less outer whitespace, retaining one scrolling dialog, numbered instructions, all distances and map actions. Real-router controls cover exact metadata, unchanged text/descriptions, at least two complete rows at 640×320, no horizontal overflow or nested scroll area, reversal, selected-step restoration and read-only navigation. Local typecheck, two unknown/direction unit controls, eight Chromium and twelve WebKit controls passed. A local simultaneous output-directory collision was corrected with isolated output, without changing assertions. Exact-head hosted gates, independent subscription review and exact artifact/live verification are still required before release.
+
+Grouping and further density acceptance remain open; no leg categories are inferred. Physical GPS/device/screen-reader speech remain NOT RUN. Native features, county coverage, source activation, runtime defaults, sharing and #48 header holds remain unchanged.
