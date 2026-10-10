@@ -14,6 +14,11 @@ test("unknown or missing maneuver metadata never invents a direction", () => {
 
 test("router turn directions are distinct and decorative", () => {
   for (const value of [
+    "Start",
+    "SlightLeft",
+    "SharpLeft",
+    "SlightRight",
+    "SharpRight",
     "TurnLeft",
     "TurnRight",
     "Continue",
@@ -25,7 +30,14 @@ test("router turn directions are distinct and decorative", () => {
     assert.match(icon, /focusable="false"/);
     assert.doesNotMatch(icon, /aria-label|<title/);
   }
+  // Start intentionally shares the straight-ahead Continue symbol.
   const path = (value: string) => render(value).match(/<path d="([^"]+)"/)?.[1];
+  assert.equal(path("Start"), path("Continue"));
+  for (const side of ["Left", "Right"])
+    assert.equal(
+      new Set([`Slight${side}`, `Turn${side}`, `Sharp${side}`].map(path)).size,
+      3,
+    );
   assert.equal(
     new Set(
       ["TurnLeft", "TurnRight", "Continue", "TurnAround", "Arrive"].map(path),

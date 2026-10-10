@@ -623,21 +623,21 @@ nav button[aria-current="page"] {
   height: 1.25em;
   margin-right: 0.35em;
   vertical-align: middle;
-  color: #123b32;
 }
 @media (min-width: 600px) and (max-height: 480px) {
-  .directions-dialog {
+  .modal.directions-dialog {
     width: min(900px, calc(100% - 24px));
+    max-width: calc(100% - 24px);
     max-height: calc(100dvh - 24px);
     padding: 12px 20px;
   }
-  .directions-dialog .dialog-heading {
+  .modal.directions-dialog .dialog-heading {
     margin-bottom: 4px;
   }
-  .directions-dialog .directions {
+  .modal.directions-dialog .directions {
     margin: 4px 0;
   }
-  .directions-dialog .directions li {
+  .modal.directions-dialog .directions li {
     margin: 8px 0;
   }
 }

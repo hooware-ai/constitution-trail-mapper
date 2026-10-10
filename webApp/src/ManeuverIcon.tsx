@@ -14,7 +14,9 @@ const paths: Record<string, string> = {
 
 export function ManeuverIcon({ maneuver }: { maneuver?: string }) {
   const path =
-    maneuver && Object.hasOwn(paths, maneuver) ? paths[maneuver] : null;
+    maneuver && Object.prototype.hasOwnProperty.call(paths, maneuver)
+      ? paths[maneuver]
+      : null;
   if (!path) return null;
   return (
     <svg
