@@ -1,4 +1,5 @@
 import test from "node:test";
+import { directionGroupStarts } from "../../src/directionGroups";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -377,5 +378,29 @@ test(
     assert.equal(verdict.issues[0].code, "geometry-changed");
     // The unforged route is still current in the same data.
     assert.equal(check(route).status, "current");
+  },
+);
+
+test(
+  "real routed road-to-trail instructions have authoritative web group boundaries",
+  { skip },
+  async () => {
+    const { call, init } = await engine();
+    init(trail(), access("tiger", r1(), r2()));
+    const planned = call({
+      op: "plan",
+      start: { latitude: 40.4975, longitude: -88.956 },
+      destination: finish,
+      proposed: false,
+      now: NOW,
+    });
+    assert.equal(planned.ok, true);
+    assert.deepEqual(planned.accessGaps, []);
+    const before = JSON.stringify(planned.instructions);
+    assert.deepEqual(
+      [...directionGroupStarts(planned).values()],
+      ["Access", "Trail"],
+    );
+    assert.equal(JSON.stringify(planned.instructions), before);
   },
 );

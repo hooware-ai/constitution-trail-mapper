@@ -495,3 +495,121 @@ test("Help on the build WITH road data says what it loads and what its requests 
   await expect(help).toContainText("your position while you ride or reroute");
   await expect(help).toContainText("a saved route's first and last points");
 });
+
+test("Directions groups proven access/trail boundaries while preserving every core step", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    ({ key, values }) => {
+      localStorage.setItem(
+        key,
+        JSON.stringify({ version: 1, saved: [], recent: [], places: values }),
+      );
+      const Original = window.Worker;
+      window.Worker = class extends Original {
+        constructor(...args: ConstructorParameters<typeof Worker>) {
+          super(...args);
+          this.addEventListener("message", ({ data }) => {
+            if (data.result?.instructions)
+              (window as any).__groupingResult = data.result;
+          });
+        }
+      } as typeof Worker;
+    },
+    {
+      key: LIBRARY_KEY,
+      values: [
+        places[0],
+        {
+          ...places[1],
+          label: "Synthetic trail destination",
+          latitude: 40.5,
+          longitude: -88.97,
+        },
+      ],
+    },
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await choose(page, "Start", accessPlaces.start.label);
+  await choose(page, "Destination", "Synthetic trail destination");
+  await findRoute(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  const original = await page.evaluate(() => (window as any).__groupingResult);
+  expect(original.accessGaps).toEqual([]);
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Directions" });
+  await expect(dialog.locator(".direction-group")).toHaveText([
+    "Access",
+    "Trail",
+  ]);
+  expect(await dialog.locator("li strong").allTextContents()).toEqual(
+    original.instructions.map((i: any) => i.text),
+  );
+  await expect(dialog.locator("ol > li")).toHaveCount(
+    original.instructions.length,
+  );
+  const n = original.instructions.length;
+  await dialog
+    .getByRole("button", { name: `Show step ${n} on map`, exact: true })
+    .click();
+  await expect(page.locator(".instruction-marker")).toHaveAttribute(
+    "aria-label",
+    `Step ${n}: ${original.instructions[n - 1].text}`,
+  );
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  await expect(
+    dialog.getByRole("button", { name: `Show step ${n} on map`, exact: true }),
+  ).toBeFocused();
+  await page.setViewportSize({ width: 640, height: 320 });
+  await dialog.evaluate((e) => {
+    e.scrollTop = 0;
+  });
+  const groupedLayout = await dialog.evaluate((e) => {
+    const box = e.getBoundingClientRect();
+    const rows = [...e.querySelectorAll(".direction-row")].map((row) =>
+      row.getBoundingClientRect(),
+    );
+    const headers = [...e.querySelectorAll(".direction-group")].map((h) => ({
+      header: h.getBoundingClientRect().bottom,
+      row: h.nextElementSibling!.getBoundingClientRect().top,
+    }));
+    return {
+      fullRows: rows.filter((r) => r.top >= box.top && r.bottom <= box.bottom)
+        .length,
+      headers,
+    };
+  });
+  expect(groupedLayout.fullRows).toBeGreaterThanOrEqual(3);
+  groupedLayout.headers.forEach((h) =>
+    expect(h.header).toBeLessThanOrEqual(h.row),
+  );
+  await page.screenshot({
+    path:
+      process.env.TRAIL_GROUPING_SCREENSHOT ??
+      test.info().outputPath("grouped-directions.png"),
+  });
+  await page.evaluate(() => (document.documentElement.style.fontSize = "24px"));
+  const overflow = await dialog.evaluate(
+    (e) => e.scrollWidth > e.clientWidth + 1,
+  );
+  expect(overflow).toBe(false);
+  const sizes = await dialog
+    .locator(".direction-row button")
+    .evaluateAll((bs) =>
+      bs.map((b) => ({
+        w: b.getBoundingClientRect().width,
+        h: b.getBoundingClientRect().height,
+      })),
+    );
+  sizes.forEach((s) => {
+    expect(s.w).toBeGreaterThanOrEqual(44);
+    expect(s.h).toBeGreaterThanOrEqual(44);
+  });
+  await expect(dialog.locator(".direction-group")).toHaveText([
+    "Access",
+    "Trail",
+  ]);
+});
