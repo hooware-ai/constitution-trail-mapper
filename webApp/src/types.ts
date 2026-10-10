@@ -99,6 +99,8 @@ export const routeNeedsRecalculation = (result: {
   result.network?.status === "unverifiable";
 export type Update = {
   id: string;
+  /** Authoritative published guide category; unknown values remain visible. */
+  category?: string;
   title: string;
   details: string;
   status: string;
