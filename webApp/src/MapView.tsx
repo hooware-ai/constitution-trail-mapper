@@ -458,13 +458,41 @@ export function MapView({
     element?.setAttribute("tabindex", "-1");
     element?.setAttribute("aria-label", `Step ${number}: ${instruction.text}`);
     m.setView(xy(instruction.point), 17, { animate: false });
+    const reveal = () =>
+      root.current?.parentElement?.scrollIntoView({ block: "nearest" });
+    const cancelReveal = () => {
+      window.removeEventListener("scrollend", settle);
+      window.removeEventListener("pointerdown", cancelReveal);
+      window.removeEventListener("wheel", cancelReveal);
+      window.removeEventListener("keydown", cancelReveal);
+    };
+    const settle = () => {
+      if (document.activeElement !== element) {
+        cancelReveal();
+        return;
+      }
+      const box = element?.getBoundingClientRect();
+      if (box && (box.top < 0 || box.bottom > window.innerHeight)) {
+        cancelReveal();
+        reveal();
+      }
+    };
     // The dialog's close restores its opener first; focus the located maneuver afterwards.
     const frame = requestAnimationFrame(() => {
-      root.current?.parentElement?.scrollIntoView({ block: "nearest" });
+      const scrollBefore = window.scrollY;
+      reveal();
       element?.focus({ preventScroll: true });
+      // Mobile Chromium can restore the old viewport after this focus. Reveal once more when that scroll settles.
+      if (window.scrollY !== scrollBefore) {
+        window.addEventListener("scrollend", settle);
+        window.addEventListener("pointerdown", cancelReveal, { passive: true });
+        window.addEventListener("wheel", cancelReveal, { passive: true });
+        window.addEventListener("keydown", cancelReveal);
+      }
     });
     return () => {
       cancelAnimationFrame(frame);
+      cancelReveal();
       marker.remove();
     };
   }, [instructionFocus, route]);
