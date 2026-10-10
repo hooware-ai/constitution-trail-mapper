@@ -213,11 +213,9 @@ test("verified additions have a distinct noncolor pattern matching the map key",
     const original = CanvasRenderingContext2D.prototype.stroke;
     const records: number[][] = [];
     Object.assign(window, { verifiedStrokeRecords: records });
-    CanvasRenderingContext2D.prototype.stroke = function (
-      ...args: Parameters<typeof original>
-    ) {
+    CanvasRenderingContext2D.prototype.stroke = function (path?: Path2D) {
       if (this.strokeStyle === "#b01767") records.push(this.getLineDash());
-      return original.apply(this, args);
+      return Reflect.apply(original, this, path ? [path] : []);
     };
   });
   await page.goto("/");

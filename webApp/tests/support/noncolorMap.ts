@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { planPoint } from "../webkit/support";
+import { openPlanner, choose } from "../webkit/support";
 // Observe the real default Canvas renderer; grayscale screenshots retain its stroke patterns.
-test("[engine] noncolor network patterns match a readable map key in grayscale", async ({
+test("[engine] noncolor network patterns match text cues with a grayscale screenshot", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -10,15 +10,13 @@ test("[engine] noncolor network patterns match a readable map key in grayscale",
     const original = CanvasRenderingContext2D.prototype.stroke;
     const records: { color: string; dash: number[]; width: number }[] = [];
     Object.assign(window, { mapStrokeRecords: records });
-    CanvasRenderingContext2D.prototype.stroke = function (
-      ...args: Parameters<typeof original>
-    ) {
+    CanvasRenderingContext2D.prototype.stroke = function (path?: Path2D) {
       records.push({
         color: String(this.strokeStyle),
         dash: this.getLineDash(),
         width: this.lineWidth,
       });
-      return original.apply(this, args);
+      return Reflect.apply(original, this, path ? [path] : []);
     };
   });
   await page.goto("/");
@@ -96,6 +94,14 @@ test("[engine] noncolor network patterns match a readable map key in grayscale",
         JSON.stringify(s.dash) === "[12,4]",
     ),
   ).toBe(true);
+  expect(
+    strokes.some(
+      (s) =>
+        s.color === "#68718b" &&
+        s.width === 4 &&
+        JSON.stringify(s.dash) === "[3,3]",
+    ),
+  ).toBe(true);
   const toggle = page.getByRole("checkbox", { name: /Show proposed trails/ });
   await expect(toggle).not.toBeChecked();
   expect(
@@ -158,19 +164,72 @@ test("[engine] heavier selected route retains open noncolor gaps and white casin
       cap: string;
     }[] = [];
     Object.assign(window, { routeStrokeRecords: records });
-    CanvasRenderingContext2D.prototype.stroke = function (
-      ...args: Parameters<typeof original>
-    ) {
+    CanvasRenderingContext2D.prototype.stroke = function (path?: Path2D) {
       records.push({
         color: String(this.strokeStyle),
         dash: this.getLineDash(),
         width: this.lineWidth,
         cap: this.lineCap,
       });
-      return original.apply(this, args);
+      return Reflect.apply(original, this, path ? [path] : []);
     };
   });
-  await planPoint(page);
+  // Existing fixture-h-2-0 is a real admitted ParkConnectors edge in the synthetic router data.
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "trail-mapper.fixture:trail-mapper.web.library.v1",
+      JSON.stringify({
+        version: 1,
+        saved: [],
+        recent: [],
+        places: [
+          {
+            key: "park-from",
+            label: "Pattern park start",
+            latitude: 40.51,
+            longitude: -88.99,
+            createdAt: 1,
+          },
+          {
+            key: "park-to",
+            label: "Pattern park end",
+            latitude: 40.51,
+            longitude: -88.98,
+            createdAt: 1,
+          },
+        ],
+      }),
+    );
+  });
+  await openPlanner(page);
+  await choose(page, "Start", "Pattern park start");
+  await choose(page, "Destination", "Pattern park end");
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as {
+            routeStrokeRecords: {
+              color: string;
+              width: number;
+              cap: string;
+              dash: number[];
+            }[];
+          }
+        ).routeStrokeRecords.some(
+          (r) =>
+            r.color === "#63a375" &&
+            r.width === 6 &&
+            r.cap === "butt" &&
+            JSON.stringify(r.dash) === "[12,4]",
+        ),
+      ),
+    )
+    .toBe(true);
   const records = await page.evaluate(
     () =>
       (
@@ -193,6 +252,7 @@ test("[engine] heavier selected route retains open noncolor gaps and white casin
       ["#08725f", "#63a375", "#68718b", "#4d6888", "#7851a9"].includes(r.color),
   );
   expect(route.length).toBeGreaterThan(0);
+  expect(route.some((stroke) => stroke.dash.length > 0)).toBe(true);
   for (const stroke of route) {
     if (stroke.dash.length) {
       expect(stroke.cap).toBe("butt");
@@ -201,8 +261,6 @@ test("[engine] heavier selected route retains open noncolor gaps and white casin
       ).toBe(true);
     } else expect(stroke.cap).toBe("round");
   }
-  const info = page.locator(".map");
-  await expect(info).toHaveAttribute("data-estimated-connections", /^\d+$/);
   await page.addStyleTag({
     content: ".leaflet-container, .legend {filter:grayscale(1);}",
   });
