@@ -86,6 +86,20 @@ test("[engine] preview directions can locate a real maneuver without changing th
     await expect(marker).not.toBeInViewport();
   }
   await page.getByRole("button", { name: "Directions", exact: true }).click();
+  const restoredStep = dialog.getByRole("button", {
+    name: `Show step ${count} on map`,
+    exact: true,
+  });
+  await expect(restoredStep).toBeFocused();
+  await expect(restoredStep).toBeInViewport();
+  const lastDistance = await dialog.locator("ol li span").last().innerText();
+  await expect(restoredStep).toHaveAccessibleDescription(
+    `${lastText} ${lastDistance}`,
+  );
+  await expect(page.locator(".map")).toHaveAttribute(
+    "data-center",
+    `${lastPoint.latitude.toFixed(4)},${lastPoint.longitude.toFixed(4)}`,
+  );
   await dialog
     .getByRole("button", { name: "Show step 1 on map", exact: true })
     .focus();
@@ -140,6 +154,9 @@ test("[engine] preview directions can locate a real maneuver without changing th
   ).toBeVisible();
   await expect(marker).toHaveCount(0);
   await page.getByRole("button", { name: "Directions", exact: true }).click();
+  await expect(
+    dialog.getByRole("button", { name: "Close Directions" }),
+  ).toBeFocused();
   await page
     .getByRole("button", { name: "Show step 1 on map", exact: true })
     .click();
@@ -178,4 +195,45 @@ test("[engine] entering navigation clears preview selection and leaves direction
     .getByRole("button", { name: "Stop navigation", exact: true })
     .click();
   expect(errors).toEqual([]);
+});
+
+test("[engine] short large-text directions reveal the selected maneuver on return", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 640, height: 320 });
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      document.documentElement.style.fontSize = "150%";
+    });
+  });
+  await planPoint(page);
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Directions" });
+  const steps = dialog.getByRole("button", { name: /^Show step/ });
+  const count = await steps.count();
+  expect(count).toBeGreaterThan(1);
+  await steps.last().click();
+  const center = await page.locator(".map").getAttribute("data-center");
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  await expect(steps.last()).toBeFocused();
+  // A button can intersect the viewport while clipped by the scrollable dialog.
+  const geometry = await steps.last().evaluate((button) => {
+    const modal = button.closest("dialog")!;
+    const b = button.getBoundingClientRect(),
+      d = modal.getBoundingClientRect();
+    return {
+      top: b.top,
+      bottom: b.bottom,
+      dialogTop: d.top,
+      dialogBottom: d.bottom,
+      scrollable: modal.scrollHeight > modal.clientHeight,
+    };
+  });
+  expect(geometry.scrollable).toBe(true);
+  expect(geometry.top).toBeGreaterThanOrEqual(geometry.dialogTop);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.dialogBottom);
+  await expect(page.locator(".map")).toHaveAttribute("data-center", center!);
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator(".map")).toHaveAttribute("data-center", center!);
 });

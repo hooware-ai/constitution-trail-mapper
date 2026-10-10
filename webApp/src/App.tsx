@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { RoutingClient, ROUTING_UNAVAILABLE_MESSAGE } from "./core";
 import {
   BrowserHistorySync,
@@ -291,6 +291,25 @@ export function App({ refresh }: AppProps = {}) {
   useEffect(() => {
     if (screen !== "preview") setInstructionFocus(null);
   }, [screen]);
+  const directionsRef = useRef<HTMLOListElement>(null);
+  const directionsId = useId();
+  useEffect(() => {
+    if (
+      popup !== "directions" ||
+      screen !== "preview" ||
+      !preview ||
+      instructionFocus?.route !== preview
+    )
+      return;
+    // The dialog opens first; then restore the selected route's maneuver and
+    // let normal focus scrolling reveal it within the itinerary.
+    const frame = requestAnimationFrame(() => {
+      directionsRef.current?.children[instructionFocus.index]
+        ?.querySelector<HTMLButtonElement>("button")
+        ?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [popup, screen, preview, instructionFocus]);
   const [locationRequest, setLocationRequest] = useState<{
     target: "start" | "destination";
     phase: "waiting" | "failure";
@@ -3158,14 +3177,19 @@ export function App({ refresh }: AppProps = {}) {
       {popup === "directions" && (
         <Modal title="Directions" onClose={() => setPopup(null)}>
           {preview?.instructions.length ? (
-            <ol className="directions">
+            <ol className="directions" ref={directionsRef}>
               {preview.instructions.map((instruction, index) => (
                 <li key={index}>
-                  <strong>{instruction.text}</strong>
-                  <span>{miles(instruction.distance)} mi from start</span>
+                  <strong id={`${directionsId}-step-${index}`}>
+                    {instruction.text}
+                  </strong>
+                  <span id={`${directionsId}-distance-${index}`}>
+                    {miles(instruction.distance)} mi from start
+                  </span>
                   {screen === "preview" && instruction.point && (
                     <button
                       type="button"
+                      aria-describedby={`${directionsId}-step-${index} ${directionsId}-distance-${index}`}
                       onClick={() => {
                         setInstructionFocus({ route: preview, index });
                         setGapFocus(null);
