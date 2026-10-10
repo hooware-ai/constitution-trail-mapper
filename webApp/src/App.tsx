@@ -427,6 +427,7 @@ export function App({ refresh }: AppProps = {}) {
       setStorageError(
         "The previous screen could not be recovered. Its browser data has been preserved.",
       );
+    const bootOperation = operation.current;
     client
       .call<Network>({ op: "boot", local })
       .then(async (data) => {
@@ -527,6 +528,9 @@ export function App({ refresh }: AppProps = {}) {
           setStorageError(
             "The previous ride could not be recovered from this browser.",
           );
+        // Home/Back can be chosen before the worker is ready. That intent owns the screen;
+        // keep stored rides intact, but never resume one over the rider's newer choice.
+        if (operation.current !== bootOperation) return;
         if (restored.state) {
           const token = ++operation.current;
           const ride = restored.state;
@@ -724,6 +728,13 @@ export function App({ refresh }: AppProps = {}) {
               "Your ride is still active. Use Stop navigation to end it.",
           });
         } else if (action.type === "stay") {
+          // Back to Home is still a choice when startup has not restored a screen yet.
+          if (
+            direction === "back" &&
+            target.screen === "plan" &&
+            popContext.current.screen === "plan"
+          )
+            ++operation.current;
           sync.replace(popContext.current.screen);
         } else if (action.screen !== popContext.current.screen) {
           fromPop.current = true;
