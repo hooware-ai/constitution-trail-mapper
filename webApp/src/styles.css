@@ -604,6 +604,24 @@ nav button[aria-current="page"] {
 .directions li {
   margin: 12px 0;
 }
+.directions li > button {
+  margin-top: 6px;
+}
+.instruction-marker {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #08725f;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #123b32;
+}
+.instruction-marker:focus {
+  outline: 3px solid #111;
+  outline-offset: 5px;
+}
 .directions small {
   display: block;
 }
