@@ -284,6 +284,18 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
     expect(total - result.instructions.at(-1).distance).toBeGreaterThan(160);
     await page.getByRole("button", { name: "Directions", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Directions" });
+    for (let index = 0; index < result.instructions.length; index++) {
+      const item = dialog.locator("ol li").nth(index);
+      await expect(item.locator("strong")).toHaveText(
+        result.instructions[index].text,
+      );
+      await expect(item.locator("svg")).toHaveAttribute(
+        "data-maneuver",
+        result.instructions[index].maneuver,
+      );
+      await expect(item.locator("svg")).toHaveAttribute("aria-hidden", "true");
+      await expect(item.locator("svg")).toHaveAttribute("focusable", "false");
+    }
     await expect(dialog.locator("ol li > span").last()).toHaveText(
       `${(total / 1609.344).toFixed(1)} mi from start · Last step`,
     );
@@ -314,6 +326,34 @@ test("[engine] itinerary distances follow real loop instruction legs and regener
     return result.instructions;
   }
   const before = await checkItinerary();
+  await page.setViewportSize({ width: 640, height: 320 });
+  await page.getByRole("button", { name: "Directions", exact: true }).click();
+  const landscape = page.getByRole("dialog", { name: "Directions" });
+  const geometry = await landscape.evaluate((dialog) => {
+    const bounds = dialog.getBoundingClientRect();
+    const rows = [...dialog.querySelectorAll("ol li")].map((row) =>
+      row.getBoundingClientRect(),
+    );
+    return {
+      width: bounds.width,
+      horizontalOverflow: dialog.scrollWidth > dialog.clientWidth,
+      fullRows: rows.filter(
+        (row) => row.top >= bounds.top && row.bottom <= bounds.bottom,
+      ).length,
+      nestedScrollers: [...dialog.querySelectorAll("*")].filter((child) => {
+        const style = getComputedStyle(child);
+        return (
+          /auto|scroll/.test(style.overflowY) &&
+          child.scrollHeight > child.clientHeight
+        );
+      }).length,
+    };
+  });
+  expect(geometry.width).toBeGreaterThan(600);
+  expect(geometry.horizontalOverflow).toBe(false);
+  expect(geometry.fullRows).toBeGreaterThanOrEqual(2);
+  expect(geometry.nestedScrollers).toBe(0);
+  await page.getByRole("button", { name: "Close Directions" }).click();
   const countBefore = await page.evaluate(
     () => (window as any).__itineraryCount,
   );

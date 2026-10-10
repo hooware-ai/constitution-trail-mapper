@@ -26,6 +26,7 @@ export function Modal({
   onClose,
   notice,
   noticeInChildren = false,
+  className,
 }: {
   title: string;
   children: ReactNode;
@@ -34,6 +35,7 @@ export function Modal({
   notice?: DialogNotice | null;
   /** Long forms may place their unique live regions beside the relevant action/recovery control. */
   noticeInChildren?: boolean;
+  className?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     close = useRef(onClose),
@@ -58,7 +60,7 @@ export function Modal({
   return (
     <dialog
       ref={dialog}
-      className="modal"
+      className={["modal", className].filter(Boolean).join(" ")}
       aria-labelledby={id}
       onClick={(e) => {
         if (e.target === dialog.current) onClose();

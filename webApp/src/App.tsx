@@ -7,6 +7,7 @@ import {
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
+import { ManeuverIcon } from "./ManeuverIcon";
 import { DataSources } from "./DataSources";
 import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
@@ -3259,12 +3260,17 @@ export function App({ refresh }: AppProps = {}) {
         />
       )}
       {popup === "directions" && (
-        <Modal title="Directions" onClose={() => setPopup(null)}>
+        <Modal
+          title="Directions"
+          className="directions-dialog"
+          onClose={() => setPopup(null)}
+        >
           {preview?.instructions.length ? (
             <ol className="directions" ref={directionsRef}>
               {preview.instructions.map((instruction, index) => (
                 <li key={index}>
                   <strong id={`${directionsId}-step-${index}`}>
+                    <ManeuverIcon maneuver={instruction.maneuver} />
                     {instruction.text}
                   </strong>
                   <span id={`${directionsId}-distance-${index}`}>
