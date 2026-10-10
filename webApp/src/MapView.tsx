@@ -459,21 +459,23 @@ export function MapView({
     element?.setAttribute("aria-label", `Step ${number}: ${instruction.text}`);
     m.setView(xy(instruction.point), 17, { animate: false });
     const reveal = () =>
-      root.current?.parentElement?.scrollIntoView({ block: "nearest" });
+      root.current?.parentElement?.scrollIntoView({
+        block: "nearest",
+        behavior: "instant",
+      });
+    let revealedY = 0;
     const cancelReveal = () => {
       window.removeEventListener("scrollend", settle);
-      window.removeEventListener("pointerdown", cancelReveal);
-      window.removeEventListener("wheel", cancelReveal);
-      window.removeEventListener("keydown", cancelReveal);
+      window.removeEventListener("pointerdown", cancelReveal, true);
+      window.removeEventListener("wheel", cancelReveal, true);
+      window.removeEventListener("keydown", cancelReveal, true);
     };
     const settle = () => {
-      if (document.activeElement !== element) {
-        cancelReveal();
-        return;
-      }
+      if (window.scrollY === revealedY) return;
+      cancelReveal();
+      if (document.activeElement !== element) return;
       const box = element?.getBoundingClientRect();
       if (box && (box.top < 0 || box.bottom > window.innerHeight)) {
-        cancelReveal();
         reveal();
       }
     };
@@ -481,13 +483,20 @@ export function MapView({
     const frame = requestAnimationFrame(() => {
       const scrollBefore = window.scrollY;
       reveal();
+      revealedY = window.scrollY;
       element?.focus({ preventScroll: true });
       // Mobile Chromium can restore the old viewport after this focus. Reveal once more when that scroll settles.
-      if (window.scrollY !== scrollBefore) {
+      if (revealedY !== scrollBefore) {
         window.addEventListener("scrollend", settle);
-        window.addEventListener("pointerdown", cancelReveal, { passive: true });
-        window.addEventListener("wheel", cancelReveal, { passive: true });
-        window.addEventListener("keydown", cancelReveal);
+        window.addEventListener("pointerdown", cancelReveal, {
+          passive: true,
+          capture: true,
+        });
+        window.addEventListener("wheel", cancelReveal, {
+          passive: true,
+          capture: true,
+        });
+        window.addEventListener("keydown", cancelReveal, { capture: true });
       }
     });
     return () => {

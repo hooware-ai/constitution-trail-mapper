@@ -56,6 +56,14 @@ test("[engine] preview directions can locate a real maneuver without changing th
     `Step ${count}: ${lastText}`,
   );
   await expect(marker).toBeInViewport();
+  // Check again after rendering settles: mobile focus can restore an old viewport on the next frame.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(marker).toBeInViewport();
   const lastPoint = await page.evaluate(
     (index) => (window as any).__directions[index].point,
     count - 1,
@@ -86,6 +94,13 @@ test("[engine] preview directions can locate a real maneuver without changing th
   await expect(marker).toHaveCount(1);
   await expect(marker).toBeVisible();
   await expect(marker).toBeFocused();
+  await expect(marker).toBeInViewport();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   await expect(marker).toBeInViewport();
   await expect(marker).toHaveAttribute("aria-label", /^Step 1:/);
   const point = await page.evaluate(
