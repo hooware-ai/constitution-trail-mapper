@@ -3139,8 +3139,14 @@ export function App({ refresh }: AppProps = {}) {
               >
                 Choose a ride point
               </button>
+              <p className="caption" id="explore-layer-state">
+                Closure areas {showClosures ? "shown" : "hidden"} · Proposed
+                trails {draft.proposed ? "shown" : "hidden"}
+              </p>
               <details className="explore-layers">
-                <summary>Layers and map key</summary>
+                <summary aria-describedby="explore-layer-state">
+                  Layers and map key
+                </summary>
                 <ProposedChoice
                   network={network}
                   checked={draft.proposed}
@@ -3154,14 +3160,7 @@ export function App({ refresh }: AppProps = {}) {
                     checked={showClosures}
                     onChange={(e) => setShowClosures(e.target.checked)}
                   />
-                  <span>
-                    Reported closure areas
-                    <small>
-                      Dashed amber lines are approximate work corridors, not
-                      exact closure limits. Tap a marker for the official
-                      notice.
-                    </small>
-                  </span>
+                  <span>Reported closure areas</span>
                 </label>
                 <Legend
                   verified={network.features.some((f) =>
@@ -3169,6 +3168,10 @@ export function App({ refresh }: AppProps = {}) {
                   )}
                 />
               </details>
+              <p className="caption explore-closure-caveat">
+                Dashed amber lines are approximate work corridors, not exact
+                closure limits. Tap a marker for the official notice.
+              </p>
               <div className="actions">
                 <button onClick={() => setFitSignal((n) => n + 1)}>
                   Show all trails

@@ -39,13 +39,26 @@ for (const [mode, width, height, fontSize] of [
           () => document.documentElement.scrollWidth <= innerWidth + 1,
         ),
       ).toBe(true);
+      expect(
+        await page
+          .locator(".panel")
+          .evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
+      ).toBe(true);
+      expect(
+        await page.evaluate(() => document.scrollingElement!.scrollTop),
+      ).toBe(0);
     };
     await expect(page.locator(".explore-layers")).not.toHaveAttribute(
       "open",
       "",
     );
+    await expect(page.getByText(/approximate work corridors/)).toBeVisible();
+    await expect(summary).toHaveAccessibleDescription(
+      "Closure areas shown · Proposed trails hidden",
+    );
     await summary.focus();
     await summary.press("Enter");
+    await expect(page.locator(".explore-layers")).toHaveAttribute("open", "");
     const summaryBox = await summary.boundingBox();
     expect(summaryBox!.height).toBeGreaterThanOrEqual(44);
     const closures = page.getByRole("checkbox", {
@@ -82,8 +95,17 @@ for (const [mode, width, height, fontSize] of [
     }
     await summary.focus();
     await summary.press("Space");
+    await expect(page.locator(".explore-layers")).not.toHaveAttribute(
+      "open",
+      "",
+    );
+    await expect(summary).toHaveAccessibleDescription(
+      "Closure areas hidden · Proposed trails shown",
+    );
+    await expect(page.getByText(/approximate work corridors/)).toBeVisible();
     await expect(summary).toBeFocused();
     await summary.press("Enter");
+    await expect(page.locator(".explore-layers")).toHaveAttribute("open", "");
     await expect(closures).not.toBeChecked();
     await expect(proposed).toBeChecked();
     await page
@@ -111,9 +133,54 @@ for (const [mode, width, height, fontSize] of [
       page.getByRole("heading", { name: "Trails around you" }),
     ).toBeFocused();
     await summary.click();
+    await expect(page.locator(".explore-layers")).toHaveAttribute("open", "");
     await expect(closures).not.toBeChecked();
     await expect(proposed).toBeChecked();
     await checkMap();
     expect(errors).toEqual([]);
+  });
+}
+
+for (const [width, height, fontSize] of [
+  [320, 256, "100%"],
+  [640, 320, "200%"],
+] as const) {
+  test(`[engine] Explore controls remain reachable at ${width}x${height} with ${fontSize} text`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Explore", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Trails around you" }),
+    ).toBeVisible();
+    await page.evaluate((size) => {
+      document.documentElement.style.fontSize = size;
+    }, fontSize);
+    const summary = page.getByText("Layers and map key", { exact: true });
+    await summary.focus();
+    await summary.press("Enter");
+    const closure = page.getByRole("checkbox", {
+      name: /Reported closure areas/,
+    });
+    await closure.uncheck();
+    await expect(closure).not.toBeChecked();
+    expect(
+      await page.locator(".panel").evaluate((e) => e.clientHeight),
+    ).toBeGreaterThanOrEqual(100);
+    expect(
+      await page
+        .locator(".panel")
+        .evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
+    ).toBe(true);
+    await page
+      .getByRole("button", { name: "Plan a ride", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Go somewhere", exact: true }),
+    ).toBeVisible();
   });
 }

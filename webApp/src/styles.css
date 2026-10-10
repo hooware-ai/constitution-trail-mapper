@@ -2051,6 +2051,7 @@ dialog::backdrop {
 
 /* Explore retains the map while its controls and source metadata scroll independently. */
 .app.explore {
+  height: 100vh;
   height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -2062,7 +2063,7 @@ dialog::backdrop {
 }
 .explore .workspace {
   flex: 1;
-  min-height: 0;
+  min-height: 120px;
   height: auto;
 }
 .explore .panel {
@@ -2090,7 +2091,8 @@ dialog::backdrop {
   .explore .workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(140px, 34%) minmax(0, 1fr);
+    min-height: 360px;
+    grid-template-rows: minmax(240px, 34%) minmax(120px, 1fr);
     grid-template-areas: "map" "panel";
   }
   .explore .map-wrap {
@@ -2104,6 +2106,7 @@ dialog::backdrop {
 @media (max-height: 500px) and (min-width: 500px) {
   .explore .workspace {
     display: grid;
+    min-height: 120px;
     grid-template-columns: minmax(0, 48%) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "panel map";
@@ -2113,4 +2116,12 @@ dialog::backdrop {
     margin-top: 0;
     border-radius: 0;
   }
+}
+
+.explore .map-error {
+  top: auto;
+  bottom: 26px;
+  max-height: calc(100% - 52px);
+  max-width: min(250px, calc(100% - 76px));
+  overflow: auto;
 }
