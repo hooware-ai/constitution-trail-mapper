@@ -134,6 +134,7 @@ test("Explore marks the reviewed additions in the map key, as native does", asyn
     .getByRole("navigation")
     .getByRole("button", { name: "Explore", exact: true })
     .click();
+  await page.getByText("Layers and map key", { exact: true }).click();
   await expect(
     page.getByLabel("Map key").getByText("Verified addition"),
   ).toBeVisible();
