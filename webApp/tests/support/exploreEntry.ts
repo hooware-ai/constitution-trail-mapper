@@ -213,26 +213,113 @@ test("[engine] Explore selection is accessible at large text and keeps empty end
   ).not.toBeChecked();
 });
 
-test("[engine] a real map-point response arriving after Cancel cannot replace a newer confirmed pin", async ({
+for (const cancel of ["button", "browser"] as const)
+  test(`[engine] a real map-point response arriving after ${cancel} cancellation cannot replace a newer confirmed pin`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const Original = window.Worker;
+      let heldId: number | undefined;
+      window.Worker = class extends Original {
+        constructor(...args: ConstructorParameters<typeof Worker>) {
+          super(...args);
+          this.addEventListener("message", ({ data }) => {
+            if (data.id === heldId) (window as any).__oldPoint = data.result;
+            else if (
+              data.result?.point &&
+              typeof data.result?.label === "string"
+            )
+              (window as any).__newPoint = data.result;
+          });
+        }
+        postMessage(message: any) {
+          if (message.request?.op === "mapPoint" && heldId === undefined) {
+            heldId = message.id;
+            (window as any).__releaseOldPick = () => super.postMessage(message);
+          } else super.postMessage(message);
+        }
+      } as typeof Worker;
+    });
+    await page.goto("/");
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Explore", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Choose a ride point", exact: true })
+      .click();
+    await page
+      .getByRole("region", { name: /Interactive map/ })
+      .press("ArrowLeft");
+    await page
+      .getByRole("button", { name: "Use map center", exact: true })
+      .click();
+    await expect(
+      page.getByText("Checking map point…", { exact: true }),
+    ).toBeVisible();
+    if (cancel === "browser") await page.goBack();
+    else
+      await page
+        .getByRole("button", { name: "Cancel map selection", exact: true })
+        .click();
+    await expect(
+      page.getByRole("heading", { name: "Trails around you", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Choose a ride point", exact: true })
+      .click();
+    await page
+      .getByRole("region", { name: /Interactive map/ })
+      .press("ArrowRight");
+    await page
+      .getByRole("button", { name: "Use map center", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Plan to here", exact: true }),
+    ).toBeVisible();
+    const newest = await page.evaluate(() => (window as any).__newPoint);
+    await page.evaluate(() => (window as any).__releaseOldPick());
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__oldPoint != null))
+      .toBe(true);
+    const older = await page.evaluate(() => (window as any).__oldPoint);
+    expect(older.point).not.toEqual(newest.point);
+    await page
+      .getByRole("button", { name: "Plan to here", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Find route", exact: true }),
+    ).toBeDisabled();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (k) =>
+            JSON.parse(localStorage.getItem(k) ?? "null")?.draft?.destination,
+          key,
+        ),
+      )
+      .toEqual({ ...newest.point, label: newest.label });
+  });
+
+test("[engine] an invalid real-core pick is announced and a subsequent valid pick recovers", async ({
   page,
 }) => {
   await page.addInitScript(() => {
     const Original = window.Worker;
-    let heldId: number | undefined;
+    let invalid = true;
     window.Worker = class extends Original {
-      constructor(...args: ConstructorParameters<typeof Worker>) {
-        super(...args);
-        this.addEventListener("message", ({ data }) => {
-          if (data.id === heldId) (window as any).__oldReceived = true;
-          else if (data.result?.point && typeof data.result?.label === "string")
-            (window as any).__newPoint = data.result;
-        });
-      }
       postMessage(message: any) {
-        if (message.request?.op === "mapPoint" && heldId === undefined) {
-          heldId = message.id;
-          (window as any).__releaseOldPick = () => super.postMessage(message);
-        } else super.postMessage(message);
+        if (invalid && message.request?.op === "mapPoint") {
+          invalid = false;
+          message = {
+            ...message,
+            request: {
+              ...message.request,
+              point: { latitude: 91, longitude: 0 },
+            },
+          };
+        }
+        super.postMessage(message);
       }
     } as typeof Worker;
   });
@@ -244,46 +331,78 @@ test("[engine] a real map-point response arriving after Cancel cannot replace a 
   await page
     .getByRole("button", { name: "Choose a ride point", exact: true })
     .click();
-  await page
-    .getByRole("region", { name: /Interactive map/ })
-    .press("ArrowLeft");
+  const status = page.locator('#route-controls p[role="status"]');
+  await expect(status).toHaveText("No point selected.");
+  await expect(status).toHaveAttribute("aria-live", "polite");
+  await expect(status).toHaveAttribute("aria-atomic", "true");
+  await status.evaluate((element) =>
+    element.setAttribute("data-test-live-region", "original"),
+  );
   await page
     .getByRole("button", { name: "Use map center", exact: true })
     .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Invalid latitude or longitude.",
+  );
+  await expect(page.locator(".explore-point-marker")).toHaveCount(0);
   await expect(
-    page.getByText("Checking map point…", { exact: true }),
-  ).toBeVisible();
+    page.getByRole("button", { name: "Plan from here", exact: true }),
+  ).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Cancel map selection", exact: true })
+    .getByRole("button", { name: "Use map center", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(status).toContainText("Selected:");
+  await expect(status).toHaveAttribute("data-test-live-region", "original");
+  await expect(page.locator(".explore-point-marker")).toHaveAttribute(
+    "aria-label",
+    "Selected ride point",
+  );
+});
+
+test("[engine] Explore explicitly changes a loop draft into point planning while retaining its choices", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "8 mi", exact: true }).click();
+  await page.getByRole("checkbox", { name: /Include proposed trails/ }).check();
+  await page
+    .getByRole("button", { name: "Trail Mapper home", exact: true })
+    .click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Explore", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Choose a ride point", exact: true })
     .click();
   await page
-    .getByRole("region", { name: /Interactive map/ })
-    .press("ArrowRight");
-  await page
     .getByRole("button", { name: "Use map center", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Plan to here", exact: true }),
+    page.getByText(/Opens a start-to-destination ride/),
   ).toBeVisible();
-  const newest = await page.evaluate(() => (window as any).__newPoint);
-  await page.evaluate(() => (window as any).__releaseOldPick());
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__oldReceived))
-    .toBe(true);
   await page.getByRole("button", { name: "Plan to here", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Find route", exact: true }),
-  ).toBeDisabled();
+    page.getByRole("heading", { name: "Go somewhere", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
+    "Review trailhead · East",
+  );
+  await expect(
+    page.getByRole("checkbox", { name: /Include proposed trails/ }),
+  ).toBeChecked();
   await expect
     .poll(() =>
       page.evaluate(
-        (k) =>
-          JSON.parse(localStorage.getItem(k) ?? "null")?.draft?.destination,
+        (k) => JSON.parse(localStorage.getItem(k) ?? "null")?.draft?.miles,
         key,
       ),
     )
-    .toEqual({ ...newest.point, label: newest.label });
+    .toBe(8);
+  await expect(
+    page.getByRole("button", { name: "Find route", exact: true }),
+  ).toBeEnabled();
 });

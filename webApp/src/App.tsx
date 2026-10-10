@@ -225,6 +225,7 @@ export function App({ refresh }: AppProps = {}) {
     [popup, setPopup] = useState<Popup>(null),
     [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
   const [explorePoint, setExplorePoint] = useState<Endpoint | null>(null);
+  const [exploreReceipt, setExploreReceipt] = useState("");
   const popupOpen = useRef(false),
     dialogEpoch = useRef(0),
     shownPopup = useRef<Popup>(null),
@@ -868,6 +869,7 @@ export function App({ refresh }: AppProps = {}) {
     setGapFocus(null);
     setInstructionFocus(null);
     setExplorePoint(null);
+    setExploreReceipt("");
     if (controllerRef.current?.state.record && next !== "navigation")
       controllerRef.current.stop();
     const token = ++operation.current;
@@ -905,7 +907,10 @@ export function App({ refresh }: AppProps = {}) {
     const token = ++operation.current;
     setBusy(true);
     setError("");
-    if (screen === "explore-picker") setExplorePoint(null);
+    if (screen === "explore-picker") {
+      setExplorePoint(null);
+      setExploreReceipt("");
+    }
     try {
       const resolved = await clientRef.current.call<{
         point: Point;
@@ -915,7 +920,7 @@ export function App({ refresh }: AppProps = {}) {
       if (token !== operation.current) return;
       if (screen === "explore-picker") {
         setExplorePoint({ ...resolved.point, label: resolved.label });
-        if (resolved.receipt) success(resolved.receipt);
+        setExploreReceipt(resolved.receipt ?? "");
         return;
       }
       setDraft((value) => ({
@@ -2431,11 +2436,19 @@ export function App({ refresh }: AppProps = {}) {
                 Choosing a point does not verify trail access. The planner will
                 check connections and closures before you can start navigation.
               </p>
-              {busy && <p role="status">Checking map point…</p>}
+              <p role="status" aria-live="polite" aria-atomic="true">
+                {busy
+                  ? "Checking map point…"
+                  : explorePoint
+                    ? `Selected: ${explorePoint.label}`
+                    : "No point selected."}
+              </p>
               {explorePoint && (
                 <section aria-label="Selected ride point">
                   <h2>Selected point</h2>
-                  <p role="status">{explorePoint.label}</p>
+                  {exploreReceipt && (
+                    <p className="caption">{exploreReceipt}</p>
+                  )}
                   <div className="actions">
                     <button
                       className="primary"
@@ -2448,7 +2461,8 @@ export function App({ refresh }: AppProps = {}) {
                     </button>
                   </div>
                   <p className="caption">
-                    Your other endpoint and ride preferences will be kept.
+                    Opens a start-to-destination ride and keeps your other
+                    endpoint. Proposed-trail choice stays as shown.
                   </p>
                 </section>
               )}
