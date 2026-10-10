@@ -7,6 +7,7 @@ import {
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
+import { directionGroupStarts } from "./directionGroups";
 import { ManeuverIcon } from "./ManeuverIcon";
 import { DataSources } from "./DataSources";
 import { loopComparison, loopHeading } from "./loopSummary";
@@ -2012,6 +2013,7 @@ export function App({ refresh }: AppProps = {}) {
           })
         : null;
   const directionSteps = itineraryDistances(preview?.instructions ?? []);
+  const directionGroups = directionGroupStarts(preview);
   const shownRecent = library.recent.slice(0, 3),
     share = privateRouteShare(location.href, preview?.distance);
   return (
@@ -3269,6 +3271,15 @@ export function App({ refresh }: AppProps = {}) {
             <ol className="directions" ref={directionsRef}>
               {preview.instructions.map((instruction, index) => (
                 <li key={index}>
+                  {directionGroups.has(index) && (
+                    <span
+                      className="direction-group"
+                      role="heading"
+                      aria-level={3}
+                    >
+                      {directionGroups.get(index)}
+                    </span>
+                  )}
                   <div className="direction-row">
                     <div className="direction-text">
                       <strong id={`${directionsId}-step-${index}`}>

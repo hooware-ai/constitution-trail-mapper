@@ -2030,3 +2030,9 @@ dialog::backdrop {
     margin-top: 4px;
   }
 }
+
+.direction-group {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
