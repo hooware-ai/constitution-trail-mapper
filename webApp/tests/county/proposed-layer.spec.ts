@@ -147,5 +147,23 @@ test("control: the standard county build has no proposed layer, and the switch s
   await expect(box).toBeDisabled();
   await expect(box).not.toBeChecked();
   await expect(page.getByText(/no proposed trails/i).first()).toBeVisible();
+  await page
+    .getByRole("button", { name: "Trail Mapper home", exact: true })
+    .click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Explore", exact: true })
+    .click();
+  const summary = page.getByText("Layers and map key", { exact: true });
+  await expect(summary).toHaveAccessibleDescription(
+    "Closure areas shown · Proposed trails unavailable in this data",
+  );
+  await summary.click();
+  await expect(
+    page.getByRole("checkbox", { name: /Show proposed trails/ }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("checkbox", { name: /Show proposed trails/ }),
+  ).not.toBeChecked();
   await context.close();
 });

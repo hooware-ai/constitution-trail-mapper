@@ -2070,7 +2070,6 @@ dialog::backdrop {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  overscroll-behavior: contain;
   scroll-padding: 12px;
 }
 .explore .map-wrap,
@@ -2118,10 +2117,7 @@ dialog::backdrop {
   }
 }
 
-.explore .map-error {
-  top: auto;
-  bottom: 26px;
-  max-height: calc(100% - 52px);
-  max-width: min(250px, calc(100% - 76px));
-  overflow: auto;
+.explore-basemap-error {
+  background: #fdebd8;
+  padding: 10px;
 }

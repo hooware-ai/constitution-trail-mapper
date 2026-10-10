@@ -274,6 +274,7 @@ export function App({ refresh }: AppProps = {}) {
     [reverseOf, setReverseOf] = useState<RouteRecord | null>(null),
     [showClosures, setShowClosures] = useState(true),
     [basemap, setBasemap] = useState(false),
+    [basemapError, setBasemapError] = useState(false),
     [fitSignal, setFitSignal] = useState(0),
     [retryPlan, setRetryPlan] = useState(false),
     [error, setError] = useState(""),
@@ -2142,6 +2143,10 @@ export function App({ refresh }: AppProps = {}) {
           county={network?.mode === "county"}
           tilesEnabled={basemap}
           onTilesChange={setBasemap}
+          onTileError={setBasemapError}
+          showTileError={screen !== "explore"}
+          showTileControl={screen !== "explore"}
+          showCaption={screen !== "explore"}
           osm={
             Boolean(network?.datasetRecord?.supplements?.length) ||
             (network?.datasetRecord?.access?.index.localFeatureCount ?? 0) > 0
@@ -3127,6 +3132,11 @@ export function App({ refresh }: AppProps = {}) {
           )}
           {network && screen === "explore" && (
             <>
+              <p className="caption">
+                {fixtureData
+                  ? "Synthetic review network · not real trails"
+                  : "Bloomington–Normal · Constitution Trail"}
+              </p>
               <p className="eyebrow">Explore the network</p>
               <h1>Trails around you</h1>
               <p>
@@ -3139,9 +3149,21 @@ export function App({ refresh }: AppProps = {}) {
               >
                 Choose a ride point
               </button>
+              {basemap && basemapError && (
+                <p className="explore-basemap-error" role="status">
+                  Street map unavailable. Trail geometry remains visible.
+                </p>
+              )}
               <p className="caption" id="explore-layer-state">
                 Closure areas {showClosures ? "shown" : "hidden"} · Proposed
-                trails {draft.proposed ? "shown" : "hidden"}
+                trails{" "}
+                {network.features.some(
+                  (feature) => feature.status === "Proposed",
+                )
+                  ? draft.proposed
+                    ? "shown"
+                    : "hidden"
+                  : "unavailable in this data"}
               </p>
               <details className="explore-layers">
                 <summary aria-describedby="explore-layer-state">
@@ -3162,6 +3184,19 @@ export function App({ refresh }: AppProps = {}) {
                   />
                   <span>Reported closure areas</span>
                 </label>
+                {!fixtureData && (
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={basemap}
+                      onChange={(event) => {
+                        setBasemapError(false);
+                        setBasemap(event.target.checked);
+                      }}
+                    />
+                    <span>Street basemap (online)</span>
+                  </label>
+                )}
                 <Legend
                   verified={network.features.some((f) =>
                     f.id.startsWith("verified-osm:way:"),

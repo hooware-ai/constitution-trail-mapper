@@ -12,6 +12,9 @@ for (const [mode, width, height, fontSize] of [
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
+    await expect(
+      page.getByRole("button", { name: /Go somewhere/ }),
+    ).toBeVisible();
     await page
       .getByRole("navigation")
       .getByRole("button", { name: "Explore", exact: true })
@@ -56,7 +59,11 @@ for (const [mode, width, height, fontSize] of [
     await expect(summary).toHaveAccessibleDescription(
       "Closure areas shown · Proposed trails hidden",
     );
-    await summary.focus();
+    await page
+      .getByRole("button", { name: "Choose a ride point", exact: true })
+      .focus();
+    await page.keyboard.press("Tab");
+    await expect(summary).toBeFocused();
     await summary.press("Enter");
     await expect(page.locator(".explore-layers")).toHaveAttribute("open", "");
     const summaryBox = await summary.boundingBox();
@@ -149,7 +156,12 @@ for (const [width, height, fontSize] of [
     page,
   }) => {
     await page.setViewportSize({ width, height });
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/");
+    await expect(
+      page.getByRole("button", { name: /Go somewhere/ }),
+    ).toBeVisible();
     await page
       .getByRole("navigation")
       .getByRole("button", { name: "Explore", exact: true })
@@ -177,10 +189,37 @@ for (const [width, height, fontSize] of [
         .evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
     ).toBe(true);
     await page
+      .getByRole("button", { name: "Show all trails", exact: true })
+      .click();
+    const county = page.getByRole("link", { name: /^County map/ });
+    await county.scrollIntoViewIfNeeded();
+    await expect(county).toBeInViewport();
+    await page
+      .getByRole("button", { name: "Help, privacy and sources", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Help and about" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Close Help and about", exact: true })
+      .click();
+    const panel = await page.locator(".panel").boundingBox();
+    const nav = await page
+      .getByRole("navigation", { name: "Main navigation" })
+      .boundingBox();
+    expect(
+      Math.max(
+        0,
+        Math.min(panel!.y + panel!.height, nav!.y, height) -
+          Math.max(panel!.y, 0),
+      ),
+    ).toBeGreaterThanOrEqual(44);
+    await page
       .getByRole("button", { name: "Plan a ride", exact: true })
       .click();
     await expect(
       page.getByRole("heading", { name: "Go somewhere", exact: true }),
     ).toBeVisible();
+    expect(errors).toEqual([]);
   });
 }
