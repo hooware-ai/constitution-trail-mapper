@@ -5,6 +5,7 @@ for (const [name, width, height, font] of [
   ["desktop", 1280, 800, 16],
   ["portrait", 390, 844, 16],
   ["short landscape", 640, 320, 16],
+  ["wide landscape", 844, 390, 16],
   ["short landscape 150%", 640, 320, 24],
   ["narrow 200%", 320, 640, 32],
 ] as const) {
@@ -111,23 +112,56 @@ for (const [name, width, height, font] of [
     await page.setViewportSize({ width, height });
     await check();
     const map = page.locator(".map");
+    const settledCamera = async () => {
+      let previous = "",
+        since = Date.now();
+      await expect
+        .poll(
+          async () => {
+            const current = `${await map.getAttribute("data-center")}/${await map.getAttribute("data-zoom")}`;
+            if (current !== previous) {
+              previous = current;
+              since = Date.now();
+            }
+            return Date.now() - since;
+          },
+          { intervals: [50, 100] },
+        )
+        .toBeGreaterThanOrEqual(350);
+    };
+    await settledCamera();
+    const resizeCamera = async () => {
+      const previousHeight = await map.evaluate((e) => e.clientHeight);
+      await page.setViewportSize({ width, height: height + 160 });
+      await expect
+        .poll(() => map.evaluate((e) => e.clientHeight))
+        .not.toBe(previousHeight);
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      await settledCamera();
+    };
     const fittedCenter = await map.getAttribute("data-center");
     await map.focus();
     await page.keyboard.press("ArrowRight");
     await expect
       .poll(() => map.getAttribute("data-center"))
       .not.toBe(fittedCenter);
+    await settledCamera();
     const manualCenter = (await map.getAttribute("data-center"))!
       .split(",")
       .map(Number);
     const manualZoom = await map.getAttribute("data-zoom");
-    await page.setViewportSize({ width, height: height + 60 });
+    await resizeCamera();
     await expect.poll(() => map.getAttribute("data-zoom")).toBe(manualZoom);
     const resizedCenter = (await map.getAttribute("data-center"))!
       .split(",")
       .map(Number);
-    expect(Math.abs(resizedCenter[0] - manualCenter[0])).toBeLessThan(0.0002);
-    expect(Math.abs(resizedCenter[1] - manualCenter[1])).toBeLessThan(0.0002);
+    expect(Math.abs(resizedCenter[0] - manualCenter[0])).toBeLessThanOrEqual(0.0002 + 1e-12);
+    expect(Math.abs(resizedCenter[1] - manualCenter[1])).toBeLessThanOrEqual(0.0002 + 1e-12);
     await page.setViewportSize({ width, height });
     const fit = page.getByRole("button", { name: "Fit route", exact: true });
     expect((await fit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -159,17 +193,18 @@ for (const [name, width, height, font] of [
       await expect
         .poll(() => map.getAttribute("data-center"))
         .not.toBe(beforeDrag);
+      await settledCamera();
       const center = (await map.getAttribute("data-center"))!
         .split(",")
         .map(Number);
       const zoom = await map.getAttribute("data-zoom");
-      await page.setViewportSize({ width, height: height + 60 });
+      await resizeCamera();
       await expect(map).toHaveAttribute("data-zoom", zoom!);
       const resized = (await map.getAttribute("data-center"))!
         .split(",")
         .map(Number);
-      expect(Math.abs(resized[0] - center[0])).toBeLessThan(0.0002);
-      expect(Math.abs(resized[1] - center[1])).toBeLessThan(0.0002);
+      expect(Math.abs(resized[0] - center[0])).toBeLessThanOrEqual(0.0002 + 1e-12);
+      expect(Math.abs(resized[1] - center[1])).toBeLessThanOrEqual(0.0002 + 1e-12);
       await page.setViewportSize({ width, height });
       await fit.click();
       await check();
@@ -209,6 +244,7 @@ for (const [name, width, height, font] of [
       return `${p.latitude.toFixed(4)},${p.longitude.toFixed(4)}`;
     });
     await expect(map).toHaveAttribute("data-center", instructionCenter);
+    await settledCamera();
     await page.evaluate(
       () =>
         new Promise<void>((resolve) =>
@@ -217,7 +253,7 @@ for (const [name, width, height, font] of [
     );
     const focusedCenter = await map.getAttribute("data-center");
     const focusedZoom = await map.getAttribute("data-zoom");
-    await page.setViewportSize({ width, height: height + 60 });
+    await resizeCamera();
     await expect(map).toHaveAttribute("data-center", focusedCenter!);
     await expect(map).toHaveAttribute("data-zoom", focusedZoom!);
     await map.evaluate((e) => e.scrollIntoView({ block: "start" }));

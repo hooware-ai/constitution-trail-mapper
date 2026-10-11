@@ -153,6 +153,7 @@ export function MapView({
     node.addEventListener("keydown", manualKey, true);
     const ro = new ResizeObserver(() => {
       m.invalidateSize();
+      if (!node.closest(".preview")) resizeFit.current = null;
       if (resizeFit.current && node.closest(".preview")) {
         m.fitBounds(resizeFit.current, {
           padding: [32, 32],
