@@ -3,10 +3,18 @@ import { simulateDevice, planPoint, startButton, fix } from "../webkit/support";
 
 // Real app and Kotlin fixture router; GPS/error callbacks are scripted browser APIs.
 // Viewport resizing is layout emulation, not physical phone orientation or permission acceptance.
-for (const [name, width, height, font, rotate] of [
+for (const [name, width, height, font, rotate, fontFamily] of [
   ["short landscape", 640, 320, 16, false],
   ["short landscape 150%", 640, 320, 24, false],
   ["short landscape 200%", 640, 320, 32, false],
+  [
+    "short landscape 200% wide fallback font",
+    640,
+    320,
+    32,
+    false,
+    "DejaVu Sans, sans-serif",
+  ],
   ["wide landscape 150%", 844, 390, 24, false],
   ["wide landscape 200%", 844, 390, 32, false],
   ["portrait to short landscape 150%", 640, 320, 24, true],
@@ -42,6 +50,10 @@ for (const [name, width, height, font, rotate] of [
     await page.evaluate((font) => {
       document.documentElement.style.fontSize = `${font}px`;
     }, font);
+    if (fontFamily)
+      await page.evaluate((family) => {
+        document.documentElement.style.fontFamily = family;
+      }, fontFamily);
     if (rotate) await page.setViewportSize({ width, height });
 
     async function reachableStop() {
