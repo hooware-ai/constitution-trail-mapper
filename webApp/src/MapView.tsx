@@ -150,7 +150,7 @@ export function MapView({
     node.addEventListener("pointerdown", clearResizeFit, true);
     node.addEventListener("click", clearResizeFit, true);
     node.addEventListener("wheel", clearResizeFit, { passive: true });
-    node.addEventListener("keydown", manualKey);
+    node.addEventListener("keydown", manualKey, true);
     const ro = new ResizeObserver(() => {
       m.invalidateSize();
       if (resizeFit.current && node.closest(".preview")) {
@@ -167,7 +167,7 @@ export function MapView({
       node.removeEventListener("pointerdown", clearResizeFit, true);
       node.removeEventListener("click", clearResizeFit, true);
       node.removeEventListener("wheel", clearResizeFit);
-      node.removeEventListener("keydown", manualKey);
+      node.removeEventListener("keydown", manualKey, true);
       m.remove();
       map.current = null;
     };
@@ -484,6 +484,7 @@ export function MapView({
     const m = map.current;
     if (!m || !gap) return;
     resizeFit.current = null;
+    m.stop();
     root.current?.parentElement?.scrollIntoView({ block: "nearest" });
     m.fitBounds(L.latLngBounds([xy(gap.from), xy(gap.to)]), {
       padding: [56, 56],
@@ -501,6 +502,7 @@ export function MapView({
     const m = map.current;
     if (!m || !instruction?.point || !instructionFocus) return;
     resizeFit.current = null;
+    m.stop();
     const number = instructionFocus.index + 1;
     const icon = document.createElement("span");
     icon.textContent = String(number);

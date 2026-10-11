@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { planPoint } from "../webkit/support";
 
 for (const [name, width, height, font] of [
+  ["desktop", 1280, 800, 16],
   ["portrait", 390, 844, 16],
   ["short landscape", 640, 320, 16],
   ["short landscape 150%", 640, 320, 24],
@@ -9,6 +10,7 @@ for (const [name, width, height, font] of [
 ] as const) {
   test(`[engine] preview route is unobscured by its controls in ${name}`, async ({
     page,
+    isMobile,
   }) => {
     await page.setViewportSize({ width, height });
     await page.addInitScript((font) => {
@@ -99,9 +101,9 @@ for (const [name, width, height, font] of [
       expect(m.tools.y).toBeGreaterThanOrEqual(m.map.bottom - 1);
       expect(m.overlap).toBe(false);
       expect(m.overflow).toBe(false);
-      await expect(
-        page.locator(".leaflet-control-attribution"),
-      ).toBeInViewport();
+      await expect(page.locator(".leaflet-control-attribution")).toBeInViewport(
+        { ratio: 1 },
+      );
     };
     await check();
     await page.setViewportSize({ width, height: height + 60 });
@@ -132,15 +134,95 @@ for (const [name, width, height, font] of [
     await fit.click();
     await page.evaluate(() => scrollTo(0, 0));
     await check();
+    if (!isMobile) {
+      const box = (await map.boundingBox())!;
+      const beforeDrag = await map.getAttribute("data-center");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(
+        box.x + box.width / 2 + 70,
+        box.y + box.height / 2,
+        { steps: 8 },
+      );
+      // Hold the pointer stationary across four frames so drag inertia does not
+      // continue changing the camera while the resize assertion records it.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            let frames = 4;
+            const next = () =>
+              --frames ? requestAnimationFrame(next) : resolve();
+            requestAnimationFrame(next);
+          }),
+      );
+      await page.mouse.up();
+      await expect
+        .poll(() => map.getAttribute("data-center"))
+        .not.toBe(beforeDrag);
+      const center = (await map.getAttribute("data-center"))!
+        .split(",")
+        .map(Number);
+      const zoom = await map.getAttribute("data-zoom");
+      await page.setViewportSize({ width, height: height + 60 });
+      await expect(map).toHaveAttribute("data-zoom", zoom!);
+      const resized = (await map.getAttribute("data-center"))!
+        .split(",")
+        .map(Number);
+      expect(Math.abs(resized[0] - center[0])).toBeLessThan(0.0002);
+      expect(Math.abs(resized[1] - center[1])).toBeLessThan(0.0002);
+      await page.setViewportSize({ width, height });
+      await fit.click();
+      await check();
+    }
     await expect(
       page.getByRole("button", { name: "Start navigation", exact: true }),
     ).toBeEnabled();
+    if (width >= 500 && height <= 500) {
+      await page.locator(".panel").evaluate((panel) => {
+        panel.scrollTop = (panel.scrollHeight - panel.clientHeight) / 2;
+      });
+      await expect(
+        page.getByRole("button", { name: "Start navigation", exact: true }),
+      ).toBeInViewport({ ratio: 1 });
+      expect(
+        await page.locator(".start-dock .primary").evaluate((button) => {
+          const b = button.getBoundingClientRect();
+          const p = button.closest(".panel")!.getBoundingClientRect();
+          return (
+            b.top >= p.top &&
+            b.bottom <= p.bottom &&
+            b.left >= p.left &&
+            b.right <= p.right
+          );
+        }),
+      ).toBe(true);
+    }
     await page.getByRole("button", { name: "Directions", exact: true }).click();
     await expect(
       page.getByRole("dialog", { name: "Directions" }).locator("ol li"),
     ).not.toHaveCount(0);
     await page
-      .getByRole("button", { name: "Close Directions", exact: true })
+      .getByRole("button", { name: "Show step 1 on map", exact: true })
       .click();
+    const instructionCenter = await page.evaluate(() => {
+      const p = (window as any).__previewRoute.instructions[0].point;
+      return `${p.latitude.toFixed(4)},${p.longitude.toFixed(4)}`;
+    });
+    await expect(map).toHaveAttribute("data-center", instructionCenter);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    const focusedCenter = await map.getAttribute("data-center");
+    const focusedZoom = await map.getAttribute("data-zoom");
+    await page.setViewportSize({ width, height: height + 60 });
+    await expect(map).toHaveAttribute("data-center", focusedCenter!);
+    await expect(map).toHaveAttribute("data-zoom", focusedZoom!);
+    await map.evaluate((e) => e.scrollIntoView({ block: "start" }));
+    await expect(page.locator(".instruction-marker")).toBeInViewport({
+      ratio: 1,
+    });
   });
 }

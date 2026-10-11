@@ -1542,6 +1542,7 @@ dialog::backdrop {
   .preview .start-dock {
     position: sticky;
     bottom: 0;
+    bottom: 0;
     z-index: 520;
     margin: 8px -16px 0;
     padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
@@ -2074,6 +2075,7 @@ dialog::backdrop {
     border-radius: 0;
   }
 }
+/* Keep this after the mobile rules: short landscape replaces their map minimum. */
 @media (max-height: 500px) and (min-width: 500px) {
   .explore .workspace {
     display: grid;
@@ -2157,6 +2159,9 @@ dialog::backdrop {
   max-width: none;
   margin: 0;
   order: 2;
+}
+.preview .leaflet-control-attribution {
+  margin: 0 2px 2px 0;
 }
 @media (max-width: 760px) {
   .preview .map-wrap {
