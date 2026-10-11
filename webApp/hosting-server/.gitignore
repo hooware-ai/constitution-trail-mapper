@@ -1,0 +1,13 @@
+node_modules/
+dist/
+public/
+trail.html
+.wrangler/
+.vinext/
+.sites-runtime/
+.env*
+.next/
+next-env.d.ts
+!build/
+!build/**
+

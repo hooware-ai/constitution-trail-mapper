@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { DataSources } from "./DataSources";
 import { Modal, SafeLink, type DialogNotice } from "./components";
 import { places } from "./search";
+import { SupportForm } from "./SupportForm";
 import {
   REPORT_URL,
   buildText,
@@ -30,7 +31,9 @@ export function HelpDialog({
   build: BuildInfo;
   onClose: () => void;
 }) {
-  const [view, setView] = useState<"help" | "report" | "feedback">("help");
+  const [view, setView] = useState<
+    "help" | "report" | "feedback" | "feedback_submit" | "feature_request"
+  >("help");
   const [notice, setNotice] = useState<DialogNotice | null>(null);
   // Coverage counts what is actually loaded: existing features only, with proposed ones (off by default) said apart.
   const mix = useMemo(() => featureMix(network?.features ?? []), [network]);
@@ -64,7 +67,14 @@ export function HelpDialog({
       if (owner === session.current) setNotice(next);
     });
   }
-  function switchView(next: "help" | "report" | "feedback") {
+  function switchView(
+    next:
+      | "help"
+      | "report"
+      | "feedback"
+      | "feedback_submit"
+      | "feature_request",
+  ) {
     session.current++;
     cancelAnimationFrame(frame.current);
     setNotice(null);
@@ -88,9 +98,13 @@ export function HelpDialog({
       title={
         view === "help"
           ? "Help and about"
-          : view === "feedback"
-            ? "Ride feedback"
-            : "Report a problem"
+          : view === "feedback_submit"
+            ? "Feedback"
+            : view === "feature_request"
+              ? "Feature request"
+              : view === "feedback"
+                ? "Ride feedback"
+                : "Report a problem"
       }
       notice={notice}
       noticeInChildren={view !== "help"}
@@ -101,6 +115,14 @@ export function HelpDialog({
           <h3 ref={heading} tabIndex={-1} className="visually-hidden">
             Help topics
           </h3>
+          <div className="actions support-actions">
+            <button onClick={() => switchView("feedback_submit")}>
+              Send feedback
+            </button>
+            <button onClick={() => switchView("feature_request")}>
+              Request a feature
+            </button>
+          </div>
           <nav aria-label="Help topics">
             <ul className="help-contents">
               {[
@@ -266,16 +288,24 @@ export function HelpDialog({
                 <strong>Location:</strong> the browser asks permission only when
                 you choose Use current location or start navigation. Your
                 position is used on this device to plan and guide. The app never
-                uploads your exact GPS fixes, what you type or what you save
+                uploads your exact GPS fixes, place searches or saved routes
                 {access
                   ? "; but road files are fetched by map square, and those requests show this site approximately where you are (see Requests the app makes)"
                   : ""}
                 .
               </li>
               <li>
+                <strong>Voluntary feedback:</strong> Send feedback and Request a
+                feature send only the message you review to the private project
+                collection. No location, saved routes, name or email is added.
+                Your network address is used for spam limits without storing it
+                directly. A pending message stays in this tab for retry until
+                its submission is confirmed.
+              </li>
+              <li>
                 <strong>Removing it:</strong> Saved shows Delete for each saved
                 route and place and Clear recents; stopping a ride clears its
-                recovery data. To remove everything, clear this site&apos;s data
+                recovery data. To remove all on-device data, clear this site&apos;s data
                 in your browser settings.
               </li>
               <li>
@@ -287,11 +317,12 @@ export function HelpDialog({
               </li>
               <li>
                 <strong>Requests the app makes:</strong> to this site, for the
-                app and its trail data.
+                app and its trail data. If you submit Feedback or a Feature
+                Request, your reviewed message is also sent to this site.
                 {access
                   ? " This build also has road data: it asks this site for the road files that cover the map squares (about 1 km across, three by three) around a trip's start and destination, around your position while you ride or reroute, and around a saved route's first and last points. The file names carry each square's grid numbers, so this site's host can tell roughly which area was requested and when. Exact GPS fixes, typed searches and saved records are not part of those requests."
                   : ""}{" "}
-                Nothing else, unless you turn on{" "}
+                Otherwise nothing else, unless you turn on{" "}
                 <strong>Street basemap (online)</strong>
                 {mode === "fixture"
                   ? " (not offered in the synthetic review build)"
@@ -474,6 +505,12 @@ export function HelpDialog({
             </p>
           </section>
         </div>
+      ) : view === "feedback_submit" || view === "feature_request" ? (
+        <SupportForm
+          key={view}
+          kind={view === "feedback_submit" ? "feedback" : "feature_request"}
+          back={() => switchView("help")}
+        />
       ) : (
         <ReportView
           key={view}
