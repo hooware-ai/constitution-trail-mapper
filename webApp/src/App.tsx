@@ -302,6 +302,7 @@ export function App({ refresh }: AppProps = {}) {
     >(null),
     [renameValue, setRenameValue] = useState(""),
     [exactExport, setExactExport] = useState(false);
+  const renameInput = useRef<HTMLInputElement>(null);
   const [gapFocus, setGapFocus] = useState<{ id: string } | null>(null);
   const [instructionFocus, setInstructionFocus] = useState<{
     route: RouteResult;
@@ -3534,6 +3535,7 @@ export function App({ refresh }: AppProps = {}) {
           title="Rename"
           notice={dialogNotice}
           onClose={() => setPopup(null)}
+          initialFocus={renameInput}
         >
           <form
             onSubmit={(event) => {
@@ -3544,7 +3546,7 @@ export function App({ refresh }: AppProps = {}) {
             <label className="field">
               Name
               <input
-                autoFocus
+                ref={renameInput}
                 value={renameValue}
                 maxLength={120}
                 onChange={(event) => setRenameValue(event.target.value)}
