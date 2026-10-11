@@ -42,13 +42,21 @@ test("[sim-device] clipped ride guidance can be reached and scrolled by keyboard
   await expect
     .poll(() => guidance.evaluate((e) => e.scrollTop))
     .toBeGreaterThan(0);
-  const bottom = await guidance
-    .locator(".ride-guidance-copy > :last-child")
-    .boundingBox();
-  const box = await guidance.boundingBox();
-  expect(bottom!.y + bottom!.height).toBeLessThanOrEqual(
-    box!.y + box!.height + 1,
-  );
+  // WebKit animates keyboard scrolling. A positive scrollTop means it started,
+  // not that End has finished; verify the final content bounds directly.
+  await expect
+    .poll(() =>
+      guidance.evaluate((element) => {
+        const last = element.querySelector(".ride-guidance-copy > :last-child");
+        if (!last) throw new Error("Ride guidance text is missing");
+        const remaining =
+          last.getBoundingClientRect().bottom -
+          element.getBoundingClientRect().bottom;
+        console.log(JSON.stringify({ keyboardScroll: element.scrollTop, remaining }));
+        return remaining;
+      }),
+    )
+    .toBeLessThanOrEqual(1);
   await page.keyboard.press("Tab");
   expect(await guidance.evaluate((e) => e === document.activeElement)).toBe(
     false,
