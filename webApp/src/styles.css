@@ -1618,12 +1618,14 @@ dialog::backdrop {
   }
 }
 
-/* Ride mode is a separate, glanceable surface. The planner keeps its detailed controls. */
+/* Ride mode is a separate, glanceable surface. The planner keeps its detailed controls.
+   The workspace follows the viewport even in landscape, keeping Stop on screen. */
 .navigation .workspace {
   position: relative;
   display: block;
+  height: 100vh;
   height: 100dvh;
-  min-height: 420px;
+  min-height: 0;
   overflow: hidden;
   background: #dce9e0;
 }
@@ -1898,6 +1900,7 @@ dialog::backdrop {
 }
 .ride-details[open] {
   /* Keep details in the scrolling dock so large text cannot cover Stop. */
+  max-height: 25vh;
   max-height: 25dvh;
   overflow-y: auto;
 }
@@ -2015,8 +2018,9 @@ dialog::backdrop {
     line-height: 48px !important;
   }
   .navigation .workspace {
+    height: 100vh;
     height: 100dvh;
-    min-height: 420px;
+    min-height: 0;
   }
   .navigation .panel {
     padding: 0;
@@ -2270,4 +2274,81 @@ dialog::backdrop {
 }
 .updates-list article {
   overflow-wrap: anywhere;
+}
+
+/* In short landscape, ride information and the map share the viewport rather
+   than covering each other. Each keeps its controls and attribution reachable. */
+@media (max-height: 500px) and (min-width: 640px) {
+  .navigation .panel {
+    width: 55%;
+  }
+  .navigation .ride-map,
+  .navigation .ride-map-fallback {
+    left: 55%;
+    width: 45%;
+  }
+  .navigation .ride-ui {
+    gap: 4px;
+    padding: max(8px, env(safe-area-inset-top)) 8px
+      max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+  .navigation .ride-guidance {
+    flex-shrink: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-items: start;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+  .navigation .ride-turn-icon {
+    font-size: 2rem;
+  }
+  .navigation .ride-dock {
+    min-height: min-content;
+  }
+  .navigation .ride-dock-content {
+    height: max(60px, 2.25rem);
+    min-height: max(60px, 2.25rem);
+    flex-grow: 1;
+  }
+  .navigation .ride-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+  }
+  .navigation .ride-details summary {
+    padding: 8px;
+    font-size: 0.8rem;
+  }
+  .navigation .ride-stop {
+    min-width: 0;
+    padding: 8px;
+  }
+  .navigation .ride-progress {
+    flex-wrap: wrap;
+  }
+  .navigation .ride-progress button {
+    width: 100%;
+    margin-left: 0;
+  }
+  .navigation .ride-map-control {
+    top: max(12px, env(safe-area-inset-top));
+  }
+  .navigation .ride-credit {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-width: calc(100% - 24px);
+  }
+  .navigation .ride-map .maplibregl-ctrl-bottom-right {
+    bottom: 12px;
+  }
+  .navigation .ride-map-fallback .ride-map-control {
+    top: auto;
+    bottom: 70px;
+  }
+}
+
+.ride-guidance:focus-visible {
+  outline: 3px solid #006ca8;
+  outline-offset: -3px;
 }
