@@ -3,11 +3,15 @@ import assert from "node:assert/strict";
 import {
   acquirePlannerLocation,
   PLANNER_LOCATION_TIMEOUT_MS,
+  PLANNER_MAX_FIX_ACCURACY_METERS,
+  PLANNER_MAX_FIX_AGE_MS,
+  usablePlannerFix,
 } from "../../src/platform/plannerLocation";
-import type {
-  LocationFailure,
-  LocationFix,
-  LocationPort,
+import {
+  navigableFix,
+  type LocationFailure,
+  type LocationFix,
+  type LocationPort,
 } from "../../src/platform/navigation";
 
 type Event = Parameters<Parameters<typeof acquirePlannerLocation>[1]>[0];
@@ -257,13 +261,84 @@ test("a valid reading can recover after invalid coordinates", () => {
   assert.equal(f.timers.size, 0);
 });
 
-test("planner retains the inclusive navigation accuracy and freshness limits", () => {
+test("planner keeps its own inclusive 35 m / 15 s endpoint limits", () => {
   const f = fixture();
   f.fix({ accuracy: 35, timestamp: NOW - 15_000 });
   assert.deepEqual(f.events.at(-1), {
     phase: "success",
     fix: { ...goodFix, accuracy: 35, timestamp: NOW - 15_000 },
   });
+  assert.equal(PLANNER_MAX_FIX_ACCURACY_METERS, 35);
+  assert.equal(PLANNER_MAX_FIX_AGE_MS, 15_000);
+  const edge = { ...goodFix, accuracy: 35, timestamp: NOW - 15_000 };
+  assert.equal(usablePlannerFix(edge, NOW), true);
+  assert.equal(usablePlannerFix({ ...edge, accuracy: 35.1 }, NOW), false);
+  assert.equal(
+    usablePlannerFix({ ...edge, timestamp: NOW - 15_001 }, NOW),
+    false,
+  );
+  assert.equal(
+    usablePlannerFix({ ...edge, timestamp: NOW + 5_000 }, NOW),
+    true,
+  );
+  assert.equal(
+    usablePlannerFix({ ...edge, timestamp: NOW + 5_001 }, NOW),
+    false,
+  );
+});
+
+test("an endpoint fix navigation would refuse (26–35 m, 11–15 s old, slightly future) is still a precise planner location", () => {
+  for (const patch of [
+    { accuracy: 26 },
+    { accuracy: 35 },
+    { timestamp: NOW - 11_000 },
+    { timestamp: NOW - 15_000 },
+    { timestamp: NOW + 1 },
+  ]) {
+    const fix = { ...goodFix, ...patch };
+    assert.equal(navigableFix(fix, NOW), false, JSON.stringify(patch));
+    const f = fixture();
+    f.fix(patch);
+    assert.deepEqual(f.events.at(-1), { phase: "success", fix });
+    assert.deepEqual(f.clearedWatches, [0]);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test("a coarse reading stays an explicit approximate offer by the planner's 15 s freshness, not navigation's 10 s", () => {
+  const f = fixture();
+  f.advance(5_000);
+  f.fix({ accuracy: 36 });
+  const coarseFix = { ...goodFix, accuracy: 36, timestamp: NOW + 5_000 };
+  const waiting = f.events.at(-1);
+  assert.ok(waiting?.phase === "waiting");
+  assert.deepEqual(waiting.approximateFix, coarseFix);
+  // Never adopted automatically: the watch and watchdog keep running.
+  assert.equal(f.timers.size, 1);
+  assert.deepEqual(f.clearedWatches, []);
+  // At the real 20 s watchdog deadline, this reading is 15 s old: past navigation's age limit but still offered.
+  f.advance(15_000);
+  assert.equal(
+    navigableFix({ ...coarseFix, accuracy: 0 }, NOW + 20_000),
+    false,
+  );
+  assert.equal(
+    usablePlannerFix({ ...coarseFix, accuracy: 0 }, NOW + 20_000),
+    true,
+  );
+  f.expire(0);
+  const offered = f.events.at(-1);
+  assert.ok(offered?.phase === "failure");
+  assert.equal(offered.reason, "inaccurate");
+  assert.deepEqual(offered.approximateFix, coarseFix);
+  // One millisecond later the offer has aged out of the planner's window too.
+  const aged = fixture();
+  aged.advance(4_999);
+  aged.fix({ accuracy: 36 });
+  aged.expire(15_001);
+  const expired = aged.events.at(-1);
+  assert.ok(expired?.phase === "failure");
+  assert.equal(expired.approximateFix, undefined);
 });
 
 test("synchronous startup failure is recoverable and clears the watchdog", () => {

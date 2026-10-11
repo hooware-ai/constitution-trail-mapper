@@ -1,11 +1,25 @@
 import {
-  MAX_FIX_ACCURACY_METERS,
-  usableFix,
+  wellFormedFix,
   type LocationFix,
   type LocationPort,
 } from "./navigation";
 
 export const PLANNER_LOCATION_TIMEOUT_MS = 20_000;
+/**
+ * Choosing a route endpoint is looser than live guidance (navigation.ts follows the shared core's 25 m / 10 s rule):
+ * an endpoint may be within 35 m, up to 15 s old, or up to 5 s ahead of this device's clock.
+ */
+export const PLANNER_MAX_FIX_ACCURACY_METERS = 35;
+export const PLANNER_MAX_FIX_AGE_MS = 15_000;
+const PLANNER_FUTURE_TOLERANCE_MS = 5_000;
+export function usablePlannerFix(fix: LocationFix, now: number): boolean {
+  return (
+    wellFormedFix(fix) &&
+    fix.accuracy <= PLANNER_MAX_FIX_ACCURACY_METERS &&
+    now - fix.timestamp <= PLANNER_MAX_FIX_AGE_MS &&
+    fix.timestamp - now <= PLANNER_FUTURE_TOLERANCE_MS
+  );
+}
 export type PlannerLocationFailure =
   | "insecure"
   | "unsupported"
@@ -77,7 +91,7 @@ export function acquirePlannerLocation(
     listener({
       phase: "failure",
       reason,
-      ...(coarseFix && usableFix({ ...coarseFix, accuracy: 0 }, now())
+      ...(coarseFix && usablePlannerFix({ ...coarseFix, accuracy: 0 }, now())
         ? { approximateFix: coarseFix }
         : {}),
       message:
@@ -100,13 +114,13 @@ export function acquirePlannerLocation(
       const id = deps.location.watch(
         (fix) => {
           if (!active) return;
-          if (usableFix(fix, now())) {
+          if (usablePlannerFix(fix, now())) {
             cancel();
             listener({ phase: "success", fix });
           } else if (
             Number.isFinite(fix.accuracy) &&
-            fix.accuracy > MAX_FIX_ACCURACY_METERS &&
-            usableFix({ ...fix, accuracy: 0 }, now())
+            fix.accuracy > PLANNER_MAX_FIX_ACCURACY_METERS &&
+            usablePlannerFix({ ...fix, accuracy: 0 }, now())
           ) {
             coarseAccuracy = Math.min(coarseAccuracy ?? Infinity, fix.accuracy);
             coarseFix = fix;

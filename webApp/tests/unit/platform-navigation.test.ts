@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ForegroundNavigationController,
-  usableFix,
+  NAVIGATION_MAX_FIX_ACCURACY_METERS,
+  NAVIGATION_MAX_FIX_AGE_MS,
+  navigableFix,
   type LocationFix,
   type LocationFailure,
   type LocationPort,
@@ -93,9 +95,10 @@ function fixture() {
     storage,
     callbacks,
     cleared,
-    advance(ms: number) {
+    /** Moves the clock; `tick: false` leaves the expiry timer for later, as a busy page would. */
+    advance(ms: number, tick = true) {
       now += ms;
-      timer?.();
+      if (tick) timer?.();
     },
     async fix(next: number, options: Partial<LocationFix> = {}, off = 0) {
       progress = next;
@@ -112,18 +115,137 @@ function fixture() {
     now: () => now,
   };
 }
-test("location accuracy and age gates are inclusive at 35m/15s, future tolerance 5s", () => {
+test("navigation accepts exactly the shared core's credible fixes: accuracy <= 25 m, age 0..10 s, never future", () => {
+  assert.equal(NAVIGATION_MAX_FIX_ACCURACY_METERS, 25);
+  assert.equal(NAVIGATION_MAX_FIX_AGE_MS, 10_000);
   const fix = {
     latitude: 40,
     longitude: -89,
-    accuracy: 35,
-    timestamp: NOW - 15000,
+    accuracy: 25,
+    timestamp: NOW - 10_000,
   };
-  assert.equal(usableFix(fix, NOW), true);
-  assert.equal(usableFix({ ...fix, accuracy: 35.1 }, NOW), false);
-  assert.equal(usableFix({ ...fix, timestamp: NOW - 15001 }, NOW), false);
-  assert.equal(usableFix({ ...fix, timestamp: NOW + 5000 }, NOW), true);
-  assert.equal(usableFix({ ...fix, timestamp: NOW + 5001 }, NOW), false);
+  assert.equal(navigableFix(fix, NOW), true);
+  assert.equal(navigableFix({ ...fix, timestamp: NOW }, NOW), true);
+  for (const accuracy of [25.01, 26, 35])
+    assert.equal(navigableFix({ ...fix, accuracy }, NOW), false, `${accuracy}`);
+  assert.equal(navigableFix({ ...fix, timestamp: NOW - 10_001 }, NOW), false);
+  assert.equal(navigableFix({ ...fix, timestamp: NOW - 11_000 }, NOW), false);
+  assert.equal(navigableFix({ ...fix, timestamp: NOW + 1 }, NOW), false);
+  assert.equal(navigableFix({ ...fix, timestamp: NOW + 5_000 }, NOW), false);
+  for (const invalid of [
+    { latitude: Number.NaN },
+    { latitude: 91 },
+    { longitude: -181 },
+    { accuracy: -1 },
+    { timestamp: Number.NaN },
+  ])
+    assert.equal(navigableFix({ ...fix, ...invalid }, NOW), false);
+});
+test("controller guides on a 25 m fix, loses guidance on 26 m and 35 m with 25 m recovery copy, and recovers without unseen credit", async () => {
+  const f = fixture();
+  f.controller.start(record);
+  await f.fix(100, { accuracy: 25 });
+  assert.equal(f.controller.state.phase, "navigating");
+  assert.equal(f.controller.state.guidance?.instruction, "Continue");
+  f.advance(1000);
+  await f.fix(150, { accuracy: 25 });
+  assert.equal(f.controller.state.creditedDistanceMeters, 50);
+  for (const accuracy of [26, 35]) {
+    f.advance(1000);
+    await f.fix(200, { accuracy });
+    assert.equal(f.controller.state.phase, "location-lost", `${accuracy}`);
+    assert.equal(f.controller.state.guidance, null);
+    assert.equal(f.controller.state.fix, null);
+    assert.equal(
+      f.controller.state.message,
+      "Waiting for a fresh location with accuracy within 25 m.",
+    );
+  }
+  f.advance(1000);
+  await f.fix(400, { accuracy: 5 });
+  assert.equal(f.controller.state.phase, "navigating");
+  assert.equal(f.controller.state.creditedDistanceMeters, 50);
+  f.advance(1000);
+  await f.fix(420, { accuracy: 5 });
+  assert.equal(f.controller.state.creditedDistanceMeters, 70);
+});
+test("controller accepts a fix aged exactly 10 s, rejects 11 s and future-dated fixes, and expires after 10 s", async () => {
+  // A fix taken when the watch started and delivered 10 s later is still credible.
+  const inclusive = fixture();
+  inclusive.controller.start(record);
+  inclusive.advance(10_000);
+  assert.equal(inclusive.controller.state.phase, "reacquiring");
+  await inclusive.fix(100, { timestamp: NOW });
+  assert.equal(inclusive.controller.state.phase, "navigating");
+  // The expiry timer agrees: still current at exactly 10 s, lost one second later.
+  inclusive.advance(1000);
+  assert.equal(inclusive.controller.state.phase, "location-lost");
+  assert.equal(inclusive.controller.state.guidance, null);
+  // The same watch-start fix delivered 11 s later is not.
+  const late = fixture();
+  late.controller.start(record);
+  late.advance(9_000);
+  assert.equal(late.controller.state.phase, "reacquiring");
+  late.advance(2_000);
+  assert.equal(late.controller.state.phase, "location-lost");
+  await late.fix(100, { timestamp: NOW });
+  assert.equal(late.controller.state.phase, "location-lost");
+  assert.equal(late.controller.state.guidance, null);
+  assert.match(late.controller.state.message, /within 25 m/);
+  // Future-dated readings are refused, then a current one recovers.
+  const future = fixture();
+  future.controller.start(record);
+  await future.fix(100, { timestamp: NOW + 1 });
+  assert.equal(future.controller.state.phase, "location-lost");
+  assert.equal(future.controller.state.guidance, null);
+  future.advance(1);
+  await future.fix(100);
+  assert.equal(future.controller.state.phase, "navigating");
+});
+test("a worker answer arriving after its fix aged past 10 s is discarded; one at exactly 10 s is adopted", async () => {
+  for (const [delay, adopted] of [
+    [10_000, true],
+    [10_001, false],
+  ] as const) {
+    const f = fixture();
+    const resolves: Array<(value: NavigationGuidance) => void> = [];
+    const controller = new ForegroundNavigationController({
+      location: f.location,
+      clock: f.clock,
+      evaluate: () => new Promise((resolve) => resolves.push(resolve)),
+    });
+    controller.start(record);
+    f.callbacks
+      .at(-1)!
+      .success({ latitude: 40, longitude: -89, accuracy: 25, timestamp: NOW });
+    // The worker is slow; the expiry timer has not ticked yet.
+    f.advance(delay, false);
+    resolves[0]({
+      routeProgressMeters: 100,
+      distanceFromRouteMeters: 0,
+      instruction: "Late",
+      remainingMeters: 900,
+    });
+    await flush();
+    assert.equal(controller.state.phase === "navigating", adopted, `${delay}`);
+    assert.equal(
+      controller.state.guidance?.instruction ?? null,
+      adopted ? "Late" : null,
+    );
+  }
+});
+test("a reroute request and its applicability follow the 10 s freshness rule", async () => {
+  const { f, request } = await offRoute();
+  f.advance(10_000, false);
+  assert.equal(f.controller.rerouteStaleReason(request), null);
+  assert.ok(f.controller.rerouteRequest());
+  f.advance(1, false);
+  assert.equal(f.controller.rerouteStaleReason(request), "location-lost");
+  assert.equal(f.controller.rerouteRequest(), null);
+  // The next timer tick then drops guidance, which also interrupts the request.
+  f.advance(0);
+  assert.equal(f.controller.state.phase, "location-lost");
+  assert.equal(f.controller.rerouteStaleReason(request), "interrupted");
 });
 test("hide immediately clears guidance and watch; resume earns no distance for unseen movement", async () => {
   const f = fixture();
@@ -181,7 +303,9 @@ test("timeout and inaccurate fixes immediately remove guidance, next good fix es
   const f = fixture();
   f.controller.start(record);
   await f.fix(100);
-  f.advance(15_001);
+  f.advance(10_000);
+  assert.equal(f.controller.state.phase, "navigating");
+  f.advance(1);
   assert.equal(f.controller.state.phase, "location-lost");
   assert.equal(f.controller.state.guidance, null);
   await f.fix(500);
@@ -230,8 +354,10 @@ test("off-route requires accurate, consecutive fixes separated by four seconds; 
   await f.fix(100);
   assert.equal(f.controller.state.phase, "navigating");
   f.advance(1000);
-  await f.fix(100, { accuracy: 35 }, 60);
+  // The fallback tolerance widens with accuracy: max(45, 2 × 25 m) = 50 m.
+  await f.fix(100, { accuracy: 25 }, 49);
   assert.equal(f.controller.state.phase, "navigating");
+  assert.notEqual(f.controller.state.guidance, null);
 });
 test("stale worker completion after hide is ignored", async () => {
   const f = fixture();
