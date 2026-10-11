@@ -2241,26 +2241,48 @@ dialog::backdrop {
 
 /* In short landscape, ride information and the map share the viewport rather
    than covering each other. Each keeps its controls and attribution reachable. */
-@media (max-height: 500px) and (min-width: 500px) {
+@media (max-height: 500px) and (min-width: 640px) {
   .navigation .panel {
-    width: 48%;
+    width: 55%;
   }
   .navigation .ride-map,
   .navigation .ride-map-fallback {
-    left: 48%;
-    width: 52%;
+    left: 55%;
+    width: 45%;
   }
   .navigation .ride-ui {
+    gap: 4px;
     padding: max(8px, env(safe-area-inset-top)) 8px
-      max(8px, env(safe-area-inset-bottom));
+      max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   }
   .navigation .ride-guidance {
+    flex-shrink: 1;
     grid-template-columns: 36px minmax(0, 1fr);
     gap: 8px;
     padding: 8px;
   }
   .navigation .ride-turn-icon {
     font-size: 2rem;
+  }
+  .navigation .ride-dock {
+    min-height: min-content;
+  }
+  .navigation .ride-dock-content {
+    height: max(60px, 2.25rem);
+    min-height: max(60px, 2.25rem);
+    flex-grow: 1;
+  }
+  .navigation .ride-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+  }
+  .navigation .ride-details summary {
+    padding: 8px;
+    font-size: 0.8rem;
+  }
+  .navigation .ride-stop {
+    min-width: 0;
+    padding: 8px;
   }
   .navigation .ride-progress {
     flex-wrap: wrap;
@@ -2273,6 +2295,7 @@ dialog::backdrop {
     top: max(12px, env(safe-area-inset-top));
   }
   .navigation .ride-credit {
+    right: max(12px, env(safe-area-inset-right));
     bottom: max(12px, env(safe-area-inset-bottom));
     max-width: calc(100% - 24px);
   }

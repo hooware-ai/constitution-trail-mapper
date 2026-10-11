@@ -58,6 +58,16 @@ for (const [name, width, height, font, rotate] of [
       expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(44);
       // Checks actual hit testing, including an expanded details card covering Stop.
       await stop.click({ trial: true });
+      const details = page.locator(".ride-details summary");
+      const detailsBox = await details.boundingBox();
+      expect(detailsBox!.y).toBeGreaterThanOrEqual(0);
+      expect(detailsBox!.y + detailsBox!.height).toBeLessThanOrEqual(
+        height + 1,
+      );
+      expect(
+        Math.min(detailsBox!.width, detailsBox!.height),
+      ).toBeGreaterThanOrEqual(44);
+      await details.click({ trial: true });
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
