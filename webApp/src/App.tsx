@@ -1673,6 +1673,26 @@ export function App({ refresh }: AppProps = {}) {
       "Place saved",
     );
   }
+  /**
+   * Engines do not reliably scroll a focused read-only textarea into its scrolling dialog (WebKit leaves it below the
+   * dialog; after the failure notice grows the dialog, scroll anchoring can leave it above). Only scrolls, never focuses,
+   * and only while the field still has focus and is wholly outside the dialog or window; checked again after layout settles.
+   */
+  function revealFocused(field: HTMLElement) {
+    const reveal = () => {
+      const dialog = field.closest("dialog");
+      if (!dialog || document.activeElement !== field) return;
+      const r = field.getBoundingClientRect(),
+        d = dialog.getBoundingClientRect();
+      if (
+        r.bottom <= Math.max(d.top, 0) ||
+        r.top >= Math.min(d.bottom, innerHeight)
+      )
+        field.scrollIntoView({ block: "nearest" });
+    };
+    reveal();
+    requestAnimationFrame(reveal);
+  }
   async function shareSummary() {
     // This attempt belongs to the dialog session and the request that started it.
     const epoch = dialogEpoch.current,
@@ -3446,6 +3466,7 @@ export function App({ refresh }: AppProps = {}) {
               rows={4}
               value={share.text + "\n" + share.url}
               aria-describedby={shareCopyId}
+              onFocus={(e) => revealFocused(e.currentTarget)}
             />
           </label>
           <p className="caption" id={shareCopyId}>
