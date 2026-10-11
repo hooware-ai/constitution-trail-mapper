@@ -283,6 +283,7 @@ for (const [name, width, height, font] of [
     await fit.click();
     await page.setViewportSize({ width, height });
     await settledCamera();
+    await page.evaluate(() => scrollTo(0, 0));
     await check();
   });
 }
