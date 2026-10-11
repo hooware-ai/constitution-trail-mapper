@@ -80,7 +80,12 @@ test("Help follows today's behaviour: browser-only storage, optional basemap, no
   await expect(dialog).toContainText("Accounts and sync: not available");
   // The location claim is the qualified one: exact fixes are never uploaded, and this build fetches no road files.
   await expect(dialog).toContainText(
-    "The app never uploads your exact GPS fixes, what you type or what you save",
+    "The app never uploads your exact GPS fixes, place searches or saved routes",
+  );
+  await expect(dialog).toContainText("Voluntary feedback");
+  await expect(dialog).toContainText("private project collection");
+  await expect(dialog).toContainText(
+    "No location, saved routes, name or email is added",
   );
   const copy = await dialog.innerText();
   expect(copy).not.toContain("is not sent by the app anywhere");

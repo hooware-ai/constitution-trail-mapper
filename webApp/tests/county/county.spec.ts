@@ -775,7 +775,7 @@ test("Help on the build WITHOUT road data says so, claims no road files, and the
     "Outside the loaded features there is nothing to route on",
   );
   await expect(dialog).toContainText(
-    "The app never uploads your exact GPS fixes, what you type or what you save",
+    "The app never uploads your exact GPS fixes, place searches or saved routes",
   );
   const copy = await dialog.innerText();
   expect(copy).not.toContain("road files");

@@ -1,0 +1,39 @@
+name: Web feedback server
+on:
+  pull_request:
+    paths: ['webApp/hosting-server/**', 'webApp/src/SupportForm.tsx', '.github/workflows/web-feedback-server.yml']
+  push:
+    branches: [main]
+    paths: ['webApp/hosting-server/**', 'webApp/src/SupportForm.tsx', '.github/workflows/web-feedback-server.yml']
+permissions:
+  contents: read
+jobs:
+  feedback-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: webApp/hosting-server
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: webApp/hosting-server/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Real local persistence and failure controls
+        run: npm test
+      - name: Compile hosting profile with nondeployable compiler fixture
+        run: |
+          node --input-type=module - <<'JS'
+          import {mkdir,writeFile} from 'node:fs/promises';
+          await mkdir('public',{recursive:true});
+          await writeFile('trail.html','<!doctype html><html><body>Compiler fixture only; not a Trail Mapper release.</body></html>');
+          await writeFile('public/provenance.json',JSON.stringify({publicRelease:{allowed:false},compilerFixtureOnly:true}));
+          JS
+          npm run build
