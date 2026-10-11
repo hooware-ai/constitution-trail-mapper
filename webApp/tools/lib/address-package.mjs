@@ -2,14 +2,27 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
-export function addressIndexBuildFile(repoRoot, dataset, channel, override) {
+export function addressIndexBuildFile(
+  repoRoot,
+  dataset,
+  channel,
+  override,
+  syntheticEvidence,
+) {
+  // The county browser harness uses self-authored example.test data and is never publishable.
+  const synthetic =
+    syntheticEvidence?.manifest?.licensedItemId === "synthetic-item" &&
+    syntheticEvidence.manifest.licensedSourceUrl ===
+      "https://example.test/synthetic/MapServer/8" &&
+    syntheticEvidence.approval?.id === "synthetic-county" &&
+    syntheticEvidence.approval.approved === false;
   if (channel === "public" && override !== undefined)
     throw new Error(
       "Public address search uses the pinned package. Unset TRAIL_ADDRESS_INDEX_FILE; it cannot disable or replace the index.",
     );
   return (
     override ??
-    (dataset === "county" && channel === "public"
+    (dataset === "county" && channel === "public" && !synthetic
       ? resolve(repoRoot, "data/generated/web-address-index.json")
       : undefined)
   );

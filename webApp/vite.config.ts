@@ -63,6 +63,16 @@ const addressIndexFile = addressIndexBuildFile(
   datasetKind,
   channel,
   process.env.TRAIL_ADDRESS_INDEX_FILE,
+  process.env.TRAIL_COUNTY_MANIFEST && process.env.TRAIL_COUNTY_APPROVAL
+    ? {
+        manifest: JSON.parse(
+          readFileSync(resolve(process.env.TRAIL_COUNTY_MANIFEST), "utf8"),
+        ),
+        approval: JSON.parse(
+          readFileSync(resolve(process.env.TRAIL_COUNTY_APPROVAL), "utf8"),
+        ),
+      }
+    : undefined,
 );
 let addressIndex: { file: string; sha256: string; bytes: Buffer } | null = null;
 if (addressIndexFile) {

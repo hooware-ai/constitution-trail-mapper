@@ -29,6 +29,41 @@ test("a public county build always includes its pinned address index and cannot 
   );
 });
 
+test("only the explicitly synthetic, unapproved county harness omits real county addresses", () => {
+  const manifest = {
+    licensedItemId: "synthetic-item",
+    licensedSourceUrl: "https://example.test/synthetic/MapServer/8",
+  };
+  const approval = { id: "synthetic-county", approved: false };
+  const build = (evidence) =>
+    addressIndexBuildFile("/repo", "county", "public", undefined, evidence);
+  assert.equal(build({ manifest, approval }), undefined);
+  for (const evidence of [
+    { manifest, approval: { ...approval, approved: true } },
+    { manifest: { ...manifest, licensedItemId: "real-item" }, approval },
+    {
+      manifest: {
+        ...manifest,
+        licensedSourceUrl: "https://county.example/MapServer/8",
+      },
+      approval,
+    },
+    { manifest, approval: { ...approval, id: "real-county" } },
+  ])
+    assert.equal(
+      build(evidence),
+      "/repo/data/generated/web-address-index.json",
+    );
+  assert.throws(
+    () =>
+      addressIndexBuildFile("/repo", "county", "public", "", {
+        manifest,
+        approval,
+      }),
+    /cannot disable or replace/,
+  );
+});
+
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), "trail-address-pin-"));
   mkdirSync(join(root, "data/generated"), { recursive: true });

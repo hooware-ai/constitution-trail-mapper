@@ -3,6 +3,10 @@ export function addressIndexBuildFile(
   dataset: "fixture" | "county",
   channel: "review" | "public",
   override: string | undefined,
+  syntheticEvidence?: {
+    manifest: Record<string, unknown>;
+    approval: Record<string, unknown>;
+  },
 ): string | undefined;
 export function verifyAddressPackage(
   repoRoot: string,
