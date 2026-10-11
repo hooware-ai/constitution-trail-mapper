@@ -294,6 +294,43 @@ header .quiet {
 .picking .map {
   cursor: crosshair;
 }
+/* Point selection owns canvas taps; its controls never cover the chosen point. */
+.map-wrap.picking {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+}
+.map-wrap.picking > .map {
+  position: relative;
+  flex: 1;
+  height: clamp(240px, 40dvh, 480px);
+  min-height: 240px;
+}
+.map-wrap.picking > .map-tools,
+.map-wrap.picking > .map-caption,
+.map-wrap.picking > .map-picker {
+  position: static;
+  transform: none;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  flex: none;
+}
+.map-wrap.picking > .map-tools {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px;
+}
+.map-wrap.picking > .map-picker {
+  padding: 12px;
+  border-radius: 0;
+}
+.picking .leaflet-interactive,
+.picking .closure-label {
+  pointer-events: none;
+}
 .explore-point-marker {
   display: grid;
   place-items: center;
@@ -2259,6 +2296,7 @@ dialog::backdrop {
     flex-shrink: 1;
     min-height: 0;
     overflow-y: auto;
+    align-items: start;
     grid-template-columns: 36px minmax(0, 1fr);
     gap: 8px;
     padding: 8px;
@@ -2308,4 +2346,9 @@ dialog::backdrop {
     top: auto;
     bottom: 70px;
   }
+}
+
+.ride-guidance:focus-visible {
+  outline: 3px solid #006ca8;
+  outline-offset: -3px;
 }

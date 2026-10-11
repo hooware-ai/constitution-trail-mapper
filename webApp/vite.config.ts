@@ -8,6 +8,7 @@ import { repoRoot, verifyCoreManifest } from "./tools/lib/core.mjs";
 import { verifyPackageDir } from "./tools/lib/dataset-package.mjs";
 import { distDir } from "./tools/lib/provenance.mjs";
 import { browserPort } from "./tools/lib/browser-port.mjs";
+import { addressIndexBuildFile } from "./tools/lib/address-package.mjs";
 
 // Automated runs own their port (TRAIL_TEST_PORT) and fail if it is taken instead of reusing another server.
 const port = browserPort(process.env.TRAIL_TEST_PORT ?? 4173);
@@ -55,16 +56,26 @@ const buildInfo = {
   core: coreHash,
   assumeEstimated: assumeEstimatedConnections,
 };
-// OPT-IN county address index (review builds only). It is never part of a default build: the index is data the owner has not
-// approved for any composition, so it is added only when a file is named, only in the review channel, and only if its bytes
-// are exactly the pinned index in data/web-address-index.manifest.json. Hash-named, and fetched by the page on demand.
-const addressIndexFile = process.env.TRAIL_ADDRESS_INDEX_FILE;
+// County public artifacts carry the pinned local address index, following the owner's address-search fix request.
+// Fixture/review builds retain their explicit test seam. Preparation never deploys or changes sharing.
+const addressIndexFile = addressIndexBuildFile(
+  repoRoot,
+  datasetKind,
+  channel,
+  process.env.TRAIL_ADDRESS_INDEX_FILE,
+  process.env.TRAIL_COUNTY_MANIFEST && process.env.TRAIL_COUNTY_APPROVAL
+    ? {
+        manifest: JSON.parse(
+          readFileSync(resolve(process.env.TRAIL_COUNTY_MANIFEST), "utf8"),
+        ),
+        approval: JSON.parse(
+          readFileSync(resolve(process.env.TRAIL_COUNTY_APPROVAL), "utf8"),
+        ),
+      }
+    : undefined,
+);
 let addressIndex: { file: string; sha256: string; bytes: Buffer } | null = null;
 if (addressIndexFile) {
-  if (channel !== "review")
-    throw new Error(
-      "The county address index can only be added to a review build.",
-    );
   const bytes = readFileSync(resolve(addressIndexFile));
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const pinned = JSON.parse(

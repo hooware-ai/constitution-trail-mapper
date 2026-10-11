@@ -329,12 +329,13 @@ export function MapView({
           popupAnchor: [0, -16],
         }),
         title: "Trail closed — show closure details",
-        keyboard: true,
+        keyboard: !picking,
+        interactive: !picking,
         bubblingMouseEvents: false,
       })
         .bindTooltip(plain("Trail closed"), {
           permanent: true,
-          interactive: true,
+          interactive: !picking,
           direction: "auto",
           offset: [14, 0],
           className: "closure-label",
@@ -425,7 +426,7 @@ export function MapView({
       gapMarkers.current.set(gap.id, marker);
     });
     drawRidden.current();
-  }, [features, route, proposed, closures, cues]);
+  }, [features, route, proposed, closures, cues, picking]);
   useEffect(() => {
     const m = map.current;
     if (!m) return;

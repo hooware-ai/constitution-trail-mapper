@@ -69,7 +69,7 @@ test("only a house number plus street text starts address search", () => {
     assert.equal(looksLikeAddress(no), false, no);
 });
 
-test("a build with no index offers no address source, fixture or county; only an opted-in review build or the development test seam does", () => {
+test("a build with no index offers no address source, fixture or county; a shipped pinned index or the development test seam does", () => {
   const built = { file: "data/address-index.abc.json", sha256: "x" };
   assert.equal(addressIndexSource(null, false), null);
   assert.deepEqual(addressIndexSource(null, true), {

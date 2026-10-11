@@ -43,6 +43,28 @@ async function serveIndex(page: Page) {
   });
   return requests;
 }
+
+test("failed address data can be retried without erasing the typed address", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.route("**/data/address-index.fixture.json", (route) => {
+    requests++;
+    return requests === 1
+      ? route.fulfill({ status: 503, body: "Unavailable" })
+      : route.fulfill({ contentType: "application/json", body: indexText });
+  });
+  await openChooser(page, "Start");
+  await search(page).fill("421 n main");
+  await page
+    .getByRole("button", { name: "Retry address search", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "County address results" }),
+  ).toBeVisible();
+  await expect(search(page)).toHaveValue("421 n main");
+  expect(requests).toBe(2);
+});
 async function openChooser(page: Page, field: "Start" | "Destination") {
   await page.goto("/?addressFixture");
   await page.getByRole("button", { name: /Go somewhere/ }).click();

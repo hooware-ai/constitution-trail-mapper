@@ -14,6 +14,7 @@ import {
   type PopContext,
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
+import { RideGuidance } from "./RideGuidance";
 import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
 import { directionGroupStarts } from "./directionGroups";
 import { ManeuverIcon } from "./ManeuverIcon";
@@ -66,6 +67,7 @@ import {
   type NavigationState,
 } from "./platform/navigation";
 import { acquirePlannerLocation } from "./platform/plannerLocation";
+import { usableFix, type LocationFix } from "./platform/navigation";
 import { addressIndexSource } from "./addressSearch";
 import { startBlockedReason } from "./startReason";
 import {
@@ -331,6 +333,7 @@ export function App({ refresh }: AppProps = {}) {
     target: "start" | "destination";
     phase: "waiting" | "failure";
     message: string;
+    approximateFix?: LocationFix;
   } | null>(null);
   const cancelLocationRef = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelLocationRef.current?.(), []);
@@ -989,6 +992,37 @@ export function App({ refresh }: AppProps = {}) {
           setLocationRequest({ target, ...event });
         }
       },
+    );
+  }
+  function useApproximateLocation() {
+    const request = locationRequest;
+    const fix = request?.approximateFix;
+    if (!request || !fix) return;
+    if (!usableFix({ ...fix, accuracy: 0 }, Date.now())) {
+      ++operation.current;
+      cancelLocation();
+      setError("");
+      setLocationRequest({
+        target: request.target,
+        phase: "failure",
+        message:
+          "That approximate location is too old. Try location again or pick a point on the map.",
+      });
+      return;
+    }
+    ++operation.current;
+    cancelLocation();
+    setError("");
+    setDraft((value) => ({
+      ...value,
+      [request.target]: {
+        label: `Approximate current location (within ${Math.round(fix.accuracy)} m)`,
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+      },
+    }));
+    success(
+      "Approximate location selected. Check the point before planning; navigation still needs a precise live location.",
     );
   }
   function makeRecord(
@@ -2245,6 +2279,12 @@ export function App({ refresh }: AppProps = {}) {
             >
               <p>{locationRequest.message}</p>
               <div className="actions">
+                {locationRequest.approximateFix && (
+                  <button onClick={useApproximateLocation}>
+                    Use approximate location (within{" "}
+                    {Math.round(locationRequest.approximateFix.accuracy)} m)
+                  </button>
+                )}
                 {locationRequest.phase === "failure" ? (
                   <button
                     onClick={() => currentLocation(locationRequest.target)}
@@ -2816,10 +2856,7 @@ export function App({ refresh }: AppProps = {}) {
           {screen === "navigation" && (
             <div className="ride-ui">
               <h1 className="visually-hidden">Ride in progress</h1>
-              <div
-                className={"guidance ride-guidance " + nav.phase}
-                aria-live="polite"
-              >
+              <RideGuidance phase={nav.phase}>
                 <span className="ride-turn-icon" aria-hidden="true">
                   {rideSymbol(
                     rideInstruction(
@@ -2865,7 +2902,7 @@ export function App({ refresh }: AppProps = {}) {
                     <p>{nav.message}</p>
                   )}
                 </div>
-              </div>
+              </RideGuidance>
               <div className="ride-dock">
                 <div className="ride-dock-content">
                   {routeAlerts}
