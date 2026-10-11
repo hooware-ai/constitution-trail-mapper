@@ -88,6 +88,9 @@ export function MapView({
   const gapMarkers = useRef(new Map<string, L.Marker>());
   const chevrons = useRef<ChevronLayer | null>(null);
   const riddenLayer = useRef<L.LayerGroup | null>(null);
+  // Keep an automatic preview fit through layout changes, but never reclaim a
+  // view the rider has panned/zoomed or focused on a particular maneuver/gap.
+  const resizeFit = useRef<L.LatLngBounds | null>(null);
   const drawRidden = useRef<() => void>(() => {});
   const pick = useRef(onPick),
     manualPan = useRef(onManualPan),
@@ -125,10 +128,46 @@ export function MapView({
     m.on("dragstart", () => manualPan.current?.());
     publishView();
 
-    const ro = new ResizeObserver(() => m.invalidateSize());
-    ro.observe(root.current);
+    const node = root.current;
+    const clearResizeFit = () => {
+      resizeFit.current = null;
+    };
+    const manualKey = (event: KeyboardEvent) => {
+      if (
+        [
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "+",
+          "=",
+          "-",
+          "_",
+        ].includes(event.key)
+      )
+        clearResizeFit();
+    };
+    node.addEventListener("pointerdown", clearResizeFit, true);
+    node.addEventListener("click", clearResizeFit, true);
+    node.addEventListener("wheel", clearResizeFit, { passive: true });
+    node.addEventListener("keydown", manualKey);
+    const ro = new ResizeObserver(() => {
+      m.invalidateSize();
+      if (resizeFit.current && node.closest(".preview")) {
+        m.fitBounds(resizeFit.current, {
+          padding: [32, 32],
+          maxZoom: 16,
+          animate: false,
+        });
+      }
+    });
+    ro.observe(node);
     return () => {
       ro.disconnect();
+      node.removeEventListener("pointerdown", clearResizeFit, true);
+      node.removeEventListener("click", clearResizeFit, true);
+      node.removeEventListener("wheel", clearResizeFit);
+      node.removeEventListener("keydown", manualKey);
       m.remove();
       map.current = null;
     };
@@ -388,6 +427,7 @@ export function MapView({
     const pts = route
       ? routePoints(route)
       : features.flatMap((f) => f.paths.flat());
+    resizeFit.current = null;
     if (pts.length) {
       const bounds =
         route || fixture
@@ -396,6 +436,7 @@ export function MapView({
               [40.45, -89.035],
               [40.55, -88.91],
             ]);
+      resizeFit.current = route ? bounds : null;
       m.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
   }, [route, features, fixture]);
@@ -442,6 +483,7 @@ export function MapView({
     const gap = route?.accessGaps?.find((item) => item.id === gapFocus?.id);
     const m = map.current;
     if (!m || !gap) return;
+    resizeFit.current = null;
     root.current?.parentElement?.scrollIntoView({ block: "nearest" });
     m.fitBounds(L.latLngBounds([xy(gap.from), xy(gap.to)]), {
       padding: [56, 56],
@@ -458,6 +500,7 @@ export function MapView({
       : undefined;
     const m = map.current;
     if (!m || !instruction?.point || !instructionFocus) return;
+    resizeFit.current = null;
     const number = instructionFocus.index + 1;
     const icon = document.createElement("span");
     icon.textContent = String(number);
@@ -562,11 +605,14 @@ export function MapView({
     const pts = route
       ? routePoints(route)
       : features.flatMap((f) => f.paths.flat());
-    if (pts.length)
-      map.current?.fitBounds(L.latLngBounds(pts.map(xy)), {
+    if (pts.length) {
+      const bounds = L.latLngBounds(pts.map(xy));
+      resizeFit.current = route ? bounds : null;
+      map.current?.fitBounds(bounds, {
         padding: [32, 32],
         maxZoom: 16,
       });
+    }
   }
   return (
     <section
