@@ -15,7 +15,7 @@ export async function submit(request, db, now = Date.now()) {
   if(length>18000) return json({error:'too_large'},413);
   const reader=request.body?.getReader();let bytes=0;const chunks=[];
   if(!reader) return json({error:'invalid_input'},400);
-  for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>18000){await reader.cancel();return json({error:'too_large'},413);}chunks.push(value);}
+  try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>18000){await reader.cancel();return json({error:'too_large'},413);}chunks.push(value);}}catch{return json({error:'temporarily_unavailable'},503);}
   let input;try{const merged=new Uint8Array(bytes);let offset=0;for(const c of chunks){merged.set(c,offset);offset+=c.length;}input=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(merged));}catch{return json({error:'invalid_input'},400);}
   if(!input||Array.isArray(input)||typeof input!=='object'||Object.keys(input).some(k=>!['id','kind','message','website'].includes(k))||typeof input.id!=='string'||!/^([a-f0-9]{8}-){1}[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(input.id)||!['feedback','feature_request'].includes(input.kind)||typeof input.message!=='string'||typeof input.website!=='string'||input.website!=='' ) return json({error:'invalid_input'},400);
   const message=input.message.trim();if(message.length<10||message.length>4000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(message)||Array.from(message).some(c=>c.length===1&&c.charCodeAt(0)>=0xd800&&c.charCodeAt(0)<=0xdfff))return json({error:'invalid_input'},400);
@@ -31,12 +31,11 @@ export async function submit(request, db, now = Date.now()) {
     await db.batch([
       db.prepare('INSERT OR IGNORE INTO submission_limits (key,count,expires_at) VALUES (?,0,?)').bind(dayKey,(day+3)*86400000),
       db.prepare('INSERT OR IGNORE INTO submission_limits (key,count,expires_at) SELECT ?,0,? WHERE (SELECT count FROM submission_limits WHERE key = ?) < 100 AND NOT EXISTS (SELECT 1 FROM feedback_submissions WHERE id = ?)').bind(rateKey,(hour+49)*3600000,dayKey,input.id),
-      db.prepare(`INSERT INTO feedback_submissions (id,kind,message,created_at,body_hash,rate_key,counted) SELECT ?,?,?,?,?,?,0 WHERE (SELECT count FROM submission_limits WHERE key = ?) < 100 AND (SELECT count FROM submission_limits WHERE key = ?) < 5 ON CONFLICT(id) DO NOTHING`).bind(input.id,input.kind,message,now,bodyHash,rateKey,dayKey,rateKey),
+      db.prepare(`INSERT INTO feedback_submissions (id,kind,message,created_at,body_hash,counted) SELECT ?,?,?,?,?,0 WHERE (SELECT count FROM submission_limits WHERE key = ?) < 100 AND (SELECT count FROM submission_limits WHERE key = ?) < 5 ON CONFLICT(id) DO NOTHING`).bind(input.id,input.kind,message,now,bodyHash,dayKey,rateKey),
       db.prepare('UPDATE submission_limits SET count = count + 1 WHERE key IN (?,?) AND EXISTS (SELECT 1 FROM feedback_submissions WHERE id = ? AND body_hash = ? AND counted = 0)').bind(dayKey,rateKey,input.id,bodyHash),
       db.prepare('UPDATE feedback_submissions SET counted = 1 WHERE id = ? AND body_hash = ?').bind(input.id,bodyHash),
       db.prepare('INSERT OR IGNORE INTO submission_limits (key,count,expires_at) VALUES (?,0,?)').bind('maintenance:'+day,(day+3)*86400000),
       db.prepare('DELETE FROM feedback_submissions WHERE created_at < ? AND (SELECT count FROM submission_limits WHERE key = ?) = 0').bind(now-90*86400000,'maintenance:'+day),
-      db.prepare('UPDATE feedback_submissions SET rate_key = NULL WHERE rate_key IS NOT NULL AND created_at < ? AND (SELECT count FROM submission_limits WHERE key = ?) = 0').bind(now-2*86400000,'maintenance:'+day),
       db.prepare('DELETE FROM submission_limits WHERE expires_at < ? AND (SELECT count FROM submission_limits WHERE key = ?) = 0').bind(now,'maintenance:'+day),
       db.prepare('UPDATE submission_limits SET count = 1 WHERE key = ?').bind('maintenance:'+day)
     ]);
