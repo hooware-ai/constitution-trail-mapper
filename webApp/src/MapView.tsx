@@ -88,6 +88,9 @@ export function MapView({
   const gapMarkers = useRef(new Map<string, L.Marker>());
   const chevrons = useRef<ChevronLayer | null>(null);
   const riddenLayer = useRef<L.LayerGroup | null>(null);
+  // Keep an automatic preview fit through layout changes, but never reclaim a
+  // view the rider has panned/zoomed or focused on a particular maneuver/gap.
+  const resizeFit = useRef<L.LatLngBounds | null>(null);
   const drawRidden = useRef<() => void>(() => {});
   const pick = useRef(onPick),
     manualPan = useRef(onManualPan),
@@ -105,6 +108,9 @@ export function MapView({
       zoomControl: true,
       attributionControl: true,
       preferCanvas,
+      // Flat-map zooms are immediate so explicit preview focus always wins.
+      // Leaflet stop() cancels pans, but not its pending CSS zoom transition.
+      zoomAnimation: false,
     }).setView([40.502, -88.97], 13);
     // Leaflet's own prefix link would also replace this page; keep the credit, open it safely.
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
@@ -125,10 +131,48 @@ export function MapView({
     m.on("dragstart", () => manualPan.current?.());
     publishView();
 
-    const ro = new ResizeObserver(() => m.invalidateSize());
-    ro.observe(root.current);
+    const node = root.current;
+    const clearResizeFit = () => {
+      resizeFit.current = null;
+    };
+    const manualKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (
+        [
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "+",
+          "=",
+          "-",
+          "_",
+        ].includes(event.key)
+      )
+        clearResizeFit();
+    };
+    node.addEventListener("pointerdown", clearResizeFit, true);
+    node.addEventListener("click", clearResizeFit, true);
+    node.addEventListener("wheel", clearResizeFit, { passive: true });
+    node.addEventListener("keydown", manualKey, true);
+    const ro = new ResizeObserver(() => {
+      m.invalidateSize();
+      if (!node.closest(".preview")) resizeFit.current = null;
+      if (resizeFit.current && node.closest(".preview")) {
+        m.fitBounds(resizeFit.current, {
+          padding: [32, 32],
+          maxZoom: 16,
+          animate: false,
+        });
+      }
+    });
+    ro.observe(node);
     return () => {
       ro.disconnect();
+      node.removeEventListener("pointerdown", clearResizeFit, true);
+      node.removeEventListener("click", clearResizeFit, true);
+      node.removeEventListener("wheel", clearResizeFit);
+      node.removeEventListener("keydown", manualKey, true);
       m.remove();
       map.current = null;
     };
@@ -388,6 +432,7 @@ export function MapView({
     const pts = route
       ? routePoints(route)
       : features.flatMap((f) => f.paths.flat());
+    resizeFit.current = null;
     if (pts.length) {
       const bounds =
         route || fixture
@@ -396,6 +441,7 @@ export function MapView({
               [40.45, -89.035],
               [40.55, -88.91],
             ]);
+      resizeFit.current = route ? bounds : null;
       m.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
     }
   }, [route, features, fixture]);
@@ -442,7 +488,9 @@ export function MapView({
     const gap = route?.accessGaps?.find((item) => item.id === gapFocus?.id);
     const m = map.current;
     if (!m || !gap) return;
-    root.current?.parentElement?.scrollIntoView({ block: "nearest" });
+    resizeFit.current = null;
+    m.stop();
+    root.current?.scrollIntoView({ block: "nearest" });
     m.fitBounds(L.latLngBounds([xy(gap.from), xy(gap.to)]), {
       padding: [56, 56],
       maxZoom: 19,
@@ -458,6 +506,8 @@ export function MapView({
       : undefined;
     const m = map.current;
     if (!m || !instruction?.point || !instructionFocus) return;
+    resizeFit.current = null;
+    m.stop();
     const number = instructionFocus.index + 1;
     const icon = document.createElement("span");
     icon.textContent = String(number);
@@ -478,45 +528,52 @@ export function MapView({
     element?.setAttribute("aria-label", `Step ${number}: ${instruction.text}`);
     m.setView(xy(instruction.point), 17, { animate: false });
     const reveal = () =>
-      root.current?.parentElement?.scrollIntoView({
+      root.current?.scrollIntoView({
         block: "nearest",
         behavior: "instant",
       });
-    let revealedY = 0;
+    let settleFrame = 0;
+    let settleTimer = 0;
     const cancelReveal = () => {
-      window.removeEventListener("scrollend", settle);
+      cancelAnimationFrame(settleFrame);
+      window.clearTimeout(settleTimer);
+      window.removeEventListener("scroll", scheduleSettle);
       window.removeEventListener("pointerdown", cancelReveal, true);
       window.removeEventListener("wheel", cancelReveal, true);
       window.removeEventListener("keydown", cancelReveal, true);
     };
     const settle = () => {
-      if (window.scrollY === revealedY) return;
-      cancelReveal();
       if (document.activeElement !== element) return;
       const box = element?.getBoundingClientRect();
       if (box && (box.top < 0 || box.bottom > window.innerHeight)) {
+        cancelReveal();
         reveal();
       }
     };
+    const scheduleSettle = () => {
+      cancelAnimationFrame(settleFrame);
+      settleFrame = requestAnimationFrame(settle);
+    };
     // The dialog's close restores its opener first; focus the located maneuver afterwards.
     const frame = requestAnimationFrame(() => {
-      const scrollBefore = window.scrollY;
       reveal();
-      revealedY = window.scrollY;
       element?.focus({ preventScroll: true });
-      // Mobile Chromium can restore the old viewport after this focus. Reveal once more when that scroll settles.
-      if (revealedY !== scrollBefore) {
-        window.addEventListener("scrollend", settle);
-        window.addEventListener("pointerdown", cancelReveal, {
-          passive: true,
-          capture: true,
-        });
-        window.addEventListener("wheel", cancelReveal, {
-          passive: true,
-          capture: true,
-        });
-        window.addEventListener("keydown", cancelReveal, { capture: true });
-      }
+      // Browser focus can restore an older viewport after the reveal, including
+      // when the canvas was already visible. User input always cancels this guard.
+      window.addEventListener("scroll", scheduleSettle, { passive: true });
+      window.addEventListener("pointerdown", cancelReveal, {
+        passive: true,
+        capture: true,
+      });
+      window.addEventListener("wheel", cancelReveal, {
+        passive: true,
+        capture: true,
+      });
+      window.addEventListener("keydown", cancelReveal, { capture: true });
+      // Limit focus restoration recovery; later non-pointer/assistive scrolling
+      // must remain the user's choice too.
+      settleTimer = window.setTimeout(cancelReveal, 1000);
+      scheduleSettle();
     });
     return () => {
       cancelAnimationFrame(frame);
@@ -562,11 +619,16 @@ export function MapView({
     const pts = route
       ? routePoints(route)
       : features.flatMap((f) => f.paths.flat());
-    if (pts.length)
-      map.current?.fitBounds(L.latLngBounds(pts.map(xy)), {
+    if (pts.length) {
+      const bounds = L.latLngBounds(pts.map(xy));
+      resizeFit.current = route ? bounds : null;
+      map.current?.stop();
+      map.current?.fitBounds(bounds, {
         padding: [32, 32],
         maxZoom: 16,
+        animate: false,
       });
+    }
   }
   return (
     <section
