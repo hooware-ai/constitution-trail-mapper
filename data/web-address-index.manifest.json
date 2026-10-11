@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "kind": "address-index-prototype",
+  "kind": "address-index",
   "id": "mclean-address-index",
   "testOnly": false,
-  "scope": "PROTOTYPE INPUT PIN ONLY. It records which fetched county address bytes and which transform produced which index, so a later review can reproduce them. It is not a rights approval, not an owner approval of any dataset composition and not a publication approval, and no default or public build contains this index. Only an explicitly opt-in REVIEW build (TRAIL_ADDRESS_INDEX_FILE, review channel only, bytes equal to the pin below) can carry the real index, and the place chooser then fetches it only when a rider types an address; publication and composition approval are still absent.",
+  "scope": "Pinned complete county address snapshot for the owner-requested address-search fix. Public county artifacts carry the index and search locally on demand; this does not deploy, change sharing, or verify trail access.",
   "source": {
     "item": {
       "id": "502eefa828f94f749bbab9da63b0d016",
@@ -15,9 +15,9 @@
       "snippet": "Address points for McLean County, IL",
       "access": "public",
       "serviceUrl": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
-      "licenseInfo": "<a href='https://creativecommons.org/licenses/by/4.0/' rel='nofollow ugc'><img alt='Creative Commons License' src='https://i.creativecommons.org/l/by/4.0/88x31.png' style='border-width:0px;' /></a><br />This work is licensed under a <a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='nofollow ugc noopener noreferrer'>Creative Commons Attribution 4.0 International License</a>.",
+      "licenseInfo": "<a href='https://creativecommons.org/licenses/by/4.0/' rel='nofollow ugc'><img alt='Creative Commons License' src='https://i.creativecommons.org/l/by/4.0/88x31.png' style='border-width:0px;' /></a><br />This work is licensed under a\u00a0<a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='nofollow ugc noopener noreferrer'>Creative Commons Attribution 4.0 International License</a>.",
       "accessInformation": null,
-      "itemJsonSha256": "3d29d6a97df1a7f6dbe1286ac1602c98121ad6fe585ded77ce70dd9127429fb2"
+      "itemJsonSha256": "e45aac52ecad0302f31dcf42494683c1b9e9bbb6750ea79acc6b8c1bfd3efde4"
     },
     "service": {
       "url": "https://www.mcgisweb.org/mcgc/rest/services/OpenData/OpenData/MapServer/0",
@@ -46,7 +46,7 @@
       "attribution": "Contains McLean County, Illinois address data from the county's public 'Addresses' ArcGIS item (502eefa828f94f749bbab9da63b0d016), licensed CC BY 4.0. Trail Mapper reduced it to address text, postal community, postal code and point, normalized the text, rounded points to 1e-6 degrees and removed non-McLean and unnumbered rows. This is not the county's own product and is not endorsed by the county.",
       "changesMade": "reduced fields; address text upper-cased with punctuation removed and directional and street-type words made canonical; points rounded to 1e-6 degrees; rows outside McLean County, without a leading house number, without a point, or exact duplicates removed (counts below)"
     },
-    "retrievedAt": "2026-10-04T00:20:13.422Z",
+    "retrievedAt": "2026-10-11T15:53:04.481Z",
     "completeness": {
       "serviceCount": 85220,
       "fetchedRows": 85220,
@@ -61,8 +61,8 @@
       "transferLimitHit": false
     },
     "raw": {
-      "bytes": 10805388,
-      "sha256": "428e2c921afd011cc64e553b301946806e4af582090f0cb3ea3b1783ca6cd7cf"
+      "bytes": 10805392,
+      "sha256": "da2bd27436f4eb53d44fd475c96beca6e6ebbaa367dbe81c83b5871e9dd0ebf7"
     },
     "fetcher": "webApp/tools/fetch-mcgis-addresses.mjs"
   },
@@ -85,16 +85,16 @@
       "skippedNoPoint": 0,
       "skippedNotMcLean": 4,
       "exactDuplicatesDropped": 137,
-      "streets": 3284,
+      "streets": 3282,
       "cities": 37,
       "withUnit": 22001
     }
   },
   "index": {
-    "bytes": 2363849,
-    "gzipBytes": 630275,
-    "brotliBytes": 501629,
-    "sha256": "ef5c386736f099c01a1116b8f09ab85f4115815a23157de339c12eaf4f9cdc4f"
+    "bytes": 2363815,
+    "gzipBytes": 630227,
+    "brotliBytes": 500764,
+    "sha256": "e41bd334bab3edbe19a4a4547149e9d390f2842dcba9a3a83ee8aa47bb950841"
   },
   "notIncluded": [
     "staff user and edit-date fields",
@@ -102,11 +102,15 @@
     "owner or property data other than the address text and point"
   ],
   "blockers": [
-    "No Trail Mapper owner approval to ship this index in a build. That is an internal composition approval and is separate from the source's CC BY 4.0 label; a shipped build must carry the attribution and change statement above.",
-    "Address points are not approved trail entrances; the no-gap Start rule is unchanged."
+    "Deployment is held separately. Address points do not establish trail access; unverified connections still block Start."
   ],
   "operationalUnknowns": [
     "Availability and rate tolerance of the county service for repeated bulk queries is unknown. It is an operational question, not a missing licence permission for the already downloaded, CC BY-labelled bytes.",
     "Currency of the rows: the item was last modified 2022-09-06; whether the rows are newer is not established."
-  ]
+  ],
+  "featureRequest": {
+    "date": "2026-10-11",
+    "purpose": "Fix reported inability to search addresses",
+    "deployment": "HELD_SEPARATE_APPROVAL"
+  }
 }

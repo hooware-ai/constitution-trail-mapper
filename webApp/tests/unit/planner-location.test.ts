@@ -77,8 +77,11 @@ function fixture(
     fail(code: number) {
       failure({ code, message: "Browser location failure" });
     },
-    expire() {
-      now += PLANNER_LOCATION_TIMEOUT_MS;
+    advance(milliseconds: number) {
+      now += milliseconds;
+    },
+    expire(milliseconds = PLANNER_LOCATION_TIMEOUT_MS) {
+      now += milliseconds;
       for (const [id, callback] of [...timers]) {
         timers.delete(id);
         callback();
@@ -114,6 +117,7 @@ test("a coarse initial location waits for a more accurate reading", () => {
   const waiting = f.events.at(-1);
   assert.ok(waiting?.phase === "waiting");
   assert.match(waiting.message, /120\s*m/);
+  assert.deepEqual(waiting.approximateFix, { ...goodFix, accuracy: 120 });
   assert.equal(f.timers.size, 1);
   assert.deepEqual(f.clearedWatches, []);
   f.fix({ accuracy: 20 });
@@ -130,7 +134,24 @@ test("a location that remains coarse fails as inaccurate at the deadline", () =>
   f.fix({ accuracy: 120 });
   f.expire();
   expectFailure(f, "inaccurate");
+  const event = f.events.at(-1);
+  assert.ok(event?.phase === "failure");
+  assert.equal(event.approximateFix, undefined);
   assert.deepEqual(f.clearedWatches, [0]);
+});
+
+test("a still-fresh coarse reading remains selectable after the precision deadline", () => {
+  const f = fixture();
+  f.advance(12_000);
+  f.fix({ accuracy: 120 });
+  f.expire(8_000);
+  const event = f.events.at(-1);
+  assert.ok(event?.phase === "failure");
+  assert.deepEqual(event.approximateFix, {
+    ...goodFix,
+    accuracy: 120,
+    timestamp: NOW + 12_000,
+  });
 });
 
 test("the watchdog settles even when a permission prompt produces no callback", () => {

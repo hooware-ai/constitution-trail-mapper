@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { webRoot } from "./lib/core.mjs";
 import { sourceState } from "./lib/provenance.mjs";
+import { repoRoot } from "./lib/core.mjs";
+import { verifyAddressPackage } from "./lib/address-package.mjs";
 
 try {
   if (
@@ -22,6 +24,7 @@ try {
   const source = sourceState();
   if (!source.commit || source.dirty !== false)
     throw new Error("Public build requires an exact clean source commit.");
+  verifyAddressPackage(repoRoot);
   const env = {
     ...process.env,
     TRAIL_DATASET: "county",

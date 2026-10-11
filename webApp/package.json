@@ -28,7 +28,8 @@
     "test:rules": "node tools/run-emulator-tests.mjs",
     "test:rules:controls": "node tools/rules-negative-control.mjs",
     "test:rules:prefetch": "node tools/run-emulator-tests.mjs --prefetch",
-    "build:public": "node tools/build-public.mjs"
+    "build:public": "node tools/build-public.mjs",
+    "prepare:addresses": "node tools/prepare-addresses.mjs"
   },
   "dependencies": {
     "leaflet": "1.9.4",
