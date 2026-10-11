@@ -1212,6 +1212,9 @@ test("61 m of ordinary backtracking on the outbound pass never jumps to the retu
   page,
 }) => {
   await seedOutAndBackRide(page, 1000);
+  // This is continuous backtracking at the inclusive 10 s freshness boundary, not reacquisition after a GPS gap.
+  // Pause before the app imports its clock so wall time cannot turn the 10 s step into an expired reading.
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Reacquiring location…", exact: true }),
@@ -1219,7 +1222,12 @@ test("61 m of ordinary backtracking on the outbound pass never jumps to the retu
   await page.clock.fastForward(1000);
   await acceptedFix(page, 40.5 + 1000 / 111_195, -88.95);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const beforeBacktracking = await page.evaluate(() => Date.now());
   await page.clock.fastForward(10_000);
+  expect(await page.evaluate(() => Date.now())).toBe(
+    beforeBacktracking + 10_000,
+  );
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
   await acceptedFix(page, 40.5 + 939 / 111_195, -88.95);
   const stored = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((k) =>
