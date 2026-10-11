@@ -15,7 +15,7 @@ export type PlannerLocationFailure =
   | "inaccurate"
   | "startup";
 export type PlannerLocationEvent =
-  | { phase: "waiting"; message: string }
+  | { phase: "waiting"; message: string; approximateFix?: LocationFix }
   | { phase: "success"; fix: LocationFix }
   | { phase: "failure"; reason: PlannerLocationFailure; message: string };
 interface Dependencies {
@@ -103,6 +103,7 @@ export function acquirePlannerLocation(
             listener({
               phase: "waiting",
               message: `Location found within about ${Math.round(fix.accuracy)} m. Waiting for a more precise reading…`,
+              approximateFix: fix,
             });
           }
         },

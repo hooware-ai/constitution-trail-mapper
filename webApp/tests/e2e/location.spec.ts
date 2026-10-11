@@ -106,6 +106,56 @@ test("a coarse reading can improve and a late result cannot replace a manual pla
   ).toBe(2);
 });
 
+test("a rider can explicitly use a fresh approximate location for planning without accepting a late fix", async ({
+  page,
+}) => {
+  await startLocation(page);
+  await page.evaluate(() => (window as any).__plannerGps.fix(200));
+  await page
+    .getByRole("button", {
+      name: "Use approximate location (within 200 m)",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("button", {
+      name: "Start: Approximate current location (within 200 m)",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.evaluate(() => (window as any).__plannerGps.fix(5));
+  await expect(
+    page.getByRole("button", {
+      name: "Start: Approximate current location (within 200 m)",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => (window as any).__plannerGps.cleared()),
+  ).toBe(1);
+});
+
+test("an expired approximate reading cannot become a planner endpoint", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await startLocation(page);
+  await page.evaluate(() => (window as any).__plannerGps.fix(200));
+  await page.clock.fastForward(15_001);
+  await page
+    .getByRole("button", {
+      name: "Use approximate location (within 200 m)",
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "approximate location is too old",
+  );
+  await expect(
+    page.getByRole("button", { name: /^Start: Approximate/ }),
+  ).toHaveCount(0);
+});
+
 test("a missing browser callback times out and offers map selection", async ({
   page,
 }, info) => {

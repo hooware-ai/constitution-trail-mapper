@@ -65,6 +65,7 @@ export function loadAddressIndex(
       ),
       {
         cache: "no-cache",
+        signal: AbortSignal.timeout(15_000),
       },
     );
     if (!response.ok) throw new Error("The address data is not available.");

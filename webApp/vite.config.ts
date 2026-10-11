@@ -55,16 +55,15 @@ const buildInfo = {
   core: coreHash,
   assumeEstimated: assumeEstimatedConnections,
 };
-// OPT-IN county address index (review builds only). It is never part of a default build: the index is data the owner has not
-// approved for any composition, so it is added only when a file is named, only in the review channel, and only if its bytes
-// are exactly the pinned index in data/web-address-index.manifest.json. Hash-named, and fetched by the page on demand.
-const addressIndexFile = process.env.TRAIL_ADDRESS_INDEX_FILE;
+// County public artifacts carry the pinned local address index, following the owner's address-search fix request.
+// Fixture/review builds retain their explicit test seam. Preparation never deploys or changes sharing.
+const addressIndexFile =
+  process.env.TRAIL_ADDRESS_INDEX_FILE ??
+  (datasetKind === "county" && channel === "public"
+    ? resolve(repoRoot, "data/generated/web-address-index.json")
+    : undefined);
 let addressIndex: { file: string; sha256: string; bytes: Buffer } | null = null;
 if (addressIndexFile) {
-  if (channel !== "review")
-    throw new Error(
-      "The county address index can only be added to a review build.",
-    );
   const bytes = readFileSync(resolve(addressIndexFile));
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const pinned = JSON.parse(

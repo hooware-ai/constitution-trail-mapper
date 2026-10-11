@@ -114,6 +114,7 @@ test("a coarse initial location waits for a more accurate reading", () => {
   const waiting = f.events.at(-1);
   assert.ok(waiting?.phase === "waiting");
   assert.match(waiting.message, /120\s*m/);
+  assert.deepEqual(waiting.approximateFix, { ...goodFix, accuracy: 120 });
   assert.equal(f.timers.size, 1);
   assert.deepEqual(f.clearedWatches, []);
   f.fix({ accuracy: 20 });

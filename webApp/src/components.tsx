@@ -167,6 +167,7 @@ export function PlaceChooser({
   const [addressState, setAddressState] = useState<
     "idle" | "loading" | "error"
   >("idle");
+  const [addressRetry, setAddressRetry] = useState(0);
   useEffect(() => {
     // The index is fetched only once a rider types an address, and only a fixed file is requested: the text stays here.
     if (!wantsAddress || !addressSource || index) return;
@@ -183,7 +184,7 @@ export function PlaceChooser({
     return () => {
       current = false;
     };
-  }, [wantsAddress, addressSource, index]);
+  }, [wantsAddress, addressSource, index, addressRetry]);
   const addresses = useMemo(
     () =>
       wantsAddress && index
@@ -230,10 +231,15 @@ export function PlaceChooser({
         <p role="status">Loading county address data on this device…</p>
       )}
       {wantsAddress && addressSource && addressState === "error" && (
-        <p role="alert">
-          The county address data could not be loaded. Saved places, the public
-          places, Use current location and Pick on map still work.
-        </p>
+        <div role="alert">
+          <p>
+            The county address data could not be loaded. Saved places, the
+            public places, Use current location and Pick on map still work.
+          </p>
+          <button onClick={() => setAddressRetry((value) => value + 1)}>
+            Retry address search
+          </button>
+        </div>
       )}
       {addresses && (
         <section aria-label="County address results">
@@ -243,6 +249,18 @@ export function PlaceChooser({
             are not verified trail entrances: the route starts or ends exactly
             at the point you choose, and any unverified connection to a mapped
             trail still blocks Start.
+          </p>
+          <p className="caption">
+            Address data: McLean County, Illinois ·{" "}
+            <a
+              href="https://creativecommons.org/licenses/by/4.0/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              CC BY 4.0
+            </a>
+            . Text normalized, fields reduced and duplicate points removed. Not
+            endorsed by the county; records may be out of date.
           </p>
           {addresses.notice && <p role="status">{addresses.notice}</p>}
           <ul className="place-results">
