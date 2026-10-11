@@ -28,6 +28,7 @@ export function Modal({
   notice,
   noticeInChildren = false,
   className,
+  initialFocus,
 }: {
   title: string;
   children: ReactNode;
@@ -37,6 +38,11 @@ export function Modal({
   /** Long forms may place their unique live regions beside the relevant action/recovery control. */
   noticeInChildren?: boolean;
   className?: string;
+  /**
+   * The control that takes focus once the dialog is open. React's autoFocus cannot do this: it focuses during commit,
+   * while the dialog is still closed, so the call is ignored. Without it the browser's own showModal focus applies.
+   */
+  initialFocus?: { readonly current: HTMLElement | null };
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     close = useRef(onClose),
@@ -47,6 +53,7 @@ export function Modal({
       previous = document.activeElement as HTMLElement | null;
     if (!d) return;
     d.showModal();
+    initialFocus?.current?.focus();
     const cancel = (e: Event) => {
       e.preventDefault();
       close.current();
@@ -158,6 +165,7 @@ export function PlaceChooser({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const input = useRef<HTMLInputElement>(null);
   const options = searchPlaces(query, start, [
     ...saved,
     ...(fixture ? [...reviewPlaces, ...places] : places),
@@ -196,11 +204,11 @@ export function PlaceChooser({
     [wantsAddress, index, query, start],
   );
   return (
-    <Modal title={"Choose " + field} onClose={onClose}>
+    <Modal title={"Choose " + field} onClose={onClose} initialFocus={input}>
       <label className="field">
         Search places
         <input
-          autoFocus
+          ref={input}
           placeholder="Search places"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
