@@ -1863,6 +1863,7 @@ dialog::backdrop {
 }
 .ride-details[open] {
   /* Keep details in the scrolling dock so large text cannot cover Stop. */
+  max-height: 25vh;
   max-height: 25dvh;
   overflow-y: auto;
 }
@@ -2236,4 +2237,50 @@ dialog::backdrop {
 }
 .updates-list article {
   overflow-wrap: anywhere;
+}
+
+/* In short landscape, ride information and the map share the viewport rather
+   than covering each other. Each keeps its controls and attribution reachable. */
+@media (max-height: 500px) and (min-width: 500px) {
+  .navigation .panel {
+    width: 48%;
+  }
+  .navigation .ride-map,
+  .navigation .ride-map-fallback {
+    left: 48%;
+    width: 52%;
+  }
+  .navigation .ride-ui {
+    padding: max(8px, env(safe-area-inset-top)) 8px
+      max(8px, env(safe-area-inset-bottom));
+  }
+  .navigation .ride-guidance {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+  .navigation .ride-turn-icon {
+    font-size: 2rem;
+  }
+  .navigation .ride-progress {
+    flex-wrap: wrap;
+  }
+  .navigation .ride-progress button {
+    width: 100%;
+    margin-left: 0;
+  }
+  .navigation .ride-map-control {
+    top: max(12px, env(safe-area-inset-top));
+  }
+  .navigation .ride-credit {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-width: calc(100% - 24px);
+  }
+  .navigation .ride-map .maplibregl-ctrl-bottom-right {
+    bottom: 12px;
+  }
+  .navigation .ride-map-fallback .ride-map-control {
+    top: auto;
+    bottom: 70px;
+  }
 }

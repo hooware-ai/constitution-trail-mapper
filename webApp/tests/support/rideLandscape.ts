@@ -73,6 +73,27 @@ for (const [name, width, height, font, rotate] of [
       "true",
     );
     await reachableStop();
+    const credit = page.locator(".ride-credit");
+    await expect(credit).toBeInViewport({ ratio: 1 });
+    expect(
+      await credit.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return [
+          [r.left + 10, r.top + 10],
+          [r.right - 10, r.top + 10],
+          [r.left + 10, r.bottom - 10],
+          [r.right - 10, r.bottom - 10],
+          [r.left + r.width / 2, r.top + r.height / 2],
+        ].every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+      }),
+    ).toBe(true);
+    await page
+      .getByRole("button", { name: "Following", exact: true })
+      .click({ trial: true });
+    const map = await page.locator(".ride-map-canvas").boundingBox();
+    const info = await page.locator(".navigation .panel").boundingBox();
+    expect(map!.x).toBeGreaterThanOrEqual(info!.x + info!.width - 1);
+    expect(map!.height).toBeGreaterThanOrEqual(height - 1);
     await context.setOffline(true);
     await expect(page.locator(".ride-offline")).toBeVisible();
     await reachableStop();
