@@ -160,8 +160,12 @@ for (const [name, width, height, font] of [
     const resizedCenter = (await map.getAttribute("data-center"))!
       .split(",")
       .map(Number);
-    expect(Math.abs(resizedCenter[0] - manualCenter[0])).toBeLessThanOrEqual(0.0002 + 1e-12);
-    expect(Math.abs(resizedCenter[1] - manualCenter[1])).toBeLessThanOrEqual(0.0002 + 1e-12);
+    expect(Math.abs(resizedCenter[0] - manualCenter[0])).toBeLessThanOrEqual(
+      0.0002 + 1e-12,
+    );
+    expect(Math.abs(resizedCenter[1] - manualCenter[1])).toBeLessThanOrEqual(
+      0.0002 + 1e-12,
+    );
     await page.setViewportSize({ width, height });
     const fit = page.getByRole("button", { name: "Fit route", exact: true });
     expect((await fit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -203,8 +207,12 @@ for (const [name, width, height, font] of [
       const resized = (await map.getAttribute("data-center"))!
         .split(",")
         .map(Number);
-      expect(Math.abs(resized[0] - center[0])).toBeLessThanOrEqual(0.0002 + 1e-12);
-      expect(Math.abs(resized[1] - center[1])).toBeLessThanOrEqual(0.0002 + 1e-12);
+      expect(Math.abs(resized[0] - center[0])).toBeLessThanOrEqual(
+        0.0002 + 1e-12,
+      );
+      expect(Math.abs(resized[1] - center[1])).toBeLessThanOrEqual(
+        0.0002 + 1e-12,
+      );
       await page.setViewportSize({ width, height });
       await fit.click();
       await check();
@@ -256,9 +264,25 @@ for (const [name, width, height, font] of [
     await resizeCamera();
     await expect(map).toHaveAttribute("data-center", focusedCenter!);
     await expect(map).toHaveAttribute("data-zoom", focusedZoom!);
-    await map.evaluate((e) => e.scrollIntoView({ block: "start" }));
     await expect(page.locator(".instruction-marker")).toBeInViewport({
       ratio: 1,
     });
+    // Immediate actions deliberately race the old animated Fit path. Verify
+    // the app's own reveal and final camera after any stale transition could fire.
+    await fit.click();
+    await page.getByRole("button", { name: "Directions", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Show step 1 on map", exact: true })
+      .click();
+    await settledCamera();
+    await expect(map).toHaveAttribute("data-center", instructionCenter);
+    await expect(map).toHaveAttribute("data-zoom", "17");
+    await expect(page.locator(".instruction-marker")).toBeInViewport({
+      ratio: 1,
+    });
+    await fit.click();
+    await page.setViewportSize({ width, height });
+    await settledCamera();
+    await check();
   });
 }

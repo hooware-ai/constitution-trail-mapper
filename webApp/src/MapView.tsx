@@ -108,6 +108,9 @@ export function MapView({
       zoomControl: true,
       attributionControl: true,
       preferCanvas,
+      // Explicit preview focus must win even immediately after a zoom control.
+      // Leaflet stop() cancels pans, but not its pending CSS zoom transition.
+      zoomAnimation: false,
     }).setView([40.502, -88.97], 13);
     // Leaflet's own prefix link would also replace this page; keep the credit, open it safely.
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
@@ -486,7 +489,7 @@ export function MapView({
     if (!m || !gap) return;
     resizeFit.current = null;
     m.stop();
-    root.current?.parentElement?.scrollIntoView({ block: "nearest" });
+    root.current?.scrollIntoView({ block: "nearest" });
     m.fitBounds(L.latLngBounds([xy(gap.from), xy(gap.to)]), {
       padding: [56, 56],
       maxZoom: 19,
@@ -524,7 +527,7 @@ export function MapView({
     element?.setAttribute("aria-label", `Step ${number}: ${instruction.text}`);
     m.setView(xy(instruction.point), 17, { animate: false });
     const reveal = () =>
-      root.current?.parentElement?.scrollIntoView({
+      root.current?.scrollIntoView({
         block: "nearest",
         behavior: "instant",
       });
@@ -611,9 +614,11 @@ export function MapView({
     if (pts.length) {
       const bounds = L.latLngBounds(pts.map(xy));
       resizeFit.current = route ? bounds : null;
+      map.current?.stop();
       map.current?.fitBounds(bounds, {
         padding: [32, 32],
         maxZoom: 16,
+        animate: false,
       });
     }
   }
