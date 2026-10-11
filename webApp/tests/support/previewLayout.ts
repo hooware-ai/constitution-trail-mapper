@@ -281,6 +281,8 @@ for (const [name, width, height, font] of [
       ratio: 1,
     });
     await page.locator(".leaflet-control-zoom-out").click();
+    // Check synchronously: waiting for an animated zoom would hide the race.
+    expect(await map.getAttribute("data-zoom")).toBe("16");
     await page.getByRole("button", { name: "Directions", exact: true }).click();
     await page
       .getByRole("button", { name: "Show step 1 on map", exact: true })

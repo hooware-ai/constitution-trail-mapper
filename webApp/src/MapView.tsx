@@ -533,8 +533,10 @@ export function MapView({
         behavior: "instant",
       });
     let settleFrame = 0;
+    let settleTimer = 0;
     const cancelReveal = () => {
       cancelAnimationFrame(settleFrame);
+      window.clearTimeout(settleTimer);
       window.removeEventListener("scroll", scheduleSettle);
       window.removeEventListener("pointerdown", cancelReveal, true);
       window.removeEventListener("wheel", cancelReveal, true);
@@ -568,6 +570,9 @@ export function MapView({
         capture: true,
       });
       window.addEventListener("keydown", cancelReveal, { capture: true });
+      // Limit focus restoration recovery; later non-pointer/assistive scrolling
+      // must remain the user's choice too.
+      settleTimer = window.setTimeout(cancelReveal, 1000);
       scheduleSettle();
     });
     return () => {
