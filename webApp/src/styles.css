@@ -1586,6 +1586,7 @@ dialog::backdrop {
 .navigation .workspace {
   position: relative;
   display: block;
+  height: 100vh;
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
@@ -1979,6 +1980,7 @@ dialog::backdrop {
     line-height: 48px !important;
   }
   .navigation .workspace {
+    height: 100vh;
     height: 100dvh;
     min-height: 0;
   }

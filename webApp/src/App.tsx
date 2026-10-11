@@ -2034,6 +2034,53 @@ export function App({ refresh }: AppProps = {}) {
   );
   const shownRecent = library.recent.slice(0, 3),
     share = privateRouteShare(location.href, preview?.distance);
+  // Keep ride alerts in the scrollable information area, clear of Stop.
+  const routeAlerts = (
+    <>
+      {bootError && (
+        <div className="error" role="alert">
+          <h1>Trails could not load</h1>
+          <p>{bootError}</p>
+          <p className="caption">
+            Your saved routes and places are still on this device. Nothing else
+            is shown in place of the trail data.
+          </p>
+          <button onClick={() => setBootAttempt((value) => value + 1)}>
+            Retry loading
+          </button>
+          {local && (
+            <a href={location.pathname}>Use synthetic review network</a>
+          )}
+        </div>
+      )}
+      {routingDown && network && (
+        <div className="error" role="alert">
+          <p>{ROUTING_UNAVAILABLE_MESSAGE}</p>
+          <button onClick={() => void restartRouting()}>
+            Restart route planning
+          </button>
+        </div>
+      )}
+      {error && !(routingDown && error === ROUTING_UNAVAILABLE_MESSAGE) && (
+        <div className="error" role="alert">
+          <p>{error}</p>
+          {retryPlan && screen === "planner" && canPlan && !busy && (
+            <button className="primary" onClick={() => void plan()}>
+              Try again
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setError("");
+              setRetryPlan(false);
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+    </>
+  );
   return (
     <div className={"app " + screen}>
       <a
@@ -2181,54 +2228,13 @@ export function App({ refresh }: AppProps = {}) {
               <p>Preparing route planning and current trail notices.</p>
             </div>
           )}
-          {bootError && (
-            <div className="error" role="alert">
-              <h1>Trails could not load</h1>
-              <p>{bootError}</p>
-              <p className="caption">
-                Your saved routes and places are still on this device. Nothing
-                else is shown in place of the trail data.
-              </p>
-              <button onClick={() => setBootAttempt((value) => value + 1)}>
-                Retry loading
-              </button>
-              {local && (
-                <a href={location.pathname}>Use synthetic review network</a>
-              )}
-            </div>
-          )}
+          {screen !== "navigation" && routeAlerts}
           {freshness && network && screen !== "navigation" && (
             <RuntimeFreshnessStatus
               runtime={freshness}
               appBuild={__TRAIL_BUILD__.commit}
               compact
             />
-          )}
-          {routingDown && network && (
-            <div className="error" role="alert">
-              <p>{ROUTING_UNAVAILABLE_MESSAGE}</p>
-              <button onClick={() => void restartRouting()}>
-                Restart route planning
-              </button>
-            </div>
-          )}
-          {error && !(routingDown && error === ROUTING_UNAVAILABLE_MESSAGE) && (
-            <div className="error" role="alert">
-              <p>{error}</p>
-              {retryPlan && screen === "planner" && canPlan && !busy && (
-                <button className="primary" onClick={() => void plan()}>
-                  Try again
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setError("");
-                  setRetryPlan(false);
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
           )}
           {locationRequest && (
             <div
@@ -2862,6 +2868,7 @@ export function App({ refresh }: AppProps = {}) {
               </div>
               <div className="ride-dock">
                 <div className="ride-dock-content">
+                  {routeAlerts}
                   {freshness && (
                     <RuntimeFreshnessStatus
                       runtime={freshness}
