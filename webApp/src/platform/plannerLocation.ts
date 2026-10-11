@@ -17,7 +17,12 @@ export type PlannerLocationFailure =
 export type PlannerLocationEvent =
   | { phase: "waiting"; message: string; approximateFix?: LocationFix }
   | { phase: "success"; fix: LocationFix }
-  | { phase: "failure"; reason: PlannerLocationFailure; message: string };
+  | {
+      phase: "failure";
+      reason: PlannerLocationFailure;
+      message: string;
+      approximateFix?: LocationFix;
+    };
 interface Dependencies {
   location?: LocationPort;
   secureContext: boolean;
@@ -58,6 +63,7 @@ export function acquirePlannerLocation(
   let watchId: number | undefined;
   let timer: unknown;
   let coarseAccuracy: number | undefined;
+  let coarseFix: LocationFix | undefined;
   const cancel = () => {
     active = false;
     if (timer !== undefined) clearTimer(timer);
@@ -71,6 +77,9 @@ export function acquirePlannerLocation(
     listener({
       phase: "failure",
       reason,
+      ...(coarseFix && usableFix({ ...coarseFix, accuracy: 0 }, now())
+        ? { approximateFix: coarseFix }
+        : {}),
       message:
         reason === "inaccurate"
           ? `Your browser’s location is only accurate to about ${Math.round(coarseAccuracy!)} m. Try again for a more precise reading, or choose your exact position on the map.`
@@ -100,6 +109,7 @@ export function acquirePlannerLocation(
             usableFix({ ...fix, accuracy: 0 }, now())
           ) {
             coarseAccuracy = Math.min(coarseAccuracy ?? Infinity, fix.accuracy);
+            coarseFix = fix;
             listener({
               phase: "waiting",
               message: `Location found within about ${Math.round(fix.accuracy)} m. Waiting for a more precise reading…`,

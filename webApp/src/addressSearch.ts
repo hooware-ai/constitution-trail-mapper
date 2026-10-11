@@ -56,25 +56,34 @@ export function loadAddressIndex(
   const cached = loaded.get(source.url);
   if (cached) return cached;
   const promise = (async () => {
-    const response = await fetcher(
-      new URL(
-        source.url,
-        typeof document === "undefined"
-          ? "http://localhost/"
-          : document.baseURI,
-      ),
-      {
-        cache: "no-cache",
-        signal: AbortSignal.timeout(15_000),
-      },
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new Error("Address data loading timed out.")),
+      15_000,
     );
-    if (!response.ok) throw new Error("The address data is not available.");
-    const bytes = await response.arrayBuffer();
-    if (source.sha256 && (await sha256Hex(bytes)) !== source.sha256)
-      throw new Error("The address data did not match its recorded hash.");
-    return new AddressIndex(
-      JSON.parse(new TextDecoder().decode(bytes)) as AddressIndexData,
-    );
+    try {
+      const response = await fetcher(
+        new URL(
+          source.url,
+          typeof document === "undefined"
+            ? "http://localhost/"
+            : document.baseURI,
+        ),
+        {
+          cache: "no-cache",
+          signal: controller.signal,
+        },
+      );
+      if (!response.ok) throw new Error("The address data is not available.");
+      const bytes = await response.arrayBuffer();
+      if (source.sha256 && (await sha256Hex(bytes)) !== source.sha256)
+        throw new Error("The address data did not match its recorded hash.");
+      return new AddressIndex(
+        JSON.parse(new TextDecoder().decode(bytes)) as AddressIndexData,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
   })();
   loaded.set(source.url, promise);
   promise.catch(() => loaded.delete(source.url));

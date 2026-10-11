@@ -156,6 +156,34 @@ test("an expired approximate reading cannot become a planner endpoint", async ({
   ).toHaveCount(0);
 });
 
+test("a fresh approximate reading remains usable when the precision wait expires", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await startLocation(page);
+  await page.clock.fastForward(12_000);
+  await page.evaluate(() => (window as any).__plannerGps.fix(200));
+  await page.clock.fastForward(8_001);
+  await expect(page.getByRole("alert")).toContainText(
+    "only accurate to about 200 m",
+  );
+  await page
+    .getByRole("button", {
+      name: "Use approximate location (within 200 m)",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("button", {
+      name: "Start: Approximate current location (within 200 m)",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => (window as any).__plannerGps.cleared()),
+  ).toBe(1);
+});
+
 test("a missing browser callback times out and offers map selection", async ({
   page,
 }, info) => {

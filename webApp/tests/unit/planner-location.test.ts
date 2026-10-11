@@ -77,8 +77,11 @@ function fixture(
     fail(code: number) {
       failure({ code, message: "Browser location failure" });
     },
-    expire() {
-      now += PLANNER_LOCATION_TIMEOUT_MS;
+    advance(milliseconds: number) {
+      now += milliseconds;
+    },
+    expire(milliseconds = PLANNER_LOCATION_TIMEOUT_MS) {
+      now += milliseconds;
       for (const [id, callback] of [...timers]) {
         timers.delete(id);
         callback();
@@ -131,7 +134,24 @@ test("a location that remains coarse fails as inaccurate at the deadline", () =>
   f.fix({ accuracy: 120 });
   f.expire();
   expectFailure(f, "inaccurate");
+  const event = f.events.at(-1);
+  assert.ok(event?.phase === "failure");
+  assert.equal(event.approximateFix, undefined);
   assert.deepEqual(f.clearedWatches, [0]);
+});
+
+test("a still-fresh coarse reading remains selectable after the precision deadline", () => {
+  const f = fixture();
+  f.advance(12_000);
+  f.fix({ accuracy: 120 });
+  f.expire(8_000);
+  const event = f.events.at(-1);
+  assert.ok(event?.phase === "failure");
+  assert.deepEqual(event.approximateFix, {
+    ...goodFix,
+    accuracy: 120,
+    timestamp: NOW + 12_000,
+  });
 });
 
 test("the watchdog settles even when a permission prompt produces no callback", () => {

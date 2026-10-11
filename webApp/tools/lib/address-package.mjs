@@ -2,6 +2,19 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
+export function addressIndexBuildFile(repoRoot, dataset, channel, override) {
+  if (channel === "public" && override !== undefined)
+    throw new Error(
+      "Public address search uses the pinned package. Unset TRAIL_ADDRESS_INDEX_FILE; it cannot disable or replace the index.",
+    );
+  return (
+    override ??
+    (dataset === "county" && channel === "public"
+      ? resolve(repoRoot, "data/generated/web-address-index.json")
+      : undefined)
+  );
+}
+
 export function verifyAddressPackage(
   repoRoot,
   file = resolve(repoRoot, "data/generated/web-address-index.json"),

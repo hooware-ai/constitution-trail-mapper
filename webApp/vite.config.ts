@@ -8,6 +8,7 @@ import { repoRoot, verifyCoreManifest } from "./tools/lib/core.mjs";
 import { verifyPackageDir } from "./tools/lib/dataset-package.mjs";
 import { distDir } from "./tools/lib/provenance.mjs";
 import { browserPort } from "./tools/lib/browser-port.mjs";
+import { addressIndexBuildFile } from "./tools/lib/address-package.mjs";
 
 // Automated runs own their port (TRAIL_TEST_PORT) and fail if it is taken instead of reusing another server.
 const port = browserPort(process.env.TRAIL_TEST_PORT ?? 4173);
@@ -57,11 +58,12 @@ const buildInfo = {
 };
 // County public artifacts carry the pinned local address index, following the owner's address-search fix request.
 // Fixture/review builds retain their explicit test seam. Preparation never deploys or changes sharing.
-const addressIndexFile =
-  process.env.TRAIL_ADDRESS_INDEX_FILE ??
-  (datasetKind === "county" && channel === "public"
-    ? resolve(repoRoot, "data/generated/web-address-index.json")
-    : undefined);
+const addressIndexFile = addressIndexBuildFile(
+  repoRoot,
+  datasetKind,
+  channel,
+  process.env.TRAIL_ADDRESS_INDEX_FILE,
+);
 let addressIndex: { file: string; sha256: string; bytes: Buffer } | null = null;
 if (addressIndexFile) {
   const bytes = readFileSync(resolve(addressIndexFile));

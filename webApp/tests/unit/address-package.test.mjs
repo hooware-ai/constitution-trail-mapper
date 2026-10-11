@@ -4,7 +4,30 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { verifyAddressPackage } from "../../tools/lib/address-package.mjs";
+import {
+  verifyAddressPackage,
+  addressIndexBuildFile,
+} from "../../tools/lib/address-package.mjs";
+
+test("a public county build always includes its pinned address index and cannot silently disable it", () => {
+  assert.equal(
+    addressIndexBuildFile("/repo", "county", "public", undefined),
+    "/repo/data/generated/web-address-index.json",
+  );
+  for (const override of ["", "/other/index.json"])
+    assert.throws(
+      () => addressIndexBuildFile("/repo", "county", "public", override),
+      /cannot disable or replace/,
+    );
+  assert.equal(
+    addressIndexBuildFile("/repo", "fixture", "review", undefined),
+    undefined,
+  );
+  assert.equal(
+    addressIndexBuildFile("/repo", "county", "review", "/review/index.json"),
+    "/review/index.json",
+  );
+});
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), "trail-address-pin-"));
