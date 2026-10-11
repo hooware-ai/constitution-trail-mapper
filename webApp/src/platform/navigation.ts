@@ -80,11 +80,17 @@ export interface NavigationDependencies {
     },
   ) => Promise<NavigationGuidance>;
 }
-export const MAX_FIX_AGE_MS = 15_000;
+/**
+ * Navigation follows the shared core's credible-fix rule (TrailRouteDeviation.isCredible): accuracy within 25 m and an
+ * age of 0..10 s, both inclusive. A future-dated fix is not credible. The planner's endpoint rule is separate and looser
+ * (see plannerLocation.ts).
+ */
+export const NAVIGATION_MAX_FIX_AGE_MS = 10_000;
+export const NAVIGATION_MAX_FIX_ACCURACY_METERS = 25;
+/** How long the browser may take to answer the navigation watch; this is not the fix age rule above. */
+const LOCATION_WATCH_TIMEOUT_MS = 15_000;
 /** A reroute computed for a rider who has since moved further than this is not for where they are now. */
 export const REROUTE_MAX_DRIFT_METERS = 100;
-export const MAX_FIX_ACCURACY_METERS = 35;
-const FUTURE_TOLERANCE_MS = 5_000;
 const DEVIATION_MIN_GAP_MS = 4_000;
 const defaultClock: NavigationClock = {
   now: Date.now,
@@ -92,17 +98,24 @@ const defaultClock: NavigationClock = {
   clearInterval: (id) =>
     globalThis.clearInterval(id as ReturnType<typeof setInterval>),
 };
-export function usableFix(fix: LocationFix, now: number): boolean {
+/** Finite, in-range coordinates with a finite non-negative accuracy and timestamp; says nothing about age or precision. */
+export function wellFormedFix(fix: LocationFix): boolean {
   return (
     [fix.latitude, fix.longitude, fix.accuracy, fix.timestamp].every(
       Number.isFinite,
     ) &&
     Math.abs(fix.latitude) <= 90 &&
     Math.abs(fix.longitude) <= 180 &&
-    fix.accuracy >= 0 &&
-    fix.accuracy <= MAX_FIX_ACCURACY_METERS &&
-    now - fix.timestamp <= MAX_FIX_AGE_MS &&
-    fix.timestamp - now <= FUTURE_TOLERANCE_MS
+    fix.accuracy >= 0
+  );
+}
+export function navigableFix(fix: LocationFix, now: number): boolean {
+  const age = now - fix.timestamp;
+  return (
+    wellFormedFix(fix) &&
+    fix.accuracy <= NAVIGATION_MAX_FIX_ACCURACY_METERS &&
+    age >= 0 &&
+    age <= NAVIGATION_MAX_FIX_AGE_MS
   );
 }
 const initialState = (wakeLock: WakeLockStatus): NavigationState => ({
@@ -279,7 +292,7 @@ export class ForegroundNavigationController {
   rerouteRequest(): RerouteRequest | null {
     const { record, fix, phase } = this.state;
     if (!record || !fix || phase !== "off-route") return null;
-    if (!usableFix(fix, this.clock.now())) return null;
+    if (!navigableFix(fix, this.clock.now())) return null;
     return {
       recordKey: record.key,
       record,
@@ -294,7 +307,7 @@ export class ForegroundNavigationController {
     const { record, fix, phase } = this.state;
     if (!record || record.key !== request.recordKey) return "ride-changed";
     if (this.epoch !== request.epoch) return "interrupted";
-    if (!fix || !usableFix(fix, this.clock.now())) return "location-lost";
+    if (!fix || !navigableFix(fix, this.clock.now())) return "location-lost";
     if (phase !== "off-route") return "back-on-route";
     if (distanceMeters(request.fix, fix) > REROUTE_MAX_DRIFT_METERS)
       return "moved";
@@ -353,7 +366,7 @@ export class ForegroundNavigationController {
       )
         return;
       const timestamp = this.state.fix?.timestamp ?? this.watchStartedAt;
-      if (this.clock.now() - timestamp > MAX_FIX_AGE_MS)
+      if (this.clock.now() - timestamp > NAVIGATION_MAX_FIX_AGE_MS)
         this.lose(
           "location-lost",
           "Location lost. Waiting for a fresh, accurate fix.",
@@ -403,7 +416,7 @@ export class ForegroundNavigationController {
     if (generation !== this.generation || !this.visible || !this.state.record)
       return;
     if (
-      !usableFix(fix, this.clock.now()) ||
+      !navigableFix(fix, this.clock.now()) ||
       fix.timestamp < this.watchStartedAt ||
       fix.timestamp <= this.lastTimestamp
     ) {
@@ -411,7 +424,7 @@ export class ForegroundNavigationController {
       if (fix.timestamp > this.lastTimestamp)
         this.lose(
           "location-lost",
-          "Waiting for a fresh location with accuracy within 35 m.",
+          `Waiting for a fresh location with accuracy within ${NAVIGATION_MAX_FIX_ACCURACY_METERS} m.`,
         );
       return;
     }
@@ -428,7 +441,7 @@ export class ForegroundNavigationController {
         generation !== this.generation ||
         sequence !== this.sequence ||
         !this.visible ||
-        !usableFix(fix, this.clock.now())
+        !navigableFix(fix, this.clock.now())
       )
         return;
       // Reacquired where the loop could equally be an earlier pass: do not steer, credit or claim off route.
@@ -547,7 +560,11 @@ export function browserLocationPort(geolocation: Geolocation): LocationPort {
             speed: position.coords.speed,
           }),
         failure,
-        { enableHighAccuracy: true, maximumAge: 0, timeout: MAX_FIX_AGE_MS },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: LOCATION_WATCH_TIMEOUT_MS,
+        },
       ),
     clearWatch: (id) => geolocation.clearWatch(id),
   };

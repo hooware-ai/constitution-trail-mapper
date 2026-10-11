@@ -66,8 +66,11 @@ import {
   browserLocationPort,
   type NavigationState,
 } from "./platform/navigation";
-import { acquirePlannerLocation } from "./platform/plannerLocation";
-import { usableFix, type LocationFix } from "./platform/navigation";
+import {
+  acquirePlannerLocation,
+  usablePlannerFix,
+} from "./platform/plannerLocation";
+import type { LocationFix } from "./platform/navigation";
 import { addressIndexSource } from "./addressSearch";
 import { startBlockedReason } from "./startReason";
 import {
@@ -1000,7 +1003,7 @@ export function App({ refresh }: AppProps = {}) {
     const request = locationRequest;
     const fix = request?.approximateFix;
     if (!request || !fix) return;
-    if (!usableFix({ ...fix, accuracy: 0 }, Date.now())) {
+    if (!usablePlannerFix({ ...fix, accuracy: 0 }, Date.now())) {
       ++operation.current;
       cancelLocation();
       setError("");
