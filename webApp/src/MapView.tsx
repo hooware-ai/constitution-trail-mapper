@@ -108,7 +108,7 @@ export function MapView({
       zoomControl: true,
       attributionControl: true,
       preferCanvas,
-      // Explicit preview focus must win even immediately after a zoom control.
+      // Flat-map zooms are immediate so explicit preview focus always wins.
       // Leaflet stop() cancels pans, but not its pending CSS zoom transition.
       zoomAnimation: false,
     }).setView([40.502, -88.97], 13);
@@ -136,6 +136,7 @@ export function MapView({
       resizeFit.current = null;
     };
     const manualKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (
         [
           "ArrowLeft",
@@ -531,41 +532,43 @@ export function MapView({
         block: "nearest",
         behavior: "instant",
       });
-    let revealedY = 0;
+    let settleFrame = 0;
     const cancelReveal = () => {
-      window.removeEventListener("scrollend", settle);
+      cancelAnimationFrame(settleFrame);
+      window.removeEventListener("scroll", scheduleSettle);
       window.removeEventListener("pointerdown", cancelReveal, true);
       window.removeEventListener("wheel", cancelReveal, true);
       window.removeEventListener("keydown", cancelReveal, true);
     };
     const settle = () => {
-      if (window.scrollY === revealedY) return;
-      cancelReveal();
       if (document.activeElement !== element) return;
       const box = element?.getBoundingClientRect();
       if (box && (box.top < 0 || box.bottom > window.innerHeight)) {
+        cancelReveal();
         reveal();
       }
     };
+    const scheduleSettle = () => {
+      cancelAnimationFrame(settleFrame);
+      settleFrame = requestAnimationFrame(settle);
+    };
     // The dialog's close restores its opener first; focus the located maneuver afterwards.
     const frame = requestAnimationFrame(() => {
-      const scrollBefore = window.scrollY;
       reveal();
-      revealedY = window.scrollY;
       element?.focus({ preventScroll: true });
-      // Mobile Chromium can restore the old viewport after this focus. Reveal once more when that scroll settles.
-      if (revealedY !== scrollBefore) {
-        window.addEventListener("scrollend", settle);
-        window.addEventListener("pointerdown", cancelReveal, {
-          passive: true,
-          capture: true,
-        });
-        window.addEventListener("wheel", cancelReveal, {
-          passive: true,
-          capture: true,
-        });
-        window.addEventListener("keydown", cancelReveal, { capture: true });
-      }
+      // Browser focus can restore an older viewport after the reveal, including
+      // when the canvas was already visible. User input always cancels this guard.
+      window.addEventListener("scroll", scheduleSettle, { passive: true });
+      window.addEventListener("pointerdown", cancelReveal, {
+        passive: true,
+        capture: true,
+      });
+      window.addEventListener("wheel", cancelReveal, {
+        passive: true,
+        capture: true,
+      });
+      window.addEventListener("keydown", cancelReveal, { capture: true });
+      scheduleSettle();
     });
     return () => {
       cancelAnimationFrame(frame);

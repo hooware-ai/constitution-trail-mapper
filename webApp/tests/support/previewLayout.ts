@@ -280,6 +280,17 @@ for (const [name, width, height, font] of [
     await expect(page.locator(".instruction-marker")).toBeInViewport({
       ratio: 1,
     });
+    await page.locator(".leaflet-control-zoom-out").click();
+    await page.getByRole("button", { name: "Directions", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Show step 1 on map", exact: true })
+      .click();
+    await settledCamera();
+    await expect(map).toHaveAttribute("data-center", instructionCenter);
+    await expect(map).toHaveAttribute("data-zoom", "17");
+    await expect(page.locator(".instruction-marker")).toBeInViewport({
+      ratio: 1,
+    });
     await fit.click();
     await page.setViewportSize({ width, height });
     await settledCamera();
