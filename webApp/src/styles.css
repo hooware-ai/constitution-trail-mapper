@@ -1581,12 +1581,13 @@ dialog::backdrop {
   }
 }
 
-/* Ride mode is a separate, glanceable surface. The planner keeps its detailed controls. */
+/* Ride mode is a separate, glanceable surface. The planner keeps its detailed controls.
+   The workspace follows the viewport even in landscape, keeping Stop on screen. */
 .navigation .workspace {
   position: relative;
   display: block;
   height: 100dvh;
-  min-height: 420px;
+  min-height: 0;
   overflow: hidden;
   background: #dce9e0;
 }
@@ -1979,7 +1980,7 @@ dialog::backdrop {
   }
   .navigation .workspace {
     height: 100dvh;
-    min-height: 420px;
+    min-height: 0;
   }
   .navigation .panel {
     padding: 0;
