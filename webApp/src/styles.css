@@ -1287,6 +1287,11 @@ dialog::backdrop {
   padding: 12px;
   overflow-wrap: anywhere;
 }
+.share-preview textarea {
+  min-height: 48px;
+  font-weight: 400;
+  resize: vertical;
+}
 .place-results button {
   align-items: flex-start;
 }
