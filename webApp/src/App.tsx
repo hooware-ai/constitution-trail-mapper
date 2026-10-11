@@ -313,6 +313,7 @@ export function App({ refresh }: AppProps = {}) {
   }, [screen]);
   const directionsRef = useRef<HTMLOListElement>(null);
   const directionsId = useId();
+  const shareCopyId = useId();
   useEffect(() => {
     if (
       popup !== "directions" ||
@@ -3434,10 +3435,19 @@ export function App({ refresh }: AppProps = {}) {
             Exact start and destination, route coordinates and your recent
             history are excluded.
           </p>
-          <div className="share-preview">
-            <p>{share.text}</p>
-            <p>{share.url}</p>
-          </div>
+          {/* A native read-only field so a keyboard rider can reach, select and copy exactly what Share sends. */}
+          <label className="field share-preview">
+            <span>Summary text</span>
+            <textarea
+              readOnly
+              rows={4}
+              value={share.text + "\n" + share.url}
+              aria-describedby={shareCopyId}
+            />
+          </label>
+          <p className="caption" id={shareCopyId}>
+            If sharing does not work, select this text and copy it yourself.
+          </p>
           <button className="primary wide" onClick={() => void shareSummary()}>
             {canShare ? "Share summary" : "Copy summary"}
           </button>
