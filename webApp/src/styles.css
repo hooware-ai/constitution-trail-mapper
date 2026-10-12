@@ -2068,7 +2068,7 @@ dialog::backdrop {
     min-height: 260px;
   }
   .preview .panel {
-    padding: 18px 18px 145px;
+    padding: 18px 18px calc(var(--preview-dock-height, 125px) + 20px);
   }
   .preview .start-dock {
     position: fixed;

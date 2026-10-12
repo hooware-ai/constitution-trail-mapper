@@ -225,6 +225,7 @@ export interface AppProps {
 }
 export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
+  const previewDockRef = useRef<HTMLDivElement>(null);
   const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
@@ -1965,6 +1966,28 @@ export function App({ refresh }: AppProps = {}) {
     }
   }
   useEffect(() => {
+    const dock = previewDockRef.current,
+      panel = panelRef.current;
+    if (screen !== "preview" || !preview || !dock || !panel) return;
+    // Fixed docks grow with text and closure reasons. Reserve their real height, not a font-dependent guess.
+    const reserve = () =>
+      panel.style.setProperty(
+        "--preview-dock-height",
+        getComputedStyle(dock).position === "fixed"
+          ? `${dock.getBoundingClientRect().height}px`
+          : "0px",
+      );
+    const observer = new ResizeObserver(reserve);
+    observer.observe(dock);
+    window.addEventListener("resize", reserve);
+    reserve();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", reserve);
+      panel.style.removeProperty("--preview-dock-height");
+    };
+  }, [screen, !!preview]);
+  useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const heading = panelRef.current?.querySelector<HTMLElement>("h1");
       if (heading) {
@@ -2775,7 +2798,7 @@ export function App({ refresh }: AppProps = {}) {
                       onReverse={() => void reverseDirection()}
                     />
                   )}
-                  <div className="start-dock">
+                  <div className="start-dock" ref={previewDockRef}>
                     <div className="start-dock-actions">
                       <button
                         className="primary wide"
