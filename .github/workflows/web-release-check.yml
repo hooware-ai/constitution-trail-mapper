@@ -117,6 +117,15 @@ jobs:
             exit 1
           fi
 
+      - name: Upload browser traces on failure (synthetic data only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-check-test-results
+          path: webApp/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Upload the artifact and its provenance
         if: always()
         uses: actions/upload-artifact@v4
