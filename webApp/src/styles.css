@@ -247,6 +247,16 @@ header .quiet {
 .map-tools button {
   box-shadow: 0 2px 7px #26483b20;
 }
+.map-tools button.map-reset {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 6px;
+}
 .tile-toggle {
   display: flex;
   gap: 8px;

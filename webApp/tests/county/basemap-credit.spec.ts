@@ -32,6 +32,74 @@ const credit = (page: Page) =>
 const toggle = (page: Page) =>
   page.getByRole("checkbox", { name: "Street basemap (online)" });
 
+test("the square reset icon restores the first loaded county view after pan, zoom and resize", async ({
+  page,
+}) => {
+  const tiles = await stubTiles(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  const map = page.getByRole("region", { name: /Interactive map/ });
+  const reset = page.getByRole("button", { name: "Reset map", exact: true });
+  await expect(reset).toBeVisible();
+  await expect(page.getByRole("button", { name: "Fit network" })).toHaveCount(
+    0,
+  );
+  await expect(map).toHaveAttribute("data-center", /,/);
+  const initialCenter = await map.getAttribute("data-center");
+  const initialZoom = await map.getAttribute("data-zoom");
+  const viewport = page.viewportSize()!;
+
+  for (const fontSize of ["100%", "200%"] as const) {
+    await page.evaluate((size) => {
+      document.documentElement.style.fontSize = size;
+    }, fontSize);
+    const box = (await reset.boundingBox())!;
+    expect(box.width).toBe(48);
+    expect(box.height).toBe(48);
+    expect(await reset.innerText()).toBe("");
+    await expect(reset.locator("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(
+      await reset.evaluate((button) => {
+        const r = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.x + r.width / 2,
+          r.y + r.height / 2,
+        );
+        return hit === button || button.contains(hit);
+      }),
+    ).toBe(true);
+
+    await map.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(map).not.toHaveAttribute("data-center", initialCenter!);
+    await page.keyboard.press("+");
+    await expect(map).not.toHaveAttribute("data-zoom", initialZoom!);
+    await reset.focus();
+    await page.keyboard.press("Enter");
+    await expect(reset).toBeFocused();
+    await expect(map).toHaveAttribute("data-center", initialCenter!);
+    await expect(map).toHaveAttribute("data-zoom", initialZoom!);
+
+    await page.setViewportSize({
+      width: viewport.width,
+      height: viewport.height + 80,
+    });
+    await map.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(map).not.toHaveAttribute("data-center", initialCenter!);
+    await page.keyboard.press("-");
+    await expect(map).not.toHaveAttribute("data-zoom", initialZoom!);
+    await reset.click();
+    await expect(map).toHaveAttribute("data-center", initialCenter!);
+    await expect(map).toHaveAttribute("data-zoom", initialZoom!);
+    await page.setViewportSize(viewport);
+  }
+  await expect(toggle(page)).not.toBeChecked();
+  expect(tiles).toEqual([]);
+});
+
 test("tiles are off by default and nothing credits or requests OpenStreetMap until the rider turns them on", async ({
   page,
 }) => {
@@ -186,9 +254,7 @@ for (const fontSize of ["100%", "150%"] as const) {
         return hit === e || hit?.closest("label") === e.closest("label");
       }),
     ).toBe(true);
-    await page
-      .getByRole("button", { name: "Fit network", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Reset map", exact: true }).click();
     const attribution = credit(page);
     await expect(attribution).toBeInViewport();
     expect(
