@@ -60,6 +60,22 @@ const geometry = (page: Page) =>
       rootFont: getComputedStyle(document.documentElement).fontSize,
       header: rect(document.querySelector(".app > header")),
       panel: rect(document.querySelector(".panel")),
+      controlHeight: Math.max(
+        0,
+        ...[
+          ...document.querySelectorAll<HTMLElement>(
+            ".panel button, .panel input, .panel select, .panel textarea, .panel a[href], .panel summary",
+          ),
+        ]
+          .filter((control) =>
+            Boolean(
+              control.compareDocumentPosition(
+                document.querySelector(".start-dock")!,
+              ) & Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+          )
+          .map((control) => control.getBoundingClientRect().height),
+      ),
       panelPaddingBottom: getComputedStyle(document.querySelector(".panel")!)
         .paddingBottom,
       dock: rect(document.querySelector(".start-dock")),
@@ -287,15 +303,16 @@ test("[engine] Reverse direction stays pointer-clickable while short landscape 2
   expect(errors).toEqual([]);
 });
 
-/** The measured dock policy: in the flow when the panel is at most 9rem or the dock plus its occupied padding covers more than half of it,
- * otherwise sticky with the panel's bottom scroll padding the dock's actual height and the panel padding beneath it
- * plus 12px. */
+/** Sticky docks must reserve their occupied space and leave room for a whole preceding control. Flow keeps
+ * native pointer reachability assertions above and the ordinary panel scroll padding, rather than mirroring the policy. */
 const expectDockPolicy = (g: Geometry) => {
   const panel = g.panel!.bottom - g.panel!.top,
     dock = g.dock!.bottom - g.dock!.top;
   const reserved = Math.ceil(dock + parseFloat(g.panelPaddingBottom)) + 12;
-  const flow = panel <= 9 * parseFloat(g.rootFont) || reserved > panel / 2;
-  expect(g.dockPosition).toBe(flow ? "static" : "sticky");
+  const flow = g.dockPosition === "static";
+  expect(["static", "sticky"]).toContain(g.dockPosition);
+  if (!flow)
+    expect(panel - reserved).toBeGreaterThanOrEqual(g.controlHeight + 12);
   const padding = (
     g.scrollers as { element: string; scrollPaddingBottom: string }[]
   ).find((s) => s.element.startsWith("section.panel"))!.scrollPaddingBottom;
@@ -409,5 +426,100 @@ test("[engine] the Start dock re-measures when an offline blocked reason appears
   expectHitTestable(readable, "start");
   await context.setOffline(false);
   await expect(page.locator("#start-reason")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+// Artificial wide-font stress, not a claim about the hosted machine's resolved font: monospace makes the unchanged
+// Start label wrap to two lines at 150%, reproducing the measured dock height that exposed the half-panel heuristic.
+test("[engine] short landscape 150% two-line Start keeps the dock sticky and Reverse pointer-reachable", async ({
+  page,
+  context,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 640, height: 320 });
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      document.documentElement.style.fontSize = "150%";
+      document.body.style.fontFamily = "monospace";
+    });
+  });
+  await openLoopPreview(page);
+  const start = page.getByRole("button", {
+    name: "Start navigation",
+    exact: true,
+  });
+  const stressed = await geometry(page);
+  await record(testInfo, "two-line Start stress geometry", stressed);
+  expect(stressed.start!.bottom - stressed.start!.top).toBeGreaterThanOrEqual(
+    90,
+  );
+  expect(
+    await start.evaluate((button) => {
+      const range = document.createRange();
+      range.selectNodeContents(button);
+      return new Set([...range.getClientRects()].map((rect) => rect.top)).size;
+    }),
+  ).toBe(2);
+  await expect
+    .poll(async () => (await geometry(page)).dockPosition)
+    .toBe("sticky");
+  await pointerClick(page, testInfo, "Reverse direction");
+  expectHitTestable(await geometry(page), "reverse");
+  await start.hover({ timeout: 15_000 });
+  expectHitTestable(await geometry(page), "start");
+  await page.locator(".panel").evaluate((panel) => {
+    panel.scrollTop = (panel.scrollHeight - panel.clientHeight) / 2;
+  });
+  await expect(start).toBeInViewport({ ratio: 1 });
+  const mid = await geometry(page);
+  await record(testInfo, "two-line Start mid-scroll geometry", mid);
+  expectHitTestable(mid, "start");
+  expectDockPolicy(mid);
+  await context.setOffline(true);
+  await expect(page.locator("#start-reason")).toHaveText(
+    "You're offline. Start needs a connection.",
+  );
+  await expect(start).toBeDisabled();
+  await pointerClick(page, testInfo, "Reverse direction");
+  expectHitTestable(await geometry(page), "reverse");
+  await start.hover({ timeout: 15_000 });
+  expectHitTestable(await geometry(page), "start");
+  await page.locator("#start-reason").hover();
+  await expect(page.locator("#start-reason")).toBeInViewport({ ratio: 1 });
+  expectHitTestable(await geometry(page), "start");
+  await context.setOffline(false);
+  await expect(page.locator("#start-reason")).toHaveCount(0);
+  await expect
+    .poll(async () => (await geometry(page)).dockPosition)
+    .toBe("sticky");
+  // The upper sticky bound must not intercept the actions after the dock when they are scrolled to normally.
+  for (const name of ["Directions", "Share"] as const) {
+    await pointerClick(page, testInfo, name);
+    await expect(
+      page.getByRole("dialog", {
+        name: name === "Share" ? "Share route" : name,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  const selected = await sessionSelected(page);
+  await pointerClick(page, testInfo, "Save");
+  await expect(
+    page.getByRole("button", { name: "Saved · View", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (key) =>
+          JSON.parse(localStorage.getItem(key) ?? "null")?.saved.map(
+            (record: { key: string }) => record.key,
+          ) ?? [],
+        "trail-mapper.fixture:trail-mapper.web.library.v1",
+      ),
+    )
+    .toContain(selected!.key);
   expect(errors).toEqual([]);
 });

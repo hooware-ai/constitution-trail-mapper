@@ -2287,8 +2287,20 @@ dialog::backdrop {
     padding: 12px 16px 24px;
     scroll-padding: 12px 12px calc(12px + 5rem);
   }
+  .preview .preview-start-region {
+    display: flow-root;
+  }
+  .preview .preview-start-region::after {
+    content: "";
+    display: block;
+    height: 24px;
+  }
+  .preview .workspace[data-start-dock="flow"] .preview-start-region::after {
+    display: none;
+  }
   .preview .start-dock {
     position: sticky;
+    top: 12px;
     left: auto;
     bottom: 0;
     z-index: 520;
@@ -2303,7 +2315,7 @@ dialog::backdrop {
   .preview .direction-control {
     flex-wrap: wrap;
   }
-  /* With very large text the panel is too short for a sticky dock: it would cover more than half of it and every
+  /* With very large text the panel is too short for a sticky dock: it would leave too little room for a whole
      control above Start, so Start stays in the flow and is scrolled to like the rest. previewDockLayout.ts measures the
      panel and dock and chooses. */
   .preview .workspace[data-start-dock="flow"] .panel {
