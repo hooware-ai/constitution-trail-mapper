@@ -24,6 +24,7 @@ import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
 import { renderImage } from "./shareImage";
 import { HelpDialog } from "./Help";
+import { InstallAction } from "./InstallAction";
 import { AccessConnections } from "./AccessConnections";
 import { PRIVATE_TEST_MODE_CARDS_ENABLED } from "./previewPresentation";
 import {
@@ -2166,14 +2167,7 @@ export function App({ refresh }: AppProps = {}) {
             </span>
           </button>
           <div className="header-actions">
-            <button
-              className="help-button"
-              aria-haspopup="dialog"
-              onClick={() => setPopup("help")}
-            >
-              Help
-              <span className="visually-hidden"> and about</span>
-            </button>
+            <InstallAction />
             <span className="local-badge">On this browser · no account</span>
           </div>
         </header>
@@ -3351,26 +3345,38 @@ export function App({ refresh }: AppProps = {}) {
           )}
         </section>
       </main>
-      {topScreen && (
-        <nav className="main-nav" aria-label="Main navigation">
-          {(["plan", "saved", "explore", "updates"] as const).map((tab) => (
-            <button
-              key={tab}
-              aria-current={screen === tab ? "page" : undefined}
-              onClick={() => go(tab)}
-            >
-              <span aria-hidden="true">
-                {tab === "plan"
-                  ? "↗"
-                  : tab === "saved"
-                    ? "♡"
-                    : tab === "explore"
-                      ? "◇"
-                      : "◉"}
-              </span>
-              {tab[0].toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
+      {screen !== "navigation" && (
+        <nav
+          className={topScreen ? "main-nav" : "main-nav help-only-nav"}
+          aria-label="Main navigation"
+        >
+          {topScreen &&
+            (["plan", "saved", "explore", "updates"] as const).map((tab) => (
+              <button
+                key={tab}
+                aria-current={screen === tab ? "page" : undefined}
+                onClick={() => go(tab)}
+              >
+                <span aria-hidden="true">
+                  {tab === "plan"
+                    ? "↗"
+                    : tab === "saved"
+                      ? "♡"
+                      : tab === "explore"
+                        ? "◇"
+                        : "◉"}
+                </span>
+                {tab[0].toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          <button
+            aria-haspopup="dialog"
+            aria-expanded={popup === "help"}
+            onClick={() => setPopup("help")}
+          >
+            <span aria-hidden="true">?</span>
+            Help<span className="visually-hidden"> and about</span>
+          </button>
         </nav>
       )}
       {field && (

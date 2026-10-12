@@ -1046,11 +1046,34 @@ dialog::backdrop {
   align-items: center;
   gap: 10px;
 }
-.help-button {
+.install-button {
   min-height: 44px;
   min-width: 44px;
   padding: 6px 14px;
   font-weight: 700;
+  width: 104px;
+  height: 48px;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.main-nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding-inline: max(8px, calc((100% - 650px) / 2));
+}
+.main-nav button {
+  min-width: 0;
+  min-height: 48px;
+  padding-inline: 2px;
+  overflow-wrap: anywhere;
+}
+.help-only-nav {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.help-only-nav > button {
+  grid-column: 2;
+  min-width: 64px;
 }
 .visually-hidden {
   position: absolute;
@@ -1348,7 +1371,7 @@ dialog::backdrop {
     min-width: 0;
     gap: 6px;
   }
-  .help-button {
+  .install-button {
     padding: 6px 10px;
   }
   .local-badge {
@@ -1996,7 +2019,7 @@ dialog::backdrop {
   .app-header .local-badge {
     display: none;
   }
-  .app-header .help-button {
+  .app-header .install-button {
     min-height: 48px;
     padding: 8px 12px;
   }
