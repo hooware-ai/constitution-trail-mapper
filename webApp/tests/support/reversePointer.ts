@@ -60,6 +60,8 @@ const geometry = (page: Page) =>
       rootFont: getComputedStyle(document.documentElement).fontSize,
       header: rect(document.querySelector(".app > header")),
       panel: rect(document.querySelector(".panel")),
+      panelPaddingBottom: getComputedStyle(document.querySelector(".panel")!)
+        .paddingBottom,
       dock: rect(document.querySelector(".start-dock")),
       dockPosition: getComputedStyle(document.querySelector(".start-dock")!)
         .position,
@@ -212,14 +214,13 @@ for (const [name, width, height, font] of [
     await page.locator(".leaflet-control-attribution a").first().hover();
     await expect(page.locator(".leaflet-control-attribution")).toBeInViewport();
 
-    // In short landscape Start keeps sticking within the panel mid-scroll (as tests/support/previewLayout.ts checks at
-    // 150%). At 200% in the cramped 320 and 360 heights the panel is too short for a sticky dock, which stays in the
-    // flow instead; at 420 it sticks again.
-    if (width >= 500 && height <= 500)
-      expect((await geometry(page)).dockPosition).toBe(
-        font === "200%" && height <= 360 ? "static" : "sticky",
-      );
-    if (width >= 500 && height <= 500 && !(font === "200%" && height <= 360)) {
+    // Navigable 100%/150% retains the legacy sticky mid-scroll invariant; large text follows the measured policy.
+    const policy = await geometry(page);
+    if (width >= 500 && height <= 500) {
+      expectDockPolicy(policy);
+      if (font !== "200%") expect(policy.dockPosition).toBe("sticky");
+    }
+    if (width >= 500 && height <= 500 && policy.dockPosition === "sticky") {
       await page.locator(".panel").evaluate((panel) => {
         panel.scrollTop = (panel.scrollHeight - panel.clientHeight) / 2;
       });
@@ -263,8 +264,15 @@ test("[engine] Reverse direction stays pointer-clickable while short landscape 2
   for (const height of [320, 360, 420, 320]) {
     await page.setViewportSize({ width: 640, height });
     await expect
-      .poll(async () => (await geometry(page)).dockPosition)
-      .toBe(height <= 360 ? "static" : "sticky");
+      .poll(async () => {
+        try {
+          expectDockPolicy(await geometry(page));
+          return true;
+        } catch {
+          return false;
+        }
+      })
+      .toBe(true);
     await pointerClick(page, testInfo, "Reverse direction");
     reversed = !reversed;
     const g = await geometry(page);
@@ -276,5 +284,130 @@ test("[engine] Reverse direction stays pointer-clickable while short landscape 2
     await start.hover({ timeout: 15_000 });
     expectHitTestable(await geometry(page), "start");
   }
+  expect(errors).toEqual([]);
+});
+
+/** The measured dock policy: in the flow when the panel is at most 9rem or the dock plus its occupied padding covers more than half of it,
+ * otherwise sticky with the panel's bottom scroll padding the dock's actual height and the panel padding beneath it
+ * plus 12px. */
+const expectDockPolicy = (g: Geometry) => {
+  const panel = g.panel!.bottom - g.panel!.top,
+    dock = g.dock!.bottom - g.dock!.top;
+  const reserved = Math.ceil(dock + parseFloat(g.panelPaddingBottom)) + 12;
+  const flow = panel <= 9 * parseFloat(g.rootFont) || reserved > panel / 2;
+  expect(g.dockPosition).toBe(flow ? "static" : "sticky");
+  const padding = (
+    g.scrollers as { element: string; scrollPaddingBottom: string }[]
+  ).find((s) => s.element.startsWith("section.panel"))!.scrollPaddingBottom;
+  expect(padding).toBe(
+    flow
+      ? "12px"
+      : `${Math.ceil(dock + parseFloat(g.panelPaddingBottom)) + 12}px`,
+  );
+};
+
+async function openLoopPreview(page: Page) {
+  await page.addInitScript(recordPointerTargets);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+  await choose(page, "Start", "Review trailhead · East");
+  await page.getByRole("button", { name: "5 mi", exact: true }).click();
+  await page.getByRole("button", { name: "Make loop", exact: true }).click();
+  await expect(page.locator(".direction-control span")).toHaveText(
+    "Planned direction",
+  );
+}
+
+// Changing the root font size after the preview has loaded re-measures the dock: 200% in 640x360 puts Start in the
+// flow, and returning to 100% sticks it again; Reverse stays reachable by the real pointer each time.
+test("[engine] the Start dock follows a root font size change after load in short landscape", async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 640, height: 360 });
+  await openLoopPreview(page);
+  for (const [font, position] of [
+    ["100%", "sticky"],
+    ["200%", "static"],
+    ["100%", "sticky"],
+  ] as const) {
+    await page.evaluate((font) => {
+      document.documentElement.style.fontSize = font;
+    }, font);
+    await expect
+      .poll(async () => (await geometry(page)).dockPosition)
+      .toBe(position);
+    await pointerClick(page, testInfo, "Reverse direction");
+    const g = await geometry(page);
+    await record(testInfo, `${font} reverse clicked geometry`, g);
+    expectHitTestable(g, "reverse");
+    expectDockPolicy(g);
+  }
+  expect(errors).toEqual([]);
+});
+
+// A real blocked reason (the browser going offline) grows the dock after load; the dock is re-measured and its scroll
+// padding or flow placement follows the new height.
+test("[engine] the Start dock re-measures when an offline blocked reason appears in short landscape 150%", async ({
+  page,
+  context,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 640, height: 320 });
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      document.documentElement.style.fontSize = "150%";
+    });
+  });
+  await openLoopPreview(page);
+  await expect
+    .poll(async () => (await geometry(page)).dockPosition)
+    .toBe("sticky");
+  expectDockPolicy(await geometry(page));
+  const before = await geometry(page);
+  await context.setOffline(true);
+  await expect(page.locator("#start-reason")).toHaveText(
+    "You're offline. Start needs a connection.",
+  );
+  await expect
+    .poll(async () => {
+      const g = await geometry(page);
+      return g.dock!.bottom - g.dock!.top;
+    })
+    .toBeGreaterThan(before.dock!.bottom - before.dock!.top);
+  await expect
+    .poll(async () => {
+      try {
+        expectDockPolicy(await geometry(page));
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .toBe(true);
+  await pointerClick(page, testInfo, "Reverse direction");
+  const reversed = await geometry(page);
+  await record(testInfo, "offline Reverse pointer geometry", reversed);
+  expectHitTestable(reversed, "reverse");
+  const start = page.getByRole("button", {
+    name: "Start navigation",
+    exact: true,
+  });
+  await expect(start).toBeDisabled();
+  await start.hover({ timeout: 15_000 });
+  const g = await geometry(page);
+  await record(testInfo, "offline Start pointer geometry", g);
+  expectHitTestable(g, "start");
+  // Normal flow can be scrolled to read the explanation. Use the browser's ordinary pointer action, never a scripted
+  // scroll: WebKit does not honor the button's scroll margin when hover scrolls it into view.
+  await page.locator("#start-reason").hover();
+  await expect(page.locator("#start-reason")).toBeInViewport({ ratio: 1 });
+  const readable = await geometry(page);
+  await record(testInfo, "offline reason pointer geometry", readable);
+  expectHitTestable(readable, "start");
+  await context.setOffline(false);
+  await expect(page.locator("#start-reason")).toHaveCount(0);
   expect(errors).toEqual([]);
 });

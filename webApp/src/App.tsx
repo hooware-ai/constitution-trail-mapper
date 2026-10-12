@@ -24,6 +24,7 @@ import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
 import { renderImage } from "./shareImage";
 import { HelpDialog } from "./Help";
+import { usePreviewDockLayout } from "./previewDockLayout";
 import { AccessConnections } from "./AccessConnections";
 import { PRIVATE_TEST_MODE_CARDS_ENABLED } from "./previewPresentation";
 import {
@@ -224,6 +225,8 @@ export interface AppProps {
 }
 export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const startDockRef = usePreviewDockLayout(workspaceRef, panelRef);
   const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
@@ -2209,7 +2212,7 @@ export function App({ refresh }: AppProps = {}) {
           provide offline navigation.
         </div>
       )}
-      <main className="workspace">
+      <main className="workspace" ref={workspaceRef}>
         {screen === "navigation" && (
           <Suspense
             fallback={
@@ -2781,7 +2784,7 @@ export function App({ refresh }: AppProps = {}) {
                       onReverse={() => void reverseDirection()}
                     />
                   )}
-                  <div className="start-dock">
+                  <div className="start-dock" ref={startDockRef}>
                     <button
                       className="primary wide"
                       aria-describedby={

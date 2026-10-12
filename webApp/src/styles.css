@@ -2235,13 +2235,13 @@ dialog::backdrop {
     grid-template-columns: minmax(0, 48%) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "panel map";
-    container: preview-workspace / size;
   }
   .preview .map-wrap {
     height: auto;
     min-height: 0;
   }
-  /* A control scrolled into view (by pointer or focus) stops above the sticky Start dock, not beneath it. */
+  /* A control scrolled into view (by pointer or focus) stops above the sticky Start dock, not beneath it. Once
+     measured, previewDockLayout.ts replaces the bottom padding with the dock's actual height. */
   .preview .panel {
     min-width: 0;
     min-height: 0;
@@ -2267,14 +2267,16 @@ dialog::backdrop {
     flex-wrap: wrap;
   }
   /* With very large text the panel is too short for a sticky dock: it would cover more than half of it and every
-     control above Start, so Start stays in the flow and is scrolled to like the rest. */
-  @container preview-workspace (max-height: 9rem) {
-    .preview .panel {
-      scroll-padding: 12px;
-    }
-    .preview .start-dock {
-      position: static;
-    }
+     control above Start, so Start stays in the flow and is scrolled to like the rest. previewDockLayout.ts measures the
+     panel and dock and chooses. */
+  .preview .workspace[data-start-dock="flow"] .panel {
+    scroll-padding: 12px;
+  }
+  .preview .workspace[data-start-dock="flow"] .start-dock {
+    position: static;
+  }
+  .preview .workspace[data-start-dock="flow"] .start-dock > button {
+    scroll-margin-bottom: var(--start-dock-after, 0px);
   }
 }
 .update-category > h2,
