@@ -1569,10 +1569,18 @@ export function App({ refresh }: AppProps = {}) {
       });
       // The proof is the planned route's geometry; its identity (a minted key for a recalculated route) is the stored one.
       if (geometryKey === (record.plannedGeometryKey ?? record.plannedKey)) {
+        // A saved name may have changed while this restored direction was unresolved. Only after the current geometry
+        // proof succeeds may its exact saved identity supply a title; no saved geometry, status or other fields are adopted.
+        const names = storeRef.current?.read(),
+          title = names?.ok
+            ? names.state.saved.find((item) => item.key === record.plannedKey)
+                ?.title
+            : undefined;
         const planned: RouteRecord = {
           ...own,
           key: record.plannedKey,
           route: result.route,
+          ...(title !== undefined ? { title } : {}),
           ...(record.plannedGeometryKey
             ? { geometryKey: record.plannedGeometryKey }
             : {}),
@@ -1581,6 +1589,14 @@ export function App({ refresh }: AppProps = {}) {
         const live = selectedRef.current;
         if (live && live.key === record.key && !live.temporary)
           delete planned.temporary;
+        if (title !== undefined)
+          setSelected((current) =>
+            current &&
+            current.key === record.key &&
+            current.plannedKey === record.plannedKey
+              ? { ...current, title }
+              : current,
+          );
         setReverseOf(planned);
         return;
       }
