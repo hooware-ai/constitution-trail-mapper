@@ -2035,31 +2035,27 @@ dialog::backdrop {
 @media (max-width: 760px) {
   .app-header {
     min-height: 62px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     padding: 8px 14px;
     gap: 8px;
   }
   .app-header .brand {
     font-size: 1.1rem;
     line-height: 1.05;
+    flex: 1 1 10rem;
   }
   .app-header .brand > span:last-child {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .app-header .brand small {
     display: block;
     font-size: 0.63rem;
     letter-spacing: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .app-header .header-actions {
     margin-left: auto;
     flex-shrink: 0;
-    max-width: 70%;
+    max-width: 100%;
   }
   .app-header .local-badge {
     display: none;

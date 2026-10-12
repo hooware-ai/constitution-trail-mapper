@@ -192,7 +192,12 @@ export function installLayoutTests() {
       await button.click({ trial: true });
       const brand = await page.locator(".app-header .brand").boundingBox();
       const action = await button.boundingBox();
-      expect(brand!.x + brand!.width).toBeLessThanOrEqual(action!.x);
+      expect(
+        Math.min(brand!.x + brand!.width, action!.x + action!.width) >
+          Math.max(brand!.x, action!.x) &&
+          Math.min(brand!.y + brand!.height, action!.y + action!.height) >
+            Math.max(brand!.y, action!.y),
+      ).toBe(false);
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
