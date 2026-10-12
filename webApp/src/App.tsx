@@ -2762,18 +2762,28 @@ export function App({ refresh }: AppProps = {}) {
                     />
                   )}
                   <div className="start-dock">
-                    <button
-                      className="primary wide"
-                      aria-describedby={
-                        startReason
-                          ? "foreground-note start-reason"
-                          : "foreground-note"
-                      }
-                      disabled={checking || !preview.canNavigate || !online}
-                      onClick={() => void startNavigation()}
-                    >
-                      {checking ? "Checking closures…" : "Start navigation"}
-                    </button>
+                    <div className="start-dock-actions">
+                      <button
+                        className="primary wide"
+                        aria-describedby={
+                          startReason
+                            ? "foreground-note start-reason"
+                            : "foreground-note"
+                        }
+                        disabled={checking || !preview.canNavigate || !online}
+                        onClick={() => void startNavigation()}
+                      >
+                        {checking ? "Checking closures…" : "Start navigation"}
+                      </button>
+                      <button
+                        className="start-dock-help"
+                        aria-haspopup="dialog"
+                        aria-expanded={popup === "help"}
+                        onClick={() => setPopup("help")}
+                      >
+                        Help<span className="visually-hidden"> and about</span>
+                      </button>
+                    </div>
                     {startReason && (
                       <p className="start-reason" id="start-reason">
                         {startReason}
@@ -3345,7 +3355,7 @@ export function App({ refresh }: AppProps = {}) {
           )}
         </section>
       </main>
-      {screen !== "navigation" && (
+      {screen !== "navigation" && !(screen === "preview" && preview) && (
         <nav
           className={topScreen ? "main-nav" : "main-nav help-only-nav"}
           aria-label="Main navigation"

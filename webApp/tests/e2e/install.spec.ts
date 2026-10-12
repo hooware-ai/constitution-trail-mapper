@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { startAndHelpAreReachable } from "../support/start-help-dock";
 
 const android =
   "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/154.0.0.0 Mobile Safari/537.36";
@@ -346,12 +347,26 @@ test("Help remains reachable from the planner and preview without interrupting r
   await expect(
     page.getByRole("heading", { name: "Route preview", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name: /^Help/ })
-    .click();
+  await page.locator(".start-dock-help").click();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeEnabled();
+});
+
+for (const view of [
+  { width: 390, height: 844 },
+  { width: 320, height: 720 },
+  { width: 844, height: 390 },
+]) {
+  test(`Start and Help have separate reachable targets at ${view.width}x${view.height}`, async ({
+    page,
+  }) => {
+    await startAndHelpAreReachable(page, view);
+  });
+}
+test("Start and Help remain reachable with 200% text on a narrow phone", async ({
+  page,
+}) => {
+  await startAndHelpAreReachable(page, { width: 320, height: 720 }, true);
 });

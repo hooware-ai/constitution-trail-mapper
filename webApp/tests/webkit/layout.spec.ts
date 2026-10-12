@@ -10,10 +10,28 @@ import {
   planPoint,
   startButton,
 } from "./support";
+import { startAndHelpAreReachable } from "../support/start-help-dock";
 
 const tabs = ["Plan", "Saved", "Explore", "Updates"];
 const nav = (page: Page, name: string) =>
   page.getByRole("navigation").getByRole("button", { name, exact: true });
+
+for (const view of [
+  { width: 390, height: 844 },
+  { width: 320, height: 720 },
+  { width: 844, height: 390 },
+]) {
+  test(`[sim-device] Start and Help have separate native pointer targets at ${view.width}x${view.height}`, async ({
+    page,
+  }) => {
+    await startAndHelpAreReachable(page, view);
+  });
+}
+test("[sim-device] Start and Help stay reachable at 200% text", async ({
+  page,
+}) => {
+  await startAndHelpAreReachable(page, { width: 320, height: 720 }, true);
+});
 
 test("[engine] no screen needs sideways scrolling, at normal and at 150% text", async ({
   page,

@@ -381,6 +381,9 @@ header .quiet {
 .leaflet-control-attribution {
   font-size: 10px !important;
 }
+.leaflet-control-attribution a {
+  text-decoration: underline;
+}
 .leaflet-control-zoom a {
   width: 44px !important;
   height: 44px !important;
@@ -1597,6 +1600,18 @@ dialog::backdrop {
 }
 .start-dock {
   margin: 10px 0 4px;
+}
+.start-dock-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+.start-dock-actions > .wide {
+  margin: 0;
+}
+.start-dock-help {
+  min-width: 48px;
 }
 .start-dock .primary.wide {
   min-height: 52px;
