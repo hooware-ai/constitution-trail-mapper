@@ -24,6 +24,7 @@ import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
 import { renderImage } from "./shareImage";
 import { HelpDialog } from "./Help";
+import { usePreviewDockLayout } from "./previewDockLayout";
 import { AccessConnections } from "./AccessConnections";
 import { PRIVATE_TEST_MODE_CARDS_ENABLED } from "./previewPresentation";
 import {
@@ -224,6 +225,8 @@ export interface AppProps {
 }
 export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const startDockRef = usePreviewDockLayout(workspaceRef, panelRef);
   const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
@@ -2209,7 +2212,7 @@ export function App({ refresh }: AppProps = {}) {
           provide offline navigation.
         </div>
       )}
-      <main className="workspace">
+      <main className="workspace" ref={workspaceRef}>
         {screen === "navigation" && (
           <Suspense
             fallback={
@@ -2604,201 +2607,203 @@ export function App({ refresh }: AppProps = {}) {
               )}
               {preview && (
                 <>
-                  <div className="route-stats">
-                    <div>
-                      <strong>{miles(preview.distance)}</strong>
-                      <span>miles</span>
-                    </div>
-                    <div>
-                      <strong>
-                        {Math.max(
-                          1,
-                          Math.round((preview.distance / 1609.344 / 10) * 60),
-                        )}
-                      </strong>
-                      <span>min at 10 mph · estimate</span>
-                    </div>
-                  </div>
-                  <p className="route-details">
-                    {miles(preview.accessDistance)} mi street access ·{" "}
-                    {miles(preview.sharedDistance)} mi shared roadway
-                    {typeof preview.retracedDistance === "number"
-                      ? ` · ${miles(preview.retracedDistance)} mi retraced`
-                      : null}
-                  </p>
-                  {preview.kind === "ExerciseLoop" && (
-                    <>
-                      <p>
-                        <strong>{loopHeading(preview.targetMatched)}</strong>
-                      </p>
-                      {typeof preview.requestedDistance === "number" && (
-                        <p className="route-details">
-                          {loopComparison(
-                            preview.requestedDistance,
-                            preview.distance,
+                  <div className="preview-start-region">
+                    <div className="route-stats">
+                      <div>
+                        <strong>{miles(preview.distance)}</strong>
+                        <span>miles</span>
+                      </div>
+                      <div>
+                        <strong>
+                          {Math.max(
+                            1,
+                            Math.round((preview.distance / 1609.344 / 10) * 60),
                           )}
+                        </strong>
+                        <span>min at 10 mph · estimate</span>
+                      </div>
+                    </div>
+                    <p className="route-details">
+                      {miles(preview.accessDistance)} mi street access ·{" "}
+                      {miles(preview.sharedDistance)} mi shared roadway
+                      {typeof preview.retracedDistance === "number"
+                        ? ` · ${miles(preview.retracedDistance)} mi retraced`
+                        : null}
+                    </p>
+                    {preview.kind === "ExerciseLoop" && (
+                      <>
+                        <p>
+                          <strong>{loopHeading(preview.targetMatched)}</strong>
+                        </p>
+                        {typeof preview.requestedDistance === "number" && (
+                          <p className="route-details">
+                            {loopComparison(
+                              preview.requestedDistance,
+                              preview.distance,
+                            )}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {preview.summary && (
+                      <p className="visually-hidden">{preview.summary}</p>
+                    )}
+                    {cues &&
+                      (cues.turnarounds.length > 0 ||
+                        cues.pieces.some(
+                          (piece) => piece.repeatsEarlierTravel,
+                        )) && (
+                        <p className="caption">
+                          Chevrons show direction. Double chevrons: second pass,
+                          drawn beside the first. Turn-around signs mark where
+                          the route turns back.
                         </p>
                       )}
-                    </>
-                  )}
-                  {preview.summary && (
-                    <p className="visually-hidden">{preview.summary}</p>
-                  )}
-                  {cues &&
-                    (cues.turnarounds.length > 0 ||
-                      cues.pieces.some(
-                        (piece) => piece.repeatsEarlierTravel,
-                      )) && (
-                      <p className="caption">
-                        Chevrons show direction. Double chevrons: second pass,
-                        drawn beside the first. Turn-around signs mark where the
-                        route turns back.
-                      </p>
-                    )}
-                  <AccessConnections
-                    gaps={preview.accessGaps ?? []}
-                    onShow={(id) => {
-                      setInstructionFocus(null);
-                      setGapFocus({ id });
-                    }}
-                  />
-                  {stale && (
-                    <div className="error stale-route" role="alert">
-                      <h3>This route needs recalculating</h3>
-                      <p>{staleRouteMessage(preview)}</p>
-                      <p>
-                        Your saved route is kept as it was. Navigation is off
-                        until you recalculate it on the current data or choose
-                        another route.
-                      </p>
-                      <button
-                        className="primary"
-                        disabled={checking}
-                        onClick={() => void recalculate()}
-                      >
-                        Recalculate on current data
-                      </button>
-                    </div>
-                  )}
-                  {selected?.temporary && (
-                    <div
-                      className={
-                        preview.canNavigate
-                          ? "success-note recalculated-route"
-                          : "warning recalculated-route"
-                      }
-                      role="status"
-                    >
-                      <h3>Recalculated route · not saved</h3>
-                      <p>
-                        This is a temporary preview
-                        {selected.recalculatedFrom
-                          ? ` recalculated from “${selected.recalculatedFrom.title}”`
-                          : ""}
-                        . Your saved route is unchanged.{" "}
-                        {preview.canNavigate
-                          ? "Start it now, or save it as a new route."
-                          : "It cannot be started yet (see below), but you can still save it as a new route."}
-                      </p>
-                    </div>
-                  )}
-                  {olderData && !stale && (
-                    <p className="caption">
-                      Planned on an earlier version of the trail data (
-                      {selected!.dataset!.version}). It still matches the data
-                      loaded now.
-                    </p>
-                  )}
-                  {preview.warnings
-                    .filter(
-                      (warning) =>
-                        !(stale && warning.startsWith("This saved route ")) &&
-                        (PRIVATE_TEST_MODE_CARDS_ENABLED ||
-                          !warning.startsWith("PRIVATE TEST MODE:")),
-                    )
-                    .map((warning, index) => (
-                      <p className="warning" key={index}>
-                        {warning}
-                      </p>
-                    ))}
-                  {preview.closures.length > 0 && (
-                    <div className="closure-list">
-                      {preview.closures.map((closure) => (
-                        <article key={closure.id}>
-                          <h3>{closure.title}</h3>
-                          <p>{closure.message}</p>
-                          {closure.locationDescription && (
-                            <p className="caption">
-                              {closure.locationDescription}
-                            </p>
-                          )}
-                          <SafeLink href={closure.sourceUrl}>
-                            Review official notice
-                          </SafeLink>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                  {preview.closures.length > 0 && !stale && (
-                    <div className="recalculate-offer">
-                      <button
-                        className="primary"
-                        disabled={checking}
-                        onClick={() => void recalculate()}
-                      >
-                        Recalculate around the closure
-                      </button>
-                      <p className="caption">
-                        Your saved route is kept as it is. The recalculated
-                        route is a temporary preview you can start or save as a
-                        new route.
-                      </p>
-                    </div>
-                  )}
-                  {!checking && (
-                    <p className="closure-status">
-                      {preview.closures.length
-                        ? "A reported closure affects this route. Recalculate before navigating."
-                        : "Known closure catalog checked on opening; live conditions are unverified. Check posted signs."}
-                    </p>
-                  )}
-                  <details className="map-key-details">
-                    <summary>Map key</summary>
-                    <Legend />
-                  </details>
-                  <p className="foreground-note" id="foreground-note">
-                    <strong>
-                      Keep this page open and visible while you ride.
-                    </strong>{" "}
-                    Guidance pauses if you switch tabs, lock the screen or leave
-                    the page. There is no background tracking or offline
-                    navigation.
-                  </p>
-                  {preview.kind === "ExerciseLoop" && (
-                    <DirectionControl
-                      reversed={reverseOf !== null}
-                      busy={busy || checking || directionPending}
-                      onReverse={() => void reverseDirection()}
+                    <AccessConnections
+                      gaps={preview.accessGaps ?? []}
+                      onShow={(id) => {
+                        setInstructionFocus(null);
+                        setGapFocus({ id });
+                      }}
                     />
-                  )}
-                  <div className="start-dock">
-                    <button
-                      className="primary wide"
-                      aria-describedby={
-                        startReason
-                          ? "foreground-note start-reason"
-                          : "foreground-note"
-                      }
-                      disabled={checking || !preview.canNavigate || !online}
-                      onClick={() => void startNavigation()}
-                    >
-                      {checking ? "Checking closures…" : "Start navigation"}
-                    </button>
-                    {startReason && (
-                      <p className="start-reason" id="start-reason">
-                        {startReason}
+                    {stale && (
+                      <div className="error stale-route" role="alert">
+                        <h3>This route needs recalculating</h3>
+                        <p>{staleRouteMessage(preview)}</p>
+                        <p>
+                          Your saved route is kept as it was. Navigation is off
+                          until you recalculate it on the current data or choose
+                          another route.
+                        </p>
+                        <button
+                          className="primary"
+                          disabled={checking}
+                          onClick={() => void recalculate()}
+                        >
+                          Recalculate on current data
+                        </button>
+                      </div>
+                    )}
+                    {selected?.temporary && (
+                      <div
+                        className={
+                          preview.canNavigate
+                            ? "success-note recalculated-route"
+                            : "warning recalculated-route"
+                        }
+                        role="status"
+                      >
+                        <h3>Recalculated route · not saved</h3>
+                        <p>
+                          This is a temporary preview
+                          {selected.recalculatedFrom
+                            ? ` recalculated from “${selected.recalculatedFrom.title}”`
+                            : ""}
+                          . Your saved route is unchanged.{" "}
+                          {preview.canNavigate
+                            ? "Start it now, or save it as a new route."
+                            : "It cannot be started yet (see below), but you can still save it as a new route."}
+                        </p>
+                      </div>
+                    )}
+                    {olderData && !stale && (
+                      <p className="caption">
+                        Planned on an earlier version of the trail data (
+                        {selected!.dataset!.version}). It still matches the data
+                        loaded now.
                       </p>
                     )}
+                    {preview.warnings
+                      .filter(
+                        (warning) =>
+                          !(stale && warning.startsWith("This saved route ")) &&
+                          (PRIVATE_TEST_MODE_CARDS_ENABLED ||
+                            !warning.startsWith("PRIVATE TEST MODE:")),
+                      )
+                      .map((warning, index) => (
+                        <p className="warning" key={index}>
+                          {warning}
+                        </p>
+                      ))}
+                    {preview.closures.length > 0 && (
+                      <div className="closure-list">
+                        {preview.closures.map((closure) => (
+                          <article key={closure.id}>
+                            <h3>{closure.title}</h3>
+                            <p>{closure.message}</p>
+                            {closure.locationDescription && (
+                              <p className="caption">
+                                {closure.locationDescription}
+                              </p>
+                            )}
+                            <SafeLink href={closure.sourceUrl}>
+                              Review official notice
+                            </SafeLink>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                    {preview.closures.length > 0 && !stale && (
+                      <div className="recalculate-offer">
+                        <button
+                          className="primary"
+                          disabled={checking}
+                          onClick={() => void recalculate()}
+                        >
+                          Recalculate around the closure
+                        </button>
+                        <p className="caption">
+                          Your saved route is kept as it is. The recalculated
+                          route is a temporary preview you can start or save as
+                          a new route.
+                        </p>
+                      </div>
+                    )}
+                    {!checking && (
+                      <p className="closure-status">
+                        {preview.closures.length
+                          ? "A reported closure affects this route. Recalculate before navigating."
+                          : "Known closure catalog checked on opening; live conditions are unverified. Check posted signs."}
+                      </p>
+                    )}
+                    <details className="map-key-details">
+                      <summary>Map key</summary>
+                      <Legend />
+                    </details>
+                    <p className="foreground-note" id="foreground-note">
+                      <strong>
+                        Keep this page open and visible while you ride.
+                      </strong>{" "}
+                      Guidance pauses if you switch tabs, lock the screen or
+                      leave the page. There is no background tracking or offline
+                      navigation.
+                    </p>
+                    {preview.kind === "ExerciseLoop" && (
+                      <DirectionControl
+                        reversed={reverseOf !== null}
+                        busy={busy || checking || directionPending}
+                        onReverse={() => void reverseDirection()}
+                      />
+                    )}
+                    <div className="start-dock" ref={startDockRef}>
+                      <button
+                        className="primary wide"
+                        aria-describedby={
+                          startReason
+                            ? "foreground-note start-reason"
+                            : "foreground-note"
+                        }
+                        disabled={checking || !preview.canNavigate || !online}
+                        onClick={() => void startNavigation()}
+                      >
+                        {checking ? "Checking closures…" : "Start navigation"}
+                      </button>
+                      {startReason && (
+                        <p className="start-reason" id="start-reason">
+                          {startReason}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   {PRIVATE_TEST_MODE_CARDS_ENABLED &&
                     preview.canNavigate &&
