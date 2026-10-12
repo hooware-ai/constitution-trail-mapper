@@ -2,7 +2,7 @@
 // are STUBBED: every request to the tile host is answered locally with a 1x1 image and any other outside host is aborted,
 // so this suite can never request a real tile.
 import AxeBuilder from "@axe-core/playwright";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
@@ -14,16 +14,57 @@ async function stubTiles(page: Page) {
   const tiles: string[] = [];
   await page.route(
     (url) => !["127.0.0.1", "localhost"].includes(url.hostname),
-    (route) => {
+    async (route) => {
       const url = new URL(route.request().url());
       if (url.hostname === "tile.openstreetmap.org") {
+        await route.fulfill({ contentType: "image/png", body: PIXEL });
         tiles.push(url.pathname);
-        return route.fulfill({ contentType: "image/png", body: PIXEL });
+        return;
       }
       return route.abort();
     },
   );
   return tiles;
+}
+// Opening the picker changes the map's size. Leaflet's ResizeObserver/invalidateSize can round the pixel centre
+// before the rider taps anything; capture a baseline only after one atomic camera/size snapshot has stayed unchanged.
+async function settledPickerCamera(map: Locator) {
+  let previous = "",
+    unchangedSince = 0;
+  let settled = { center: "", zoom: "", clientWidth: 0, clientHeight: 0 };
+  await expect
+    .poll(
+      async () => {
+        const current = await map.evaluate((element) => ({
+          center: element.getAttribute("data-center") ?? "",
+          zoom: element.getAttribute("data-zoom") ?? "",
+          clientWidth: element.clientWidth,
+          clientHeight: element.clientHeight,
+        }));
+        const snapshot = JSON.stringify(current),
+          now = performance.now();
+        if (
+          !current.center ||
+          !current.zoom ||
+          current.clientWidth <= 0 ||
+          current.clientHeight <= 0
+        ) {
+          previous = "";
+          unchangedSince = now;
+          return false;
+        }
+        if (snapshot !== previous) {
+          previous = snapshot;
+          unchangedSince = now;
+          return false;
+        }
+        settled = current;
+        return now - unchangedSince >= 350;
+      },
+      { intervals: [50, 100] },
+    )
+    .toBe(true);
+  return settled;
 }
 const credit = (page: Page) =>
   page.locator(".leaflet-control-attribution a", {
@@ -113,7 +154,7 @@ test("toggling street tiles in the map picker does not choose a point or pan the
   page,
   isMobile,
 }) => {
-  await stubTiles(page);
+  const tiles = await stubTiles(page);
   await page.goto("/");
   await page.getByRole("button", { name: /Go somewhere/ }).click();
   await page.getByRole("button", { name: /^Start:/ }).click();
@@ -126,11 +167,13 @@ test("toggling street tiles in the map picker does not choose a point or pan the
   });
   await expect(heading).toBeVisible();
   const map = page.getByRole("region", { name: /Interactive map/ });
-  const center = await map.getAttribute("data-center");
-  const zoom = await map.getAttribute("data-zoom");
+  await expect(page.locator(".map-error")).toHaveCount(0);
+  const { center, zoom } = await settledPickerCamera(map);
   if (isMobile) await toggle(page).tap();
   else await toggle(page).click();
   await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => tiles.length).toBeGreaterThan(0);
+  await expect(page.locator(".map-error")).toHaveCount(0);
   await expect(heading).toBeVisible();
   await expect(map).toHaveAttribute("data-center", center!);
   await expect(map).toHaveAttribute("data-zoom", zoom!);
