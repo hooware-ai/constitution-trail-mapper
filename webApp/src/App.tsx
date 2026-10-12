@@ -1599,8 +1599,22 @@ export function App({ refresh }: AppProps = {}) {
   }
   function saveRecord(record: RouteRecord) {
     // Not while the planned direction is still being proved: the route on screen is the reversed record, and saving it
-    // would store the reversed geometry key instead of the planned route's identity.
-    if (directionPendingRef.current) return;
+    // would store the reversed geometry key instead of the planned route's identity. Only that record is held back (its key
+    // AND the planned identity it claims): any other record, even one sharing its geometry key, saves as usual.
+    const unresolved = selectedRef.current;
+    if (
+      directionPendingRef.current &&
+      unresolved &&
+      record.key === unresolved.key &&
+      record.plannedKey === unresolved.plannedKey
+    )
+      return;
+    // Saving another record (a Recents row) settles nothing about the route on screen or its retained reversal.
+    const shown = reverseOf ?? selected;
+    const own =
+      !!shown &&
+      record.key === shown.key &&
+      record.plannedKey === shown.plannedKey;
     const ok = applyStore(
       storeRef.current!.save(record),
       record.temporary
@@ -1609,7 +1623,7 @@ export function App({ refresh }: AppProps = {}) {
     );
     // Only after the library accepted it is the route no longer temporary (a quota failure leaves it temporary, the
     // original untouched, and no success announced).
-    if (ok && record.temporary) {
+    if (ok && record.temporary && own) {
       const settled = (item: RouteRecord): RouteRecord => {
         const { temporary: _temporary, ...rest } = item;
         return rest;
