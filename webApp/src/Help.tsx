@@ -26,10 +26,12 @@ export function HelpDialog({
   network,
   build,
   onClose,
+  fallbackFocus,
 }: {
   network: Network | null;
   build: BuildInfo;
   onClose: () => void;
+  fallbackFocus?: { readonly current: HTMLElement | null };
 }) {
   const [view, setView] = useState<
     "help" | "report" | "feedback" | "feedback_submit" | "feature_request"
@@ -95,6 +97,7 @@ export function HelpDialog({
   }, [view]);
   return (
     <Modal
+      fallbackFocus={fallbackFocus}
       title={
         view === "help"
           ? "Help and about"
@@ -305,8 +308,8 @@ export function HelpDialog({
               <li>
                 <strong>Removing it:</strong> Saved shows Delete for each saved
                 route and place and Clear recents; stopping a ride clears its
-                recovery data. To remove all on-device data, clear this site&apos;s data
-                in your browser settings.
+                recovery data. To remove all on-device data, clear this
+                site&apos;s data in your browser settings.
               </li>
               <li>
                 <strong>Sharing and files:</strong> Share sends only the app

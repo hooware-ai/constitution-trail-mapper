@@ -24,6 +24,7 @@ import { loopComparison, loopHeading } from "./loopSummary";
 import { applyReverse, reverseOutcome } from "./reverseGate";
 import { renderImage } from "./shareImage";
 import { HelpDialog } from "./Help";
+import { InstallAction } from "./InstallAction";
 import { usePreviewDockLayout } from "./previewDockLayout";
 import { AccessConnections } from "./AccessConnections";
 import { PRIVATE_TEST_MODE_CARDS_ENABLED } from "./previewPresentation";
@@ -138,7 +139,15 @@ type Screen =
   | "updates"
   | "map-picker"
   | "explore-picker";
-type Popup = "directions" | "share" | "clear" | "rename" | "help" | null;
+type Popup =
+  | "directions"
+  | "share"
+  | "clear"
+  | "rename"
+  | "help"
+  | "install"
+  | "install-open"
+  | null;
 const EMPTY_LIBRARY: RouteLibrary = {
   version: 1,
   saved: [],
@@ -227,6 +236,7 @@ export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const startDockRef = usePreviewDockLayout(workspaceRef, panelRef);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
   const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
@@ -2213,14 +2223,26 @@ export function App({ refresh }: AppProps = {}) {
             </span>
           </button>
           <div className="header-actions">
-            <button
-              className="help-button"
-              aria-haspopup="dialog"
-              onClick={() => setPopup("help")}
-            >
-              Help
-              <span className="visually-hidden"> and about</span>
-            </button>
+            <InstallAction
+              guide={
+                popup === "install"
+                  ? "install"
+                  : popup === "install-open"
+                    ? "open"
+                    : null
+              }
+              onGuide={(guide) =>
+                setPopup((current) =>
+                  guide
+                    ? guide === "open"
+                      ? "install-open"
+                      : "install"
+                    : current === "install" || current === "install-open"
+                      ? null
+                      : current,
+                )
+              }
+            />
             <span className="local-badge">On this browser · no account</span>
           </div>
         </header>
@@ -2816,18 +2838,30 @@ export function App({ refresh }: AppProps = {}) {
                       />
                     )}
                     <div className="start-dock" ref={startDockRef}>
-                      <button
-                        className="primary wide"
-                        aria-describedby={
-                          startReason
-                            ? "foreground-note start-reason"
-                            : "foreground-note"
-                        }
-                        disabled={checking || !preview.canNavigate || !online}
-                        onClick={() => void startNavigation()}
-                      >
-                        {checking ? "Checking closures…" : "Start navigation"}
-                      </button>
+                      <div className="start-dock-actions">
+                        <button
+                          className="primary wide"
+                          aria-describedby={
+                            startReason
+                              ? "foreground-note start-reason"
+                              : "foreground-note"
+                          }
+                          disabled={checking || !preview.canNavigate || !online}
+                          onClick={() => void startNavigation()}
+                        >
+                          {checking ? "Checking closures…" : "Start navigation"}
+                        </button>
+                        <button
+                          className="start-dock-help"
+                          ref={helpButtonRef}
+                          aria-haspopup="dialog"
+                          aria-expanded={popup === "help"}
+                          onClick={() => setPopup("help")}
+                        >
+                          Help
+                          <span className="visually-hidden"> and about</span>
+                        </button>
+                      </div>
                       {startReason && (
                         <p className="start-reason" id="start-reason">
                           {startReason}
@@ -3400,26 +3434,39 @@ export function App({ refresh }: AppProps = {}) {
           )}
         </section>
       </main>
-      {topScreen && (
-        <nav className="main-nav" aria-label="Main navigation">
-          {(["plan", "saved", "explore", "updates"] as const).map((tab) => (
-            <button
-              key={tab}
-              aria-current={screen === tab ? "page" : undefined}
-              onClick={() => go(tab)}
-            >
-              <span aria-hidden="true">
-                {tab === "plan"
-                  ? "↗"
-                  : tab === "saved"
-                    ? "♡"
-                    : tab === "explore"
-                      ? "◇"
-                      : "◉"}
-              </span>
-              {tab[0].toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
+      {screen !== "navigation" && !(screen === "preview" && preview) && (
+        <nav
+          className={topScreen ? "main-nav" : "main-nav help-only-nav"}
+          aria-label="Main navigation"
+        >
+          {topScreen &&
+            (["plan", "saved", "explore", "updates"] as const).map((tab) => (
+              <button
+                key={tab}
+                aria-current={screen === tab ? "page" : undefined}
+                onClick={() => go(tab)}
+              >
+                <span aria-hidden="true">
+                  {tab === "plan"
+                    ? "↗"
+                    : tab === "saved"
+                      ? "♡"
+                      : tab === "explore"
+                        ? "◇"
+                        : "◉"}
+                </span>
+                {tab[0].toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          <button
+            ref={helpButtonRef}
+            aria-haspopup="dialog"
+            aria-expanded={popup === "help"}
+            onClick={() => setPopup("help")}
+          >
+            <span aria-hidden="true">?</span>
+            Help<span className="visually-hidden"> and about</span>
+          </button>
         </nav>
       )}
       {field && (
@@ -3516,6 +3563,10 @@ export function App({ refresh }: AppProps = {}) {
               value={share.text + "\n" + share.url}
               aria-describedby={shareCopyId}
               onFocus={(e) => revealFocused(e.currentTarget)}
+              onKeyDown={(e) => {
+                // An edit attempt in this read-only field must not navigate Back and dismiss Share.
+                if (e.key === "Backspace") e.preventDefault();
+              }}
             />
           </label>
           <p className="caption" id={shareCopyId}>
@@ -3578,6 +3629,7 @@ export function App({ refresh }: AppProps = {}) {
       )}
       {popup === "help" && (
         <HelpDialog
+          fallbackFocus={helpButtonRef}
           network={network}
           build={{
             ...__TRAIL_BUILD__,

@@ -381,6 +381,9 @@ header .quiet {
 .leaflet-control-attribution {
   font-size: 10px !important;
 }
+.leaflet-control-attribution a {
+  text-decoration: underline;
+}
 .leaflet-control-zoom a {
   width: 44px !important;
   height: 44px !important;
@@ -1046,11 +1049,58 @@ dialog::backdrop {
   align-items: center;
   gap: 10px;
 }
-.help-button {
-  min-height: 44px;
-  min-width: 44px;
+.install-button {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-height: 48px;
+  min-width: 104px;
   padding: 6px 14px;
   font-weight: 700;
+  width: max-content;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  line-height: 1.4;
+  font-size: 0.85rem;
+}
+.install-button::before,
+.install-button::after,
+.install-label {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+/* Reserve both long states without adding hidden text to the button's accessible name. */
+.install-button::before,
+.install-button::after {
+  visibility: hidden;
+}
+.install-button::before {
+  content: "Checking…";
+}
+.install-button::after {
+  content: "Installing…";
+}
+.main-nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding-inline: max(8px, calc((100% - 650px) / 2));
+}
+.main-nav button {
+  min-width: 0;
+  min-height: 48px;
+  padding-inline: 2px;
+  overflow-wrap: anywhere;
+}
+.help-only-nav {
+  grid-template-columns: minmax(0, 1fr) auto;
+  position: static;
+  z-index: auto;
+}
+.help-only-nav > button {
+  grid-column: 2;
+  min-width: 64px;
 }
 .visually-hidden {
   position: absolute;
@@ -1348,7 +1398,7 @@ dialog::backdrop {
     min-width: 0;
     gap: 6px;
   }
-  .help-button {
+  .install-button {
     padding: 6px 10px;
   }
   .local-badge {
@@ -1574,6 +1624,22 @@ dialog::backdrop {
 }
 .start-dock {
   margin: 10px 0 4px;
+}
+.start-dock-actions {
+  display: grid;
+  grid-template-columns: minmax(48px, 1fr) fit-content(40%);
+  gap: 8px;
+  align-items: stretch;
+}
+.start-dock-actions > .wide {
+  margin: 0;
+  padding-inline: 4px;
+}
+.start-dock-help {
+  /* Contain the absolute accessible label when the dock is in normal flow. */
+  position: relative;
+  min-width: 48px;
+  padding-inline: 4px;
 }
 .start-dock .primary.wide {
   min-height: 52px;
@@ -1973,13 +2039,14 @@ dialog::backdrop {
 @media (max-width: 760px) {
   .app-header {
     min-height: 62px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     padding: 8px 14px;
     gap: 8px;
   }
   .app-header .brand {
     font-size: 1.1rem;
     line-height: 1.05;
+    flex: 1 1 10rem;
   }
   .app-header .brand > span:last-child {
     min-width: 0;
@@ -1992,11 +2059,12 @@ dialog::backdrop {
   .app-header .header-actions {
     margin-left: auto;
     flex-shrink: 0;
+    max-width: 100%;
   }
   .app-header .local-badge {
     display: none;
   }
-  .app-header .help-button {
+  .app-header .install-button {
     min-height: 48px;
     padding: 8px 12px;
   }
@@ -2028,7 +2096,7 @@ dialog::backdrop {
     min-height: 260px;
   }
   .preview .panel {
-    padding: 18px 18px 145px;
+    padding: 18px 18px calc(var(--preview-dock-height, 125px) + 20px);
   }
   .preview .start-dock {
     position: fixed;
@@ -2248,7 +2316,7 @@ dialog::backdrop {
 @media (max-width: 760px) {
   .preview .map-wrap {
     height: auto;
-    min-height: max(260px, 50dvh);
+    min-height: max(260px, 50svh);
   }
   .preview .panel {
     margin-top: 0;
@@ -2280,6 +2348,8 @@ dialog::backdrop {
   /* A control scrolled into view (by pointer or focus) stops above the sticky Start dock, not beneath it. Once
      measured, previewDockLayout.ts replaces the bottom padding with the dock's actual height. */
   .preview .panel {
+    /* Keep absolute screen-reader text inside this scroller instead of extending the page behind it. */
+    position: relative;
     min-width: 0;
     min-height: 0;
     overflow: auto;
@@ -2324,8 +2394,15 @@ dialog::backdrop {
   .preview .workspace[data-start-dock="flow"] .start-dock {
     position: static;
   }
-  .preview .workspace[data-start-dock="flow"] .start-dock > button {
+  .preview .workspace[data-start-dock="flow"] .start-dock button {
     scroll-margin-bottom: var(--start-dock-after, 0px);
+  }
+}
+@media (max-width: 760px), (max-height: 500px) and (min-width: 500px) {
+  .preview .workspace:not([data-start-dock]) .start-dock[data-flow] {
+    position: static;
+    margin: 8px 0 0;
+    border-radius: 0;
   }
 }
 .update-category > h2,
