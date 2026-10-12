@@ -1,6 +1,6 @@
 # Android installation and Help
 
-Android browser pages show a compact action at the header's right. Help is the last bottom navigation option. Planning retains a bottom Help action; route previews place Help beside Start in the same bottom dock, so a separate footer cannot cover Start. Active rides retain their existing Help entry in Ride details.
+Android browser pages show a compact action at the header's right. Help is the last bottom navigation option. Planning and map selection retain a bottom Help action in normal document flow; route previews place Help beside Start in the same bottom dock, so a separate footer cannot cover route controls. Active rides retain their existing Help entry in Ride details.
 
 | State | Action |
 | --- | --- |

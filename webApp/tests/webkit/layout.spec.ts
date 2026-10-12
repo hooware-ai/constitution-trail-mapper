@@ -135,8 +135,13 @@ test("[engine] keyboard: the planner can be completed without a pointer, dialogs
   page,
 }) => {
   await openPlanner(page);
+  // The screen-entry frame focuses the heading; hand keyboard control over only after it settles.
+  await expect(
+    page.getByRole("heading", { name: "Go somewhere", exact: true }),
+  ).toBeFocused();
   const start = page.getByRole("button", { name: /^Start:/ });
   await start.focus();
+  await expect(start).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
   // Focus lands inside the dialog (on its Close button, as in Chromium); Tab reaches the search box.

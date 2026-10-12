@@ -3483,6 +3483,10 @@ export function App({ refresh }: AppProps = {}) {
               value={share.text + "\n" + share.url}
               aria-describedby={shareCopyId}
               onFocus={(e) => revealFocused(e.currentTarget)}
+              onKeyDown={(e) => {
+                // An edit attempt in this read-only field must not navigate Back and dismiss Share.
+                if (e.key === "Backspace") e.preventDefault();
+              }}
             />
           </label>
           <p className="caption" id={shareCopyId}>

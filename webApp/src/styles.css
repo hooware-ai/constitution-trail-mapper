@@ -1073,6 +1073,8 @@ dialog::backdrop {
 }
 .help-only-nav {
   grid-template-columns: minmax(0, 1fr) auto;
+  position: static;
+  z-index: auto;
 }
 .help-only-nav > button {
   grid-column: 2;

@@ -370,3 +370,33 @@ test("Start and Help remain reachable with 200% text on a narrow phone", async (
 }) => {
   await startAndHelpAreReachable(page, { width: 320, height: 720 }, true);
 });
+
+test("Help cannot cover the map-picker confirmation at 200% text with wide letters", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "32px";
+  });
+  await page.addStyleTag({ content: "*{letter-spacing:0.4em !important}" });
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await page.getByRole("button", { name: /^Start:/ }).click();
+  await page.getByRole("button", { name: "Pick on map", exact: true }).click();
+  const use = page.getByRole("button", { name: "Use map center", exact: true });
+  await use.scrollIntoViewIfNeeded();
+  expect(
+    await use.evaluate((element) => {
+      const r = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        r.x + r.width / 2,
+        r.y + r.height / 2,
+      );
+      return element === hit || element.contains(hit);
+    }),
+  ).toBe(true);
+  await use.click();
+  await expect(page.getByRole("button", { name: /^Start:/ })).not.toContainText(
+    "Choose a place",
+  );
+});
