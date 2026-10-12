@@ -257,6 +257,33 @@ header .quiet {
   padding: 0;
   border-radius: 6px;
 }
+.map-street-control:empty {
+  display: none;
+}
+.map-street-control button.street-map-toggle {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 6px;
+  color: #526a60;
+  background: repeating-linear-gradient(
+    135deg,
+    #e5eae7 0,
+    #e5eae7 7px,
+    #f6f8f7 7px,
+    #f6f8f7 9px
+  );
+  box-shadow: 0 2px 7px #26483b20;
+}
+.map-street-control button.street-map-toggle[aria-pressed="true"] {
+  color: white;
+  background: var(--green);
+  border-color: var(--green);
+}
 .tile-toggle {
   display: flex;
   gap: 8px;

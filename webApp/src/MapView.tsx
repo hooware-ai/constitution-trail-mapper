@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Feature, Point, RouteResult, Closure, MapCues } from "./types";
@@ -99,6 +100,7 @@ export function MapView({
   const pick = useRef(onPick),
     manualPan = useRef(onManualPan),
     [localTiles, setLocalTiles] = useState(false),
+    [tileControl, setTileControl] = useState<HTMLElement | null>(null),
     [tileError, setTileError] = useState(false);
   useEffect(() => onTileError?.(tileError), [tileError, onTileError]);
   const tiles = tilesEnabled ?? localTiles;
@@ -119,6 +121,13 @@ export function MapView({
     // Leaflet's own prefix link would also replace this page; keep the credit, open it safely.
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
     map.current = m;
+    const tileHost = L.DomUtil.create("div", "map-street-control");
+    L.DomEvent.disableClickPropagation(tileHost);
+    L.DomEvent.disableScrollPropagation(tileHost);
+    const streetControl = new L.Control({ position: "bottomright" });
+    streetControl.onAdd = () => tileHost;
+    streetControl.addTo(m);
+    setTileControl(tileHost);
     layers.current = L.layerGroup().addTo(m);
     chevrons.current = new ChevronLayer().addTo(m);
     riddenLayer.current = L.layerGroup().addTo(m);
@@ -136,7 +145,12 @@ export function MapView({
     publishView();
 
     const node = root.current;
-    const clearResizeFit = () => {
+    const clearResizeFit = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".map-street-control")
+      )
+        return;
       resizeFit.current = null;
     };
     const manualKey = (event: KeyboardEvent) => {
@@ -153,7 +167,7 @@ export function MapView({
           "_",
         ].includes(event.key)
       )
-        clearResizeFit();
+        clearResizeFit(event);
     };
     node.addEventListener("pointerdown", clearResizeFit, true);
     node.addEventListener("click", clearResizeFit, true);
@@ -698,20 +712,41 @@ export function MapView({
             </svg>
           </button>
         )}
-        {!fixture && showTileControl && (
-          <label className="tile-toggle">
-            <input
-              type="checkbox"
-              checked={tiles}
-              onChange={(e) => {
-                setTileError(false);
-                setTiles(e.target.checked);
-              }}
-            />{" "}
-            Street basemap (online)
-          </label>
-        )}
       </div>
+      {!fixture &&
+        showTileControl &&
+        tileControl &&
+        createPortal(
+          <button
+            type="button"
+            className="street-map-toggle"
+            aria-label="Street map"
+            aria-pressed={tiles}
+            title={
+              tiles ? "Hide street map" : "Show street map (requires internet)"
+            }
+            onClick={() => {
+              setTileError(false);
+              setTiles(!tiles);
+            }}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M5 3 3 21M19 3l2 18" />
+              <path d="M12 3v18" strokeDasharray="3 3" />
+            </svg>
+          </button>,
+          tileControl,
+        )}
       {showCaption && (
         <div className="map-caption">
           {fixture

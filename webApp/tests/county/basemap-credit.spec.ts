@@ -30,7 +30,188 @@ const credit = (page: Page) =>
     hasText: "OpenStreetMap contributors",
   });
 const toggle = (page: Page) =>
+  page.getByRole("button", { name: "Street map", exact: true });
+const exploreToggle = (page: Page) =>
   page.getByRole("checkbox", { name: "Street basemap (online)" });
+
+test("the bottom-right road icon is striped and tappable when off, lit when on, and keyboard operable", async ({
+  page,
+  isMobile,
+}, info) => {
+  const tiles = await stubTiles(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  const button = toggle(page);
+  const map = page.getByRole("region", { name: /Interactive map/ });
+  const initialCenter = await map.getAttribute("data-center");
+  const initialZoom = await map.getAttribute("data-zoom");
+  await expect(
+    page.getByRole("checkbox", { name: "Street basemap (online)" }),
+  ).toHaveCount(0);
+  await expect(button).toBeEnabled();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(button).toHaveAttribute("title", /requires internet/);
+  expect(await button.innerText()).toBe("");
+  await expect(button.locator("svg")).toHaveAttribute("aria-hidden", "true");
+  expect(
+    await button.evaluate((e) => getComputedStyle(e).backgroundImage),
+  ).toContain("repeating-linear-gradient");
+  const checkPlacement = async () => {
+    const b = (await button.boundingBox())!;
+    const m = (await map.boundingBox())!;
+    const a = (await page
+      .locator(".leaflet-control-attribution")
+      .boundingBox())!;
+    expect(b.width).toBe(48);
+    expect(b.height).toBe(48);
+    expect(b.x + b.width).toBeLessThanOrEqual(m.x + m.width);
+    expect(m.x + m.width - b.x - b.width).toBeLessThanOrEqual(20);
+    expect(b.y).toBeGreaterThan(m.y + m.height / 2);
+    expect(b.y + b.height).toBeLessThanOrEqual(a.y);
+    expect(
+      await button.evaluate((e) => {
+        const r = e.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.x + r.width / 2,
+          r.y + r.height / 2,
+        );
+        return hit === e || e.contains(hit);
+      }),
+    ).toBe(true);
+  };
+  await checkPlacement();
+  await button.screenshot({ path: info.outputPath("street-map-off.png") });
+  if (isMobile) await button.tap();
+  else await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(button).toHaveCSS("background-image", "none");
+  await expect(button).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect.poll(() => tiles.length).toBeGreaterThan(0);
+  await expect(credit(page)).toBeVisible();
+  await checkPlacement();
+  await button.screenshot({ path: info.outputPath("street-map-on.png") });
+  await expect(map).toHaveAttribute("data-center", initialCenter!);
+  await expect(map).toHaveAttribute("data-zoom", initialZoom!);
+  await button.focus();
+  await page.keyboard.press("Space");
+  await expect(button).toBeFocused();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(credit(page)).toHaveCount(0);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "200%";
+  });
+  await checkPlacement();
+  await page.keyboard.press("Enter");
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(button).toHaveCSS("background-image", "none");
+  await checkPlacement();
+});
+
+test("toggling street tiles in the map picker does not choose a point or pan the map", async ({
+  page,
+  isMobile,
+}) => {
+  await stubTiles(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  await page.getByRole("button", { name: /^Start:/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Pick on map", exact: true })
+    .click();
+  const heading = page.getByRole("heading", {
+    name: "Choose start on the map",
+  });
+  await expect(heading).toBeVisible();
+  const map = page.getByRole("region", { name: /Interactive map/ });
+  const center = await map.getAttribute("data-center");
+  const zoom = await map.getAttribute("data-zoom");
+  if (isMobile) await toggle(page).tap();
+  else await toggle(page).click();
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(heading).toBeVisible();
+  await expect(map).toHaveAttribute("data-center", center!);
+  await expect(map).toHaveAttribute("data-zoom", zoom!);
+  await page
+    .getByRole("button", { name: "Cancel map selection", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: /^Start:/ }),
+  ).toHaveAccessibleName("Start: Choose a place");
+});
+
+test("the road control preserves automatic route-preview fitting through resize", async ({
+  page,
+  isMobile,
+}) => {
+  await stubTiles(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const places = [
+      {
+        key: "toggle-west",
+        label: "Toggle proof west",
+        latitude: 40.5,
+        longitude: -88.99,
+        createdAt: 1,
+      },
+      {
+        key: "toggle-north",
+        label: "Toggle proof north",
+        latitude: 40.52,
+        longitude: -88.97,
+        createdAt: 1,
+      },
+    ];
+    if (
+      !localStorage.getItem("trail-mapper.county:trail-mapper.web.library.v1")
+    )
+      localStorage.setItem(
+        "trail-mapper.county:trail-mapper.web.library.v1",
+        JSON.stringify({ version: 1, saved: [], recent: [], places }),
+      );
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).click();
+  for (const [field, label] of [
+    ["Start", "Toggle proof west"],
+    ["Destination", "Toggle proof north"],
+  ]) {
+    await page
+      .getByRole("button", { name: new RegExp("^" + field + ":") })
+      .click();
+    await page.getByRole("textbox", { name: "Search places" }).fill(label);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: new RegExp(label) })
+      .click();
+  }
+  await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start navigation", exact: true }),
+  ).toBeEnabled();
+  if (isMobile) await toggle(page).tap();
+  else await toggle(page).click();
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
+  const map = page.getByRole("region", { name: /Interactive map/ });
+  const initialZoom = await map.getAttribute("data-zoom");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(map).not.toHaveAttribute("data-zoom", initialZoom!);
+  const resizedZoom = await map.getAttribute("data-zoom");
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start navigation", exact: true }),
+  ).toBeEnabled();
+  await expect(map).toHaveAttribute("data-zoom", resizedZoom!);
+});
 
 test("the square reset icon restores the first loaded county view after pan, zoom and resize", async ({
   page,
@@ -96,7 +277,7 @@ test("the square reset icon restores the first loaded county view after pan, zoo
     await expect(map).toHaveAttribute("data-zoom", initialZoom!);
     await page.setViewportSize(viewport);
   }
-  await expect(toggle(page)).not.toBeChecked();
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "false");
   expect(tiles).toEqual([]);
 });
 
@@ -108,7 +289,7 @@ test("tiles are off by default and nothing credits or requests OpenStreetMap unt
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await expect(toggle(page)).not.toBeChecked();
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect(credit(page)).toHaveCount(0);
   expect(tiles).toEqual([]);
 });
@@ -121,7 +302,7 @@ test("turning the basemap on shows a visible, clickable OpenStreetMap credit tha
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await toggle(page).check();
+  await toggle(page).click();
   const link = credit(page);
   await expect(link).toBeVisible();
   await expect(link).toHaveText("© OpenStreetMap contributors");
@@ -136,7 +317,7 @@ test("turning the basemap on shows a visible, clickable OpenStreetMap credit tha
   await expect(page.locator(".leaflet-control-attribution")).toContainText(
     "McGIS and members",
   );
-  await toggle(page).uncheck();
+  await toggle(page).click();
   await expect(credit(page)).toHaveCount(0);
 });
 
@@ -148,7 +329,7 @@ test("the credit fits the screen, is not covered by another control and has no a
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await toggle(page).check();
+  await toggle(page).click();
   const link = credit(page);
   await expect(link).toBeVisible();
   const box = (await link.boundingBox())!;
@@ -184,7 +365,7 @@ test("every link in the map credit opens in a new tab without handing over the p
   const own = page.locator(".leaflet-control-attribution a");
   // The data credits (McGIS, CC BY 4.0) are there before any tile is on; the OpenStreetMap credit joins them when it is.
   await expect(own.first()).toBeVisible();
-  await toggle(page).check();
+  await toggle(page).click();
   await expect(credit(page)).toBeVisible();
   const links = await own.evaluateAll((anchors) =>
     anchors.map((a) => ({
@@ -232,7 +413,7 @@ for (const fontSize of ["100%", "150%"] as const) {
     await liveRegion.evaluate((e) =>
       e.setAttribute("data-original-region", "yes"),
     );
-    await toggle(page).check();
+    await exploreToggle(page).check();
     const status = page.getByText(
       "Street map unavailable. Trail geometry remains visible.",
       { exact: true },
@@ -243,9 +424,9 @@ for (const fontSize of ["100%", "150%"] as const) {
     expect(await status.evaluate((e) => Boolean(e.closest(".panel")))).toBe(
       true,
     );
-    await toggle(page).scrollIntoViewIfNeeded();
+    await exploreToggle(page).scrollIntoViewIfNeeded();
     expect(
-      await toggle(page).evaluate((e) => {
+      await exploreToggle(page).evaluate((e) => {
         const r = e.getBoundingClientRect();
         const hit = document.elementFromPoint(
           r.x + r.width / 2,
@@ -269,14 +450,14 @@ for (const fontSize of ["100%", "150%"] as const) {
         );
       }),
     ).toBe(true);
-    await toggle(page).uncheck();
+    await exploreToggle(page).uncheck();
     await expect(status).toHaveCount(0);
-    await expect(toggle(page)).not.toBeChecked();
+    await expect(exploreToggle(page)).not.toBeChecked();
     await expect(liveRegion).toHaveText("");
-    await toggle(page).check();
+    await exploreToggle(page).check();
     await expect(status).toBeInViewport();
     await expect(status).toHaveAttribute("data-original-region", "yes");
-    await toggle(page).uncheck();
+    await exploreToggle(page).uncheck();
     await expect(liveRegion).toHaveText("");
     expect(errors).toEqual([]);
   });
