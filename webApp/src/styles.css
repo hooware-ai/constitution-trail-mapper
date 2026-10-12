@@ -1633,6 +1633,7 @@ dialog::backdrop {
 }
 .start-dock-actions > .wide {
   margin: 0;
+  padding-inline: 4px;
 }
 .start-dock-help {
   /* Contain the absolute accessible label when the dock is in normal flow. */
