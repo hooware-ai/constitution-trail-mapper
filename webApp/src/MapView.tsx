@@ -91,6 +91,10 @@ export function MapView({
   // Keep an automatic preview fit through layout changes, but never reclaim a
   // view the rider has panned/zoomed or focused on a particular maneuver/gap.
   const resizeFit = useRef<L.LatLngBounds | null>(null);
+  const initialView = useRef<{
+    center: L.LatLngTuple;
+    zoom: number;
+  } | null>(null);
   const drawRidden = useRef<() => void>(() => {});
   const pick = useRef(onPick),
     manualPan = useRef(onManualPan),
@@ -444,6 +448,13 @@ export function MapView({
             ]);
       resizeFit.current = route ? bounds : null;
       m.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false });
+      if (!route && !initialView.current) {
+        const center = m.getCenter();
+        initialView.current = {
+          center: [center.lat, center.lng],
+          zoom: m.getZoom(),
+        };
+      }
     }
   }, [route, features, fixture]);
   // The ridden overlay is redrawn on top of the route whenever either changes (the route is rebuilt on its own schedule).
@@ -631,6 +642,15 @@ export function MapView({
       });
     }
   }
+  function resetView() {
+    const m = map.current;
+    const initial = initialView.current;
+    if (!m || !initial) return;
+    resizeFit.current = null;
+    m.stop();
+    m.closePopup();
+    m.setView(initial.center, initial.zoom, { animate: false });
+  }
   return (
     <section
       className={"map-wrap" + (picking ? " picking" : "")}
@@ -651,7 +671,33 @@ export function MapView({
         tabIndex={0}
       />
       <div className="map-tools">
-        <button onClick={fit}>Fit {route ? "route" : "network"}</button>
+        {route ? (
+          <button onClick={fit}>Fit route</button>
+        ) : (
+          <button
+            type="button"
+            className="map-reset"
+            aria-label="Reset map"
+            title="Reset map"
+            onClick={resetView}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M3 11a9 9 0 1 1 2.6 7.4" />
+              <path d="M3 4v7h7" />
+            </svg>
+          </button>
+        )}
         {!fixture && showTileControl && (
           <label className="tile-toggle">
             <input
