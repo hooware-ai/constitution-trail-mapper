@@ -1050,14 +1050,36 @@ dialog::backdrop {
   gap: 10px;
 }
 .install-button {
-  min-height: 44px;
-  min-width: 44px;
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-height: 48px;
+  min-width: 104px;
   padding: 6px 14px;
   font-weight: 700;
-  width: 104px;
-  height: 48px;
-  white-space: nowrap;
+  width: max-content;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  line-height: 1.4;
   font-size: 0.85rem;
+}
+.install-button::before,
+.install-button::after,
+.install-label {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+/* Reserve both long states without adding hidden text to the button's accessible name. */
+.install-button::before,
+.install-button::after {
+  visibility: hidden;
+}
+.install-button::before {
+  content: "Checking…";
+}
+.install-button::after {
+  content: "Installing…";
 }
 .main-nav {
   display: grid;
@@ -1605,7 +1627,7 @@ dialog::backdrop {
 }
 .start-dock-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 8px;
   align-items: stretch;
 }
@@ -2023,15 +2045,21 @@ dialog::backdrop {
   }
   .app-header .brand > span:last-child {
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .app-header .brand small {
     display: block;
     font-size: 0.63rem;
     letter-spacing: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .app-header .header-actions {
     margin-left: auto;
     flex-shrink: 0;
+    max-width: 70%;
   }
   .app-header .local-badge {
     display: none;
@@ -2335,6 +2363,13 @@ dialog::backdrop {
     margin: 8px -16px 0;
     border-radius: 0;
     padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 760px), (max-height: 500px) and (min-width: 500px) {
+  .preview .start-dock[data-flow] {
+    position: static;
+    margin: 8px 0 0;
+    border-radius: 0;
   }
 }
 .update-category > h2,

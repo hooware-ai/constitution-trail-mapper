@@ -226,6 +226,7 @@ export interface AppProps {
 export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
   const previewDockRef = useRef<HTMLDivElement>(null);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
   const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
   const [local] = useState(
@@ -1969,24 +1970,47 @@ export function App({ refresh }: AppProps = {}) {
     const dock = previewDockRef.current,
       panel = panelRef.current;
     if (screen !== "preview" || !preview || !dock || !panel) return;
-    // Fixed docks grow with text and closure reasons. Reserve their real height, not a font-dependent guess.
-    const reserve = () =>
+    const map = panel.parentElement?.querySelector<HTMLElement>(".map");
+    // A dock that cannot leave room for the map/controls belongs in the scrolling content.
+    const reserve = () => {
+      const mobile = matchMedia("(max-width: 760px)").matches;
+      const landscape = matchMedia(
+        "(max-height: 500px) and (min-width: 500px)",
+      ).matches;
+      const height = dock.getBoundingClientRect().height;
+      const available = landscape
+        ? panel.clientHeight - 48
+        : innerHeight -
+          ((map?.getBoundingClientRect().bottom ?? 0) + scrollY) -
+          24;
+      dock.toggleAttribute(
+        "data-flow",
+        (mobile || landscape) && height > available,
+      );
       panel.style.setProperty(
         "--preview-dock-height",
         getComputedStyle(dock).position === "fixed"
           ? `${dock.getBoundingClientRect().height}px`
           : "0px",
       );
+    };
     const observer = new ResizeObserver(reserve);
     observer.observe(dock);
+    observer.observe(panel);
+    if (map) observer.observe(map);
+    panel
+      .closest(".app")
+      ?.querySelectorAll("header, .review-banner, .offline-banner")
+      .forEach((element) => observer.observe(element));
     window.addEventListener("resize", reserve);
     reserve();
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", reserve);
       panel.style.removeProperty("--preview-dock-height");
+      dock.removeAttribute("data-flow");
     };
-  }, [screen, !!preview]);
+  }, [screen, !!preview, online]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const heading = panelRef.current?.querySelector<HTMLElement>("h1");
@@ -2814,6 +2838,7 @@ export function App({ refresh }: AppProps = {}) {
                       </button>
                       <button
                         className="start-dock-help"
+                        ref={helpButtonRef}
                         aria-haspopup="dialog"
                         aria-expanded={popup === "help"}
                         onClick={() => setPopup("help")}
@@ -3417,6 +3442,7 @@ export function App({ refresh }: AppProps = {}) {
               </button>
             ))}
           <button
+            ref={helpButtonRef}
             aria-haspopup="dialog"
             aria-expanded={popup === "help"}
             onClick={() => setPopup("help")}
@@ -3586,6 +3612,7 @@ export function App({ refresh }: AppProps = {}) {
       )}
       {popup === "help" && (
         <HelpDialog
+          fallbackFocus={helpButtonRef}
           network={network}
           build={{
             ...__TRAIL_BUILD__,

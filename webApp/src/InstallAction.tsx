@@ -145,13 +145,15 @@ export function InstallAction() {
           status === "installed" ? setGuide("open") : void install()
         }
       >
-        {status === "checking"
-          ? "Checking…"
-          : busy
-            ? "Installing…"
-            : status === "installed"
-              ? "Open"
-              : "Install"}
+        <span className="install-label">
+          {status === "checking"
+            ? "Checking…"
+            : busy
+              ? "Installing…"
+              : status === "installed"
+                ? "Open"
+                : "Install"}
+        </span>
       </button>
       {guide && (
         <Modal

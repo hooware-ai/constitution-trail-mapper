@@ -29,6 +29,7 @@ export function Modal({
   noticeInChildren = false,
   className,
   initialFocus,
+  fallbackFocus,
 }: {
   title: string;
   children: ReactNode;
@@ -43,6 +44,8 @@ export function Modal({
    * while the dialog is still closed, so the call is ignored. Without it the browser's own showModal focus applies.
    */
   initialFocus?: { readonly current: HTMLElement | null };
+  /** Replacement opener when a loading view removed the original one while the dialog stayed open. */
+  fallbackFocus?: { readonly current: HTMLElement | null };
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     close = useRef(onClose),
@@ -62,7 +65,7 @@ export function Modal({
     return () => {
       d.removeEventListener("cancel", cancel);
       d.close();
-      previous?.focus();
+      (previous?.isConnected ? previous : fallbackFocus?.current)?.focus();
     };
   }, []);
   return (

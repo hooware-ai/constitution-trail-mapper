@@ -1,11 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { startAndHelpAreReachable } from "../support/start-help-dock";
+import { installLayoutTests } from "../support/installLayout";
 
 const android =
   "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/154.0.0.0 Mobile Safari/537.36";
 test.use({ userAgent: android });
 const action = (page: Page) => page.locator(".install-button");
+
+installLayoutTests();
 
 async function detection(
   page: Page,
