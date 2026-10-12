@@ -445,6 +445,8 @@ test("[engine] short landscape 150% two-line Start keeps the dock sticky and Rev
     });
   });
   await openLoopPreview(page);
+  await expect.poll(() => sessionSelected(page)).not.toBeNull();
+  const planned = (await sessionSelected(page))!;
   const start = page.getByRole("button", {
     name: "Start navigation",
     exact: true,
@@ -505,7 +507,12 @@ test("[engine] short landscape 150% two-line Start keeps the dock sticky and Rev
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
-  const selected = await sessionSelected(page);
+  // Session persistence is debounced. Both reversals restore the original planned identity; wait for that exact
+  // identity instead of reading a transient null (or a stale reversed session) before the scheduled write settles.
+  await expect
+    .poll(() => sessionSelected(page))
+    .toMatchObject({ key: planned.key });
+  expect((await sessionSelected(page))!.plannedKey).toBeUndefined();
   await pointerClick(page, testInfo, "Save");
   await expect(
     page.getByRole("button", { name: "Saved · View", exact: true }),
@@ -520,6 +527,6 @@ test("[engine] short landscape 150% two-line Start keeps the dock sticky and Rev
         "trail-mapper.fixture:trail-mapper.web.library.v1",
       ),
     )
-    .toContain(selected!.key);
+    .toContain(planned.key);
   expect(errors).toEqual([]);
 });
