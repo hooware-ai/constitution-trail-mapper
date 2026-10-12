@@ -1670,8 +1670,22 @@ export function App({ refresh }: AppProps = {}) {
             label: renameValue.trim(),
           });
     if (applyStore(result, "Name updated")) {
-      if (selected?.key === renameTarget.key && "title" in renameTarget)
-        setSelected({ ...selected, title: renameValue.trim() });
+      if ("title" in renameTarget) {
+        const key = renameTarget.key,
+          title = renameValue.trim(),
+          planned = reverseOf;
+        // A proved reversal shares the planned route's name. An unproved plannedKey alone is not rename authority.
+        setSelected((current) =>
+          current &&
+          (current.key === key ||
+            (planned?.key === key && current.plannedKey === key))
+            ? { ...current, title }
+            : current,
+        );
+        setReverseOf((current) =>
+          current?.key === key ? { ...current, title } : current,
+        );
+      }
       setPopup(null);
     }
   }
