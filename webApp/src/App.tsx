@@ -139,7 +139,15 @@ type Screen =
   | "updates"
   | "map-picker"
   | "explore-picker";
-type Popup = "directions" | "share" | "clear" | "rename" | "help" | null;
+type Popup =
+  | "directions"
+  | "share"
+  | "clear"
+  | "rename"
+  | "help"
+  | "install"
+  | "install-open"
+  | null;
 const EMPTY_LIBRARY: RouteLibrary = {
   version: 1,
   saved: [],
@@ -2215,7 +2223,26 @@ export function App({ refresh }: AppProps = {}) {
             </span>
           </button>
           <div className="header-actions">
-            <InstallAction />
+            <InstallAction
+              guide={
+                popup === "install"
+                  ? "install"
+                  : popup === "install-open"
+                    ? "open"
+                    : null
+              }
+              onGuide={(guide) =>
+                setPopup((current) =>
+                  guide
+                    ? guide === "open"
+                      ? "install-open"
+                      : "install"
+                    : current === "install" || current === "install-open"
+                      ? null
+                      : current,
+                )
+              }
+            />
             <span className="local-badge">On this browser · no account</span>
           </div>
         </header>

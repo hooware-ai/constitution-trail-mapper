@@ -1627,7 +1627,7 @@ dialog::backdrop {
 }
 .start-dock-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(48px, max-content);
+  grid-template-columns: minmax(48px, 1fr) fit-content(40%);
   gap: 8px;
   align-items: stretch;
 }
@@ -1635,6 +1635,8 @@ dialog::backdrop {
   margin: 0;
 }
 .start-dock-help {
+  /* Contain the absolute accessible label when the dock is in normal flow. */
+  position: relative;
   min-width: 48px;
   padding-inline: 4px;
 }
@@ -2313,7 +2315,7 @@ dialog::backdrop {
 @media (max-width: 760px) {
   .preview .map-wrap {
     height: auto;
-    min-height: max(260px, 50dvh);
+    min-height: max(260px, 50svh);
   }
   .preview .panel {
     margin-top: 0;
@@ -2345,6 +2347,8 @@ dialog::backdrop {
   /* A control scrolled into view (by pointer or focus) stops above the sticky Start dock, not beneath it. Once
      measured, previewDockLayout.ts replaces the bottom padding with the dock's actual height. */
   .preview .panel {
+    /* Keep absolute screen-reader text inside this scroller instead of extending the page behind it. */
+    position: relative;
     min-width: 0;
     min-height: 0;
     overflow: auto;

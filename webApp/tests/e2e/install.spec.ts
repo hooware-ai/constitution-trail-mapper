@@ -403,3 +403,40 @@ test("Help cannot cover the map-picker confirmation at 200% text with wide lette
     "Choose a place",
   );
 });
+
+for (const mode of ["unknown", "installed"] as const) {
+  test(`browser Back closes ${mode} installation guidance without leaving the planner`, async ({
+    page,
+  }) => {
+    await detection(page, mode);
+    await page.goto("/");
+    await page.getByRole("button", { name: /Go somewhere/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Go somewhere", exact: true }),
+    ).toBeVisible();
+    const before = await page
+      .getByRole("button", { name: /^Start:/ })
+      .getAttribute("aria-label");
+    await expect(action(page)).toBeEnabled();
+    await expect(action(page)).toHaveAccessibleName(
+      mode === "installed" ? "Open Trail Mapper from Home Screen" : "Install",
+    );
+    await action(page).click();
+    await expect(
+      page.getByRole("dialog", {
+        name:
+          mode === "installed" ? "Open Trail Mapper" : "Install Trail Mapper",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Go somewhere", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Start:/ }),
+    ).toHaveAccessibleName(before!);
+    await expect(action(page)).toBeFocused();
+  });
+}

@@ -25,6 +25,55 @@ export function usePreviewDockLayout(
     if (!dock || !workspace || !panel) return;
     const media = window.matchMedia(SHORT_LANDSCAPE);
     let frame = 0;
+    let viewport: HTMLDivElement | null = null;
+    let resize: ResizeObserver | null = null;
+    const clearViewport = () => {
+      if (viewport) {
+        resize?.unobserve(viewport);
+        viewport.remove();
+        viewport = null;
+      }
+    };
+    const smallViewportHeight = () => {
+      if (!viewport) {
+        viewport = document.createElement("div");
+        viewport.setAttribute("aria-hidden", "true");
+        viewport.style.cssText =
+          "position:fixed;left:0;top:0;width:0;height:100svh;visibility:hidden;pointer-events:none";
+        document.body.append(viewport);
+        resize?.observe(viewport);
+      }
+      return viewport.getBoundingClientRect().height;
+    };
+    // Measure the fixed-width candidate, regardless of current flow state. The hidden, inert clone is removed
+    // synchronously and lives outside the observed panel, so it cannot trigger a measurement loop or steal focus.
+    const fixedHeight = () => {
+      const host = document.createElement("div");
+      host.className = "app preview";
+      host.setAttribute("aria-hidden", "true");
+      host.inert = true;
+      host.style.cssText =
+        "position:fixed;left:0;top:0;width:0;height:0;min-height:0;visibility:hidden;pointer-events:none";
+      host.style.fontFamily = getComputedStyle(dock).fontFamily;
+      const candidate = dock.cloneNode(true) as HTMLElement;
+      candidate.removeAttribute("data-flow");
+      candidate
+        .querySelectorAll("[id]")
+        .forEach((element) => element.removeAttribute("id"));
+      Object.assign(candidate.style, {
+        position: "fixed",
+        left: "0",
+        right: "0",
+        top: "0",
+        bottom: "auto",
+        margin: "0",
+      });
+      host.append(candidate);
+      document.body.append(host);
+      const height = candidate.getBoundingClientRect().height;
+      host.remove();
+      return height;
+    };
     const controls = () =>
       [
         ...panel.querySelectorAll<HTMLElement>(
@@ -37,8 +86,8 @@ export function usePreviewDockLayout(
         ),
       );
 
-    // Neither the attribute nor the padding changes the panel's or the dock's size, so writing them cannot feed back
-    // into the next measurement; writes are skipped when nothing changed.
+    // Landscape mode uses the occupied dock/panel geometry. Portrait mode uses a stable small viewport and
+    // a fixed-width candidate, so browser toolbar changes or a previous flow layout cannot bias its decision.
     const measure = () => {
       frame = 0;
       if (!media.matches) {
@@ -48,15 +97,15 @@ export function usePreviewDockLayout(
         dock.style.removeProperty("--start-dock-after");
         // Portrait Help shares Start's dock. If it cannot fit below the map, keep it in document flow.
         const mobile = matchMedia("(max-width: 760px)").matches;
-        const map = workspace.querySelector<HTMLElement>(".map");
-        const available =
-          innerHeight -
-          ((map?.getBoundingClientRect().bottom ?? 0) + scrollY) -
-          24;
-        dock.toggleAttribute(
-          "data-flow",
-          mobile && dock.getBoundingClientRect().height > available,
-        );
+        const map = workspace.querySelector<HTMLElement>(".map-wrap");
+        const smallHeight = mobile ? smallViewportHeight() : 0;
+        if (!mobile) clearViewport();
+        const box = map?.getBoundingClientRect();
+        // Portrait map sizing uses the small viewport too. Include its complete tools/caption wrapper
+        // in document coordinates, without browser toolbar or current scrolling changing the fit decision.
+        const mapBottom = box ? box.bottom + scrollY : 0;
+        const available = smallHeight - mapBottom - 24;
+        dock.toggleAttribute("data-flow", mobile && fixedHeight() > available);
         const padding =
           getComputedStyle(dock).position === "fixed"
             ? `${dock.getBoundingClientRect().height}px`
@@ -65,6 +114,7 @@ export function usePreviewDockLayout(
           panel.style.setProperty("--preview-dock-height", padding);
         return;
       }
+      clearViewport();
       panel.style.removeProperty("--preview-dock-height");
       const rem = parseFloat(
         getComputedStyle(document.documentElement).fontSize,
@@ -125,17 +175,25 @@ export function usePreviewDockLayout(
     measure();
     // Sizes (including the dock's text wrapping or a new blocked reason) are re-measured on the next frame, outside the
     // ResizeObserver callback; a root font size change after load resizes the dock and is also watched directly.
-    const resize = new ResizeObserver(schedule);
-    resize.observe(workspace);
-    resize.observe(panel);
-    resize.observe(dock);
+    resize = new ResizeObserver(schedule);
+    if (viewport) resize?.observe(viewport);
+    resize?.observe(workspace);
+    resize?.observe(panel);
+    resize?.observe(dock);
+    // Portrait availability depends on map/header geometry, not just panel and dock size.
+    const map = workspace.querySelector<HTMLElement>(".map");
+    if (map) resize?.observe(map);
+    workspace
+      .closest(".app")
+      ?.querySelectorAll("header, .review-banner, .offline-banner")
+      .forEach((element) => resize?.observe(element));
     let observedControls = new Set<Element>();
     const bindControls = () => {
       const current = new Set<Element>(controls());
       for (const control of observedControls)
-        if (!current.has(control)) resize.unobserve(control);
+        if (!current.has(control)) resize?.unobserve(control);
       for (const control of current)
-        if (!observedControls.has(control)) resize.observe(control);
+        if (!observedControls.has(control)) resize?.observe(control);
       observedControls = current;
     };
     bindControls();
@@ -159,7 +217,8 @@ export function usePreviewDockLayout(
     media.addEventListener("change", schedule);
     return () => {
       if (frame) cancelAnimationFrame(frame);
-      resize.disconnect();
+      resize?.disconnect();
+      clearViewport();
       rootStyle.disconnect();
       panelContent.disconnect();
       window.removeEventListener("resize", schedule);

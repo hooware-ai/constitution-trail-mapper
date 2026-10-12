@@ -11,7 +11,14 @@ type InstallNavigator = Navigator & {
   >;
 };
 
-export function InstallAction() {
+export function InstallAction({
+  guide,
+  onGuide,
+}: {
+  guide: "install" | "open" | null;
+  onGuide: (guide: "install" | "open" | null) => void;
+}) {
+  const setGuide = onGuide;
   const [android, setAndroid] = useState(false),
     [standalone, setStandalone] = useState(false),
     [status, setStatus] = useState<"checking" | "unknown" | "installed">(
@@ -19,7 +26,6 @@ export function InstallAction() {
     ),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
-    [guide, setGuide] = useState<"install" | "open" | null>(null),
     prompt = useRef<InstallPrompt | null>(null),
     confirmed = useRef(false),
     mounted = useRef(false);
