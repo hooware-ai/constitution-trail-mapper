@@ -179,11 +179,7 @@ test("[engine] an unrelated Recent saves while a restored reversed route stays u
 
   // Persisted: a real reload keeps both saves and the point route stays out of Recents.
   await page.reload();
-  await expect(
-    page
-      .getByRole("navigation")
-      .getByRole("button", { name: "Saved", exact: true }),
-  ).toBeVisible();
+  await expect(previewHeading(page)).toBeVisible();
   library = await storedLibrary(page);
   expect([...library.saved].sort()).toEqual(
     [point.key, reversed.plannedKey!].sort(),
