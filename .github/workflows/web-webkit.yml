@@ -38,10 +38,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  webkit-specs:
-    name: WebKit launch-acceptance specs
+  webkit-profiles:
+    name: WebKit profile (${{ matrix.project }})
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    # Every configured profile still runs its entire suite and cold-start control.
+    # Parallel jobs avoid charging three profiles to one 20-minute test step.
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [webkit-desktop, webkit-iphone, webkit-iphone-se]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,10 +83,10 @@ jobs:
         timeout-minutes: 20
         run: npm run build:core
 
-      - name: WebKit specs (desktop Safari engine, iPhone 15 and iPhone SE profiles)
+      - name: WebKit specs (${{ matrix.project }})
         working-directory: webApp
         timeout-minutes: 20
-        run: npm run test:webkit
+        run: npm run test:webkit -- --project=${{ matrix.project }}
         env:
           CI: "true"
 
@@ -89,15 +95,50 @@ jobs:
         timeout-minutes: 10
         run: |
           npm run build
-          npx playwright test -c playwright.webkit.dist.config.ts
+          npx playwright test -c playwright.webkit.dist.config.ts --project=${{ matrix.project }}
         env:
           CI: "true"
+
+      - name: Verify the matrix covers every configured WebKit profile
+        working-directory: webApp
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const workflow = readFileSync('../.github/workflows/web-webkit.yml', 'utf8');
+          const literal = workflow.match(/^\s+project: \[([^\]]+)\]\s*$/m);
+          assert.ok(literal, 'Expected one literal matrix project list');
+          const declared = literal[1].split(',').map(name => name.trim());
+          assert.equal(new Set(declared).size, declared.length, 'Duplicate WebKit profile');
+          for (const config of ['playwright.webkit.config.ts', 'playwright.webkit.dist.config.ts']) {
+            const report = JSON.parse(execFileSync(process.execPath, [
+              'node_modules/@playwright/test/cli.js', 'test', '-c', config, '--list', '--reporter=json'
+            ], { encoding: 'utf8' }));
+            assert.deepEqual(report.config.projects.map(project => project.name).sort(), [...declared].sort(),
+              'Matrix must cover every configured profile in ' + config);
+            assert.ok(report.suites.length, 'Empty WebKit test plan');
+          }
+          NODE
 
       - name: Upload traces on failure (synthetic data only)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: webkit-test-results
+          name: webkit-test-results-${{ matrix.project }}
           path: webApp/test-results
           retention-days: 7
           if-no-files-found: ignore
+
+  # Keep the existing required check name; cancelled/skipped/failed profiles fail closed.
+  webkit-specs:
+    name: WebKit launch-acceptance specs
+    needs: webkit-profiles
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every WebKit profile to succeed
+        env:
+          PROFILE_RESULT: ${{ needs.webkit-profiles.result }}
+        run: test "$PROFILE_RESULT" = success
