@@ -41,7 +41,14 @@ async function planSavedLoop(page: Page, first = true) {
   await page.getByRole("button", { name: "5 mi", exact: true }).click();
   await page.getByRole("button", { name: "Make loop", exact: true }).click();
   await expect(preview(page)).toBeVisible();
-  await expect.poll(() => selection(page)).not.toBeNull();
+  // A prior preview may still be persisted while the new loop's debounced write settles. Require the current visible
+  // loop's planned record, not merely any non-null selection (which could still be the unrelated point route).
+  await expect
+    .poll(() => selection(page))
+    .toMatchObject({
+      title: await title(page).innerText(),
+      plannedKey: undefined,
+    });
   const planned = (await selection(page))!;
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(view(page)).toBeVisible();
