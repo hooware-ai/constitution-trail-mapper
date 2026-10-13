@@ -67,7 +67,6 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -181,7 +180,7 @@ fun App(
     recentTrailRouteStore: RecentTrailRouteStore = NoRecentTrailRouteStore,
     developerOptionsActions: DeveloperOptionsActions? = null,
 ) {
-    MaterialTheme(colorScheme = TrailMapperColorScheme) {
+    TrailMapperTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
@@ -2935,24 +2934,3 @@ private fun RouteLayer(
         }
     }
 }
-
-private val TrailMapperColorScheme = lightColorScheme(
-    primary = Color(0xFF08725F),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFCDEFE7),
-    onPrimaryContainer = Color(0xFF093B33),
-    secondary = Color(0xFF4D6888),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDDE8F3),
-    onSecondaryContainer = Color(0xFF18324B),
-    tertiary = Color(0xFFF59E0B),
-    onTertiary = Color(0xFF2E1C00),
-    background = Color(0xFFF8FBF7),
-    onBackground = Color(0xFF18211F),
-    surface = Color.White,
-    onSurface = Color(0xFF18211F),
-    surfaceVariant = Color(0xFFE7F0EC),
-    onSurfaceVariant = Color(0xFF4C5A56),
-    error = Color(0xFFB3261E),
-    onError = Color.White,
-)

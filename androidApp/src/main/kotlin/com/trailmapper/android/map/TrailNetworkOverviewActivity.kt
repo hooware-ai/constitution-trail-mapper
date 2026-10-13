@@ -4,6 +4,8 @@
  */
 package com.trailmapper.android.map
 
+import com.trailmapper.android.TrailMapperAndroidTheme
+
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -81,7 +83,7 @@ class TrailNetworkOverviewActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            TrailMapperAndroidTheme(this@TrailNetworkOverviewActivity) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     TrailNetworkOverviewScreen(
                         result = overviewModel.result,

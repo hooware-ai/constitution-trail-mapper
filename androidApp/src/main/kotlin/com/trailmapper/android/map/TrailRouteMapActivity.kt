@@ -4,6 +4,8 @@
  */
 package com.trailmapper.android.map
 
+import com.trailmapper.android.TrailMapperAndroidTheme
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -185,7 +187,7 @@ class TrailRouteMapActivity : ComponentActivity() {
         val recentTrailRouteStore = AndroidRecentTrailRouteStore(applicationContext)
 
         setContent {
-            MaterialTheme {
+            TrailMapperAndroidTheme(this@TrailRouteMapActivity) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,

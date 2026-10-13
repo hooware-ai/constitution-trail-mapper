@@ -36,7 +36,8 @@ class LocalTrailGuideTest {
         assertEquals("Recheck needed", status("camelback-trail-closure", "2026-10-06T22:00:00Z"))
         // Raab Road trail paving (Normal 3357): begins October 3; no end or trail sections are given.
         assertTrue(status("trail-paving-raab", "2026-10-03T10:59:59Z").startsWith("Scheduled"))
-        assertTrue(status("trail-paving-raab", "2026-10-03T11:00:00Z").startsWith("Paving under way"))
+        assertEquals("Paving scheduled from October 3 · current trail access unverified", status("trail-paving-raab", "2026-10-03T11:00:00Z"))
+        assertEquals("Recheck needed", status("trail-paving-raab", "2026-10-07T05:00:00Z"))
         assertEquals("Recheck needed", status("collegiate-repaving", "2026-10-03T05:00:00Z"))
         assertTrue(entries.single { it.id == "trail-paving-raab" }.details.contains("does not say which trail sections close"))
     }
@@ -60,8 +61,8 @@ class LocalTrailGuideTest {
     fun partialRoadworkIsNotReportedAsAnAllTrafficClosure() {
         val works = entries.single { it.id == "hershey-work" }
         assertTrue(works.statusAt(at("2026-09-07T22:00:00Z")).startsWith("Scheduled"))
-        assertTrue(works.statusAt(at("2026-09-08T05:00:00Z")).contains("check current notice"))
-        assertTrue(works.details.contains("street stays open"))
+        assertEquals("Scheduled start reached · current completion unverified", works.statusAt(at("2026-09-08T05:00:00Z")))
+        assertTrue(works.details.contains("with the street open to traffic"))
     }
 
     @Test

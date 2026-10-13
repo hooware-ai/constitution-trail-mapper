@@ -4,6 +4,8 @@
  */
 package com.trailmapper.android.map
 
+import com.trailmapper.android.TrailMapperAndroidTheme
+
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -79,7 +81,7 @@ class MapPointPickerActivity : ComponentActivity() {
         val addressAutocompleteProvider = AndroidAddressAutocompleteProvider(applicationContext)
 
         setContent {
-            MaterialTheme {
+            TrailMapperAndroidTheme(this@MapPointPickerActivity) {
                 Surface(
                     modifier = Modifier
                         .fillMaxSize()

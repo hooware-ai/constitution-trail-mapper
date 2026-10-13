@@ -128,23 +128,25 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            App(
-                currentLocationAddressProvider = currentLocationAddressProvider,
-                addressAutocompleteProvider = addressAutocompleteProvider,
-                mapPointSelectionProvider = mapPointSelectionProvider,
-                trailNetworkProvider = trailNetworkProvider,
-                accessNetworkProvider = accessNetworkProvider,
-                trailRouteMapPresenter = trailRouteMapPresenter,
-                trailNetworkMapPresenter = trailNetworkMapPresenter,
-                externalLinkOpener = externalLinkOpener,
-                savedTrailRouteStore = savedTrailRouteStore,
-                savedDestinationStore = savedDestinationStore,
-                completedExerciseSessionStore = completedExerciseSessionStore,
-                trailAccountProvider = resultBridge,
-                trailRouteShareProvider = trailRouteShareProvider,
-                recentTrailRouteStore = recentTrailRouteStore,
-                developerOptionsActions = developerOptionsActions,
-            )
+            TrailMapperAndroidTheme(this@MainActivity) {
+                App(
+                    currentLocationAddressProvider = currentLocationAddressProvider,
+                    addressAutocompleteProvider = addressAutocompleteProvider,
+                    mapPointSelectionProvider = mapPointSelectionProvider,
+                    trailNetworkProvider = trailNetworkProvider,
+                    accessNetworkProvider = accessNetworkProvider,
+                    trailRouteMapPresenter = trailRouteMapPresenter,
+                    trailNetworkMapPresenter = trailNetworkMapPresenter,
+                    externalLinkOpener = externalLinkOpener,
+                    savedTrailRouteStore = savedTrailRouteStore,
+                    savedDestinationStore = savedDestinationStore,
+                    completedExerciseSessionStore = completedExerciseSessionStore,
+                    trailAccountProvider = resultBridge,
+                    trailRouteShareProvider = trailRouteShareProvider,
+                    recentTrailRouteStore = recentTrailRouteStore,
+                    developerOptionsActions = developerOptionsActions,
+                )
+            }
         }
     }
 
