@@ -14,5 +14,6 @@ test("event notice becomes past after the last Chicago event date, without decla
   ])
     assert.equal(hauntedTrailIsPast(Date.parse(date)), false);
   assert.equal(hauntedTrailIsPast(HAUNTED_TRAIL_PAST_AT), true);
+  assert.equal(hauntedTrailIsPast(HAUNTED_TRAIL_PAST_AT - 1), false);
   assert.equal(hauntedTrailIsPast(HAUNTED_TRAIL_PAST_AT + 1), true);
 });

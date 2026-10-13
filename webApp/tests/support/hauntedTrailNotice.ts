@@ -32,7 +32,7 @@ for (const [width, height, font] of [
     await expect(card).toContainText("2–9 p.m. Chicago local time (CDT)");
     await expect(card).toContainText("October 15–17 and 23–24, 2026");
     await expect(card).toContainText(
-      "This is not a continuous October 15–24 closure",
+      "The notice does not describe a continuous October 15–24 closure",
     );
     await expect(card).toContainText(
       "Follow posted signs; bikes are not allowed at the event",
@@ -74,3 +74,26 @@ for (const [width, height, font] of [
     expect(errors).toEqual([]);
   });
 }
+
+test("returning to the visible Updates page rechecks a past event without waiting for a throttled timer", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-24T12:00:00-05:00") });
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /Go somewhere/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Updates", exact: true })
+    .click();
+  const card = page.locator('[data-event-advisory="haunted-trail-2026"]');
+  await expect(card).toContainText("Reported event notice");
+  await page.clock.setSystemTime(new Date("2026-10-25T00:00:00-05:00"));
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(card).toContainText(
+    "Past event notice · reopening not confirmed",
+  );
+});

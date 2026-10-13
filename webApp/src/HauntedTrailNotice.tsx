@@ -11,11 +11,18 @@ export function HauntedTrailNotice() {
   const past = hauntedTrailIsPast(now);
   useEffect(() => {
     if (past) return;
+    const refresh = () => {
+      if (document.visibilityState === "visible") setNow(Date.now());
+    };
+    document.addEventListener("visibilitychange", refresh);
     const timer = window.setTimeout(
       () => setNow(Date.now()),
       Math.min(HAUNTED_TRAIL_PAST_AT - Date.now() + 1, 2_147_483_647),
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [now, past]);
   return (
     <section aria-label="Haunted Trail event advisory">
@@ -31,8 +38,9 @@ export function HauntedTrailNotice() {
           between Connie Link Amphitheatre and West Phoenix Avenue, 2–9 p.m.
           Chicago local time (CDT). Event dates are October 15–17 and 23–24,
           2026. The closure sentence does not specify which dates apply or the
-          exact affected portions. This is not a continuous October 15–24
-          closure. Follow posted signs; bikes are not allowed at the event.
+          exact affected portions. The notice does not describe a continuous
+          October 15–24 closure. Follow posted signs; bikes are not allowed at
+          the event.
         </p>
         {past && (
           <p>
