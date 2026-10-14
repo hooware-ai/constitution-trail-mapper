@@ -8,6 +8,8 @@ import com.trailmapper.android.TrailMapperAndroidTheme
 
 import android.content.Context
 import android.os.Bundle
+import android.content.res.Configuration
+import com.trailmapper.android.applyTrailMapperSystemBars
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -82,6 +84,8 @@ class TrailNetworkOverviewActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyTrailMapperSystemBars(this,
+            resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
         setContent {
             TrailMapperAndroidTheme(this@TrailNetworkOverviewActivity) {
                 Surface(modifier = Modifier.fillMaxSize()) {

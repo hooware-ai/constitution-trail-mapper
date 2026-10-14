@@ -41,6 +41,16 @@ class NavigationProtectionTest {
         assertTrue(usesDarkStatusIcons(34,false))
         assertFalse(usesDarkStatusIcons(34,true))
     }
+    @Test fun staleModernStatusAppearanceHasABoundedBudgetAndCleanObservationRearmsIt() {
+        for (dark in listOf(false,true)) {
+            val tracker = SystemBarAppearanceTracker(dark)
+            val insets = SystemBarInsets(0,0,0,24)
+            repeat(3) { assertTrue(tracker.needsRefresh(insets,true,!dark,dark,false)) }
+            repeat(100) { assertFalse(tracker.needsRefresh(insets,true,!dark,dark,false)) }
+            assertFalse(tracker.needsRefresh(insets,false,!dark,dark,false))
+            assertTrue(tracker.needsRefresh(insets,true,!dark,dark,false))
+        }
+    }
     @Test fun protectionCoversOnlyNavigationInsetIncludingLandscapeSides() {
         assertEquals(listOf(NavigationProtectionRect(0f, 752f, 400f, 48f)), navigationProtectionRects(400f, 800f, SystemBarInsets(0,0,0,48)))
         assertEquals(listOf(NavigationProtectionRect(0f, 0f, 48f, 400f)), navigationProtectionRects(800f, 400f, SystemBarInsets(48,0,0,0)))
