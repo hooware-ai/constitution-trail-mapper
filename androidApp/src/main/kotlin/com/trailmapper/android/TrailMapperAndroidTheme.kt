@@ -96,7 +96,7 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
         Box(Modifier.fillMaxSize().background(background)) {
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                 CompositionLocalProvider(LocalPlatformModalWindowAppearance provides { owner ->
-                    TrailMapperDialogStatusAppearance(owner)
+                    TrailMapperDialogStatusAppearance(owner, protectStatusInset = true)
                 }) {
                     content()
                 }

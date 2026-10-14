@@ -17,6 +17,11 @@ class DialogWindowOwnershipTest {
         val activityContext = Node(activityContextWindow = "main-activity")
         assertNull(findWindowOwnerInParents(Node(Node(activityContext)), { it.parent }, { it.window }))
     }
+    @Test fun fullHeightSheetProtectionStillCoversOnlyItsOwnStatusInset() {
+        assertEquals(listOf(NavigationProtectionRect(0f,0f,2400f,95f)),
+            navigationProtectionRects(2400f,1080f,SystemBarInsets(0,95,0,0)))
+        assertEquals(emptyList(), navigationProtectionRects(800f,400f,SystemBarInsets(0,0,0,0)))
+    }
     @Test fun runtimeThemeOverlayChangesOnlyStatusAndCannotOverridePassedNavigationOrPalette() {
         val root = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
             .parse(java.io.File("src/main/res/values/styles.xml")).documentElement
@@ -24,6 +29,7 @@ class DialogWindowOwnershipTest {
         val overlay = (0 until styles.length).map { styles.item(it) as org.w3c.dom.Element }
             .single { it.getAttribute("name") == "TrailMapperModernStatusWindow" }
         val items = overlay.getElementsByTagName("item")
+        assertEquals("", overlay.getAttribute("parent"))
         assertEquals(1, items.length)
         val item = items.item(0) as org.w3c.dom.Element
         assertEquals("android:windowLightStatusBar", item.getAttribute("name"))

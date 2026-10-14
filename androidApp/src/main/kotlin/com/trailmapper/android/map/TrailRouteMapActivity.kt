@@ -1165,7 +1165,7 @@ private fun TrailRouteMapScreen(
             scrimColor = Color.Transparent,
             contentWindowInsets = { WindowInsets.safeDrawing },
         ) {
-            TrailMapperDialogStatusAppearance("DirectionsSheetDialog")
+            TrailMapperDialogStatusAppearance("DirectionsSheetDialog", protectStatusInset = true)
             DirectionsBottomSheetContent(
                 route = route,
                 instructions = routeInstructions,
