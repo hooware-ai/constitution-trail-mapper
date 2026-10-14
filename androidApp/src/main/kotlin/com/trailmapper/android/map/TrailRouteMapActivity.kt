@@ -49,6 +49,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -1159,13 +1160,16 @@ private fun TrailRouteMapScreen(
     }
 
     if (showDirectionsSheet && routeInstructions.isNotEmpty()) {
+        val directionsContainerColor = BottomSheetDefaults.ContainerColor
         ModalBottomSheet(
             onDismissRequest = { showDirectionsSheet = false },
             sheetState = directionsSheetState,
+            containerColor = directionsContainerColor,
             scrimColor = Color.Transparent,
             contentWindowInsets = { WindowInsets.safeDrawing },
         ) {
-            TrailMapperDialogStatusAppearance("DirectionsSheetDialog", protectStatusInset = true)
+            TrailMapperDialogStatusAppearance("DirectionsSheetDialog", protectStatusInset = true,
+                navigationProtectionColor = directionsContainerColor)
             DirectionsBottomSheetContent(
                 route = route,
                 instructions = routeInstructions,

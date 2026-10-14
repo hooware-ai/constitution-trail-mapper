@@ -22,6 +22,22 @@ class DialogWindowOwnershipTest {
             navigationProtectionRects(2400f,1080f,SystemBarInsets(0,95,0,0)))
         assertEquals(emptyList(), navigationProtectionRects(800f,400f,SystemBarInsets(0,0,0,0)))
     }
+    @Test fun movingSheetCannotDrawThroughWindowFixedNavigationRegionInEitherOrientation() {
+        for ((width,height) in listOf(2400f to 1080f,1080f to 2400f)) {
+            val regions = dialogProtectionRegions(width,height,SystemBarInsets(0,63,0,0),SystemBarInsets(0,0,0,63))
+            assertEquals(NavigationProtectionRect(0f,height-63f,width,63f), regions.first().rect)
+            assertEquals(false, regions.first().status)
+            assertEquals(true, regions.last().status)
+            // The instruction viewport between the system bars remains unpainted.
+            assertEquals(false, regions.any { height/2 >= it.rect.y && height/2 < it.rect.y + it.rect.height })
+        }
+    }
+    @Test fun statusProtectionRemainsAboveSideNavigationAtTheirIntersection() {
+        val regions = dialogProtectionRegions(2400f,1080f,SystemBarInsets(0,63,0,0),SystemBarInsets(0,0,63,0))
+        val corner = regions.filter { 2380f >= it.rect.x && 2380f < it.rect.x + it.rect.width && 30f >= it.rect.y && 30f < it.rect.y + it.rect.height }
+        assertEquals(true, corner.last().status)
+        assertEquals(emptyList(), dialogProtectionRegions(800f,400f,SystemBarInsets(0,0,0,0),SystemBarInsets(0,0,0,0)))
+    }
     @Test fun runtimeThemeOverlayChangesOnlyStatusAndCannotOverridePassedNavigationOrPalette() {
         val root = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
             .parse(java.io.File("src/main/res/values/styles.xml")).documentElement

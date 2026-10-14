@@ -17,12 +17,17 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowCompat
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.trailmapper.shared.trailMapperColorScheme
 
 /** Apply status appearance to the owning dialog, never its activity or navigation bar. */
 @Composable
-internal fun TrailMapperDialogStatusAppearance(ownerLabel: String, protectStatusInset: Boolean = false) {
+internal fun TrailMapperDialogStatusAppearance(
+    ownerLabel: String,
+    protectStatusInset: Boolean = false,
+    navigationProtectionColor: Color? = null,
+) {
     val view = LocalView.current
     val window = findWindowOwnerInParents<Any, Window>(
         node = view,
@@ -30,16 +35,18 @@ internal fun TrailMapperDialogStatusAppearance(ownerLabel: String, protectStatus
         windowOf = { (it as? DialogWindowProvider)?.window },
     )
     val appearance = dialogLightStatusOverride(Build.VERSION.SDK_INT)
-    DisposableEffect(window, appearance, protectStatusInset) {
-        var protection: DialogStatusProtectionDrawable? = null
+    val navigationColor = navigationProtectionColor?.toArgb()
+    DisposableEffect(window, appearance, protectStatusInset, navigationColor) {
+        var protection: DialogInsetProtectionDrawable? = null
         var layoutListener: View.OnLayoutChangeListener? = null
         if (window != null && appearance != null) {
             val controller = WindowCompat.getInsetsController(window, window.decorView)
             val beforeStatus = controller.isAppearanceLightStatusBars
             val beforeNavigation = controller.isAppearanceLightNavigationBars
-            if (protectStatusInset) {
+            if (protectStatusInset || navigationColor != null) {
                 val decor = window.decorView
-                val drawable = DialogStatusProtectionDrawable(decor, trailMapperColorScheme(true).background.toArgb())
+                val drawable = DialogInsetProtectionDrawable(decor,
+                    trailMapperColorScheme(true).background.toArgb(), protectStatusInset, navigationColor)
                 drawable.setBounds(0, 0, decor.width, decor.height)
                 decor.overlay.add(drawable)
                 val listener = View.OnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
@@ -55,7 +62,8 @@ internal fun TrailMapperDialogStatusAppearance(ownerLabel: String, protectStatus
                 Log.d("TrailMapperWindow", "t=${SystemClock.uptimeMillis()} owner=$ownerLabel " +
                     "windowId=${System.identityHashCode(window)} type=${window.attributes.type} " +
                     "statusBefore=$beforeStatus statusAfter=${controller.isAppearanceLightStatusBars} " +
-                    "navBefore=$beforeNavigation navAfter=${controller.isAppearanceLightNavigationBars}")
+                    "navBefore=$beforeNavigation navAfter=${controller.isAppearanceLightNavigationBars} " +
+                    "navigationProtection=${navigationColor != null}")
             }
         } else if (BuildConfig.DEBUG && appearance != null) {
             Log.d("TrailMapperWindow", "t=${SystemClock.uptimeMillis()} owner=$ownerLabel noDialogWindowOwner")
@@ -90,18 +98,40 @@ internal fun <N, W> findWindowOwnerInParents(
     return null
 }
 
-/** Paint above sheet pixels in this window, including when Expanded reaches y=0. */
-private class DialogStatusProtectionDrawable(private val decor: View, color: Int) : Drawable() {
-    private val paint = Paint().apply { this.color = color }
+/** Window-fixed protection remains above moving sheet content, including opening and closing. */
+private class DialogInsetProtectionDrawable(
+    private val decor: View,
+    statusColor: Int,
+    private val protectStatus: Boolean,
+    navigationColor: Int?,
+) : Drawable() {
+    private val statusPaint = Paint().apply { color = statusColor }
+    private val navigationPaint = navigationColor?.let { value -> Paint().apply { color = value } }
     override fun draw(canvas: Canvas) {
-        val inset = ViewCompat.getRootWindowInsets(decor)?.getInsets(WindowInsetsCompat.Type.statusBars()) ?: return
-        val edges = SystemBarInsets(inset.left, inset.top, inset.right, inset.bottom)
-        for (rect in navigationProtectionRects(bounds.width().toFloat(), bounds.height().toFloat(), edges)) {
+        val insets = ViewCompat.getRootWindowInsets(decor) ?: return
+        fun edges(value: androidx.core.graphics.Insets) = SystemBarInsets(value.left, value.top, value.right, value.bottom)
+        val status = if (protectStatus) edges(insets.getInsets(WindowInsetsCompat.Type.statusBars())) else SystemBarInsets(0,0,0,0)
+        // Keep the system navigation region clear while visibility changes during the transition.
+        val navigation = if (navigationPaint != null) {
+            val bottom = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars()).bottom
+            // Directions' observed overlap is at the bottom handle; preserve side-navigation pixels.
+            SystemBarInsets(0,0,0,bottom)
+        } else SystemBarInsets(0,0,0,0)
+        for (region in dialogProtectionRegions(bounds.width().toFloat(), bounds.height().toFloat(), status, navigation)) {
+            val paint = if (region.status) statusPaint else navigationPaint ?: continue
+            val rect = region.rect
             canvas.drawRect(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height, paint)
         }
     }
-    override fun setAlpha(alpha: Int) { paint.alpha = alpha; invalidateSelf() }
-    override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter; invalidateSelf() }
+    override fun setAlpha(alpha: Int) { statusPaint.alpha = alpha; navigationPaint?.alpha = alpha; invalidateSelf() }
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        statusPaint.colorFilter = colorFilter; navigationPaint?.colorFilter = colorFilter; invalidateSelf()
+    }
     @Deprecated("Drawable opacity is no longer used")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }
+
+internal data class DialogProtectionRegion(val rect: NavigationProtectionRect, val status: Boolean)
+internal fun dialogProtectionRegions(width: Float, height: Float, status: SystemBarInsets, navigation: SystemBarInsets): List<DialogProtectionRegion> =
+    navigationProtectionRects(width,height,navigation).map { DialogProtectionRegion(it,false) } +
+        navigationProtectionRects(width,height,status).map { DialogProtectionRegion(it,true) }
