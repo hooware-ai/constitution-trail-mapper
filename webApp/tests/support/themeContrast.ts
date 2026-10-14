@@ -351,7 +351,12 @@ test("dark: real map minimum zoom remains visibly disabled", async ({
     await zoomOut.click();
   }
   await expect(zoomOut).toHaveAttribute("aria-disabled", "true");
+  await zoomOut.evaluate((e) => (e as HTMLElement).blur());
   await expect(zoomOut).toHaveCSS("opacity", "0.55");
   await expect(zoomOut).toHaveCSS("color", "rgb(185, 206, 194)");
+  await page.keyboard.press("Tab");
+  await zoomOut.focus();
+  await expect(zoomOut).toHaveCSS("opacity", "1");
+  await expect(zoomOut).toHaveCSS("outline-width", "3px");
   await page.screenshot({ path: info.outputPath("disabled-zoom.png") });
 });
