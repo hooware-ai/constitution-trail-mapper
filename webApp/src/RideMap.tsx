@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource } from "maplibre-gl";
@@ -42,6 +43,7 @@ const allRoutePoints = (route: RouteResult | null) => routePaths(route).flat();
 
 /** The ride camera is separate from the planning map; it never changes route matching or the Start gate. */
 export function RideMap({
+  toolsHost,
   features,
   route,
   position,
@@ -55,6 +57,7 @@ export function RideMap({
   tiles,
   onTilesChange,
 }: {
+  toolsHost?: HTMLElement | null;
   features: Feature[];
   route: RouteResult | null;
   position: LocationFix | null;
@@ -353,67 +356,38 @@ export function RideMap({
     );
   }, [ready, live, position, following, route?.key]);
 
-  if (!webgl || mapFailed)
-    return (
-      <div className="ride-map-fallback">
-        <MapView
-          features={features}
-          route={route}
-          proposed={false}
-          position={live ? (position ?? undefined) : undefined}
-          closures={closures}
-          fixture={fixture}
-          county={county}
-          osm={osm}
-          cues={cues}
-          riddenMeters={riddenMeters}
-          follow={following}
-          preferCanvas={false}
-          onManualPan={() => setFollowing(false)}
-          tilesEnabled={tiles}
-          onTilesChange={onTilesChange}
-        />
+  // Keep existing controls and legal attribution in the ride dock's scrollable content.
+  // Portal placement changes presentation only; map state/effects and button handlers stay here.
+  const tools = (
+    <>
+      {!webgl || mapFailed ? (
         <div className="ride-map-control">
           <span>Flat map on this device</span>
           <button onClick={() => setFollowing(true)}>Recenter</button>
         </div>
-      </div>
-    );
-
-  return (
-    <section
-      className="ride-map"
-      aria-label="Following navigation map"
-      data-following={following}
-    >
-      <div
-        ref={root}
-        className="ride-map-canvas"
-        data-ready={ready}
-        role="region"
-        aria-label="Route map. Drag to explore, then tap Recenter to follow your location."
-      />
-      <div className="ride-map-control">
-        <button
-          className="ride-recenter"
-          onClick={() => setFollowing(true)}
-          disabled={!position || !live}
-        >
-          {following ? "Following" : "Recenter"}
-        </button>
-        {!fixture && (
+      ) : (
+        <div className="ride-map-control">
           <button
-            className="ride-tiles"
-            onClick={() => {
-              onTilesChange(!tiles);
-              setTileError(false);
-            }}
-            aria-pressed={tiles}
+            className="ride-recenter"
+            onClick={() => setFollowing(true)}
+            disabled={!position || !live}
           >
-            {tiles ? "Map on" : "Street map"}
+            {following ? "Following" : "Recenter"}
           </button>
-        )}
-      </div>
+          {!fixture && (
+            <button
+              className="ride-tiles"
+              onClick={() => {
+                onTilesChange(!tiles);
+                setTileError(false);
+              }}
+              aria-pressed={tiles}
+            >
+              {tiles ? "Map on" : "Street map"}
+            </button>
+          )}
+        </div>
+      )}
       <div className="ride-credit">
         {fixture ? (
           "Synthetic review geometry · CC0"
@@ -468,11 +442,54 @@ export function RideMap({
           </>
         )}
       </div>
-      {tileError && tiles && (
+      {webgl && !mapFailed && tileError && tiles && (
         <p className="ride-map-error" role="status">
           Street map unavailable. Trail route remains visible.
         </p>
       )}
+    </>
+  );
+  const renderedTools = toolsHost ? createPortal(tools, toolsHost) : tools;
+
+  if (!webgl || mapFailed)
+    return (
+      <div className="ride-map-fallback">
+        <MapView
+          attributionHost={toolsHost}
+          features={features}
+          route={route}
+          proposed={false}
+          position={live ? (position ?? undefined) : undefined}
+          closures={closures}
+          fixture={fixture}
+          county={county}
+          osm={osm}
+          cues={cues}
+          riddenMeters={riddenMeters}
+          follow={following}
+          preferCanvas={false}
+          onManualPan={() => setFollowing(false)}
+          tilesEnabled={tiles}
+          onTilesChange={onTilesChange}
+        />
+        {renderedTools}
+      </div>
+    );
+
+  return (
+    <section
+      className="ride-map"
+      aria-label="Following navigation map"
+      data-following={following}
+    >
+      <div
+        ref={root}
+        className="ride-map-canvas"
+        data-ready={ready}
+        role="region"
+        aria-label="Route map. Drag to explore, then tap Recenter to follow your location."
+      />
+      {renderedTools}
     </section>
   );
 }

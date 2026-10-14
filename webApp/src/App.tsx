@@ -18,6 +18,7 @@ import { RideGuidance } from "./RideGuidance";
 import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
 import { directionGroupStarts } from "./directionGroups";
 import { ManeuverIcon } from "./ManeuverIcon";
+import { NavigationIcon } from "./NavigationIcon";
 import { TrailUpdates } from "./TrailUpdates";
 import { DataSources } from "./DataSources";
 import { loopComparison, loopHeading } from "./loopSummary";
@@ -233,6 +234,8 @@ export interface AppProps {
     >;
 }
 export function App({ refresh }: AppProps = {}) {
+  const [rideMapToolsHost, setRideMapToolsHost] =
+    useState<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const startDockRef = usePreviewDockLayout(workspaceRef, panelRef);
@@ -2217,7 +2220,9 @@ export function App({ refresh }: AppProps = {}) {
             onClick={() => go("plan")}
             aria-label="Trail Mapper home"
           >
-            <span aria-hidden="true">↗</span>
+            <span aria-hidden="true">
+              <NavigationIcon name="plan" />
+            </span>
             <span>
               Trail Mapper<small>Bloomington–Normal</small>
             </span>
@@ -2274,6 +2279,7 @@ export function App({ refresh }: AppProps = {}) {
             }
           >
             <RideMap
+              toolsHost={rideMapToolsHost}
               features={network?.features ?? []}
               route={showRoute}
               position={nav.fix}
@@ -2443,7 +2449,9 @@ export function App({ refresh }: AppProps = {}) {
                   className="route-choice primary"
                   onClick={() => begin("point")}
                 >
-                  <span aria-hidden="true">↗</span>
+                  <span aria-hidden="true">
+                    <NavigationIcon name="plan" />
+                  </span>
                   <strong>Go somewhere</strong>
                   <small>Choose a start and destination</small>
                 </button>
@@ -3081,6 +3089,7 @@ export function App({ refresh }: AppProps = {}) {
                       Navigation is in beta and may experience issues.
                     </p>
                   )}
+                  <div className="ride-map-tools" ref={setRideMapToolsHost} />
                 </div>
                 <div className="ride-actions">
                   <details className="ride-details">
@@ -3447,13 +3456,7 @@ export function App({ refresh }: AppProps = {}) {
                 onClick={() => go(tab)}
               >
                 <span aria-hidden="true">
-                  {tab === "plan"
-                    ? "↗"
-                    : tab === "saved"
-                      ? "♡"
-                      : tab === "explore"
-                        ? "◇"
-                        : "◉"}
+                  <NavigationIcon name={tab} />
                 </span>
                 {tab[0].toUpperCase() + tab.slice(1)}
               </button>
@@ -3464,7 +3467,9 @@ export function App({ refresh }: AppProps = {}) {
             aria-expanded={popup === "help"}
             onClick={() => setPopup("help")}
           >
-            <span aria-hidden="true">?</span>
+            <span aria-hidden="true">
+              <NavigationIcon name="help" />
+            </span>
             Help<span className="visually-hidden"> and about</span>
           </button>
         </nav>

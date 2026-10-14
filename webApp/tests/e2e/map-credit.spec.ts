@@ -34,9 +34,19 @@ test("tapping the flat-map credit during a ride opens a new tab and the ride car
   await fix(page, 40.51, -88.95);
   await expect(page.locator(".guidance.navigating")).toBeVisible();
   await expect(page.locator(".ride-map-fallback .map-wrap")).toBeVisible();
+  const credit = page.locator(".ride-map-tools .leaflet-control-attribution");
+  await credit.scrollIntoViewIfNeeded();
+  expect(
+    await credit.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return el.contains(
+        document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+      );
+    }),
+  ).toBe(true);
   const before = page.url();
   const link = page
-    .locator(".ride-map-fallback .leaflet-control-attribution a")
+    .locator(".ride-map-tools .leaflet-control-attribution a")
     .first();
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("target", "_blank");

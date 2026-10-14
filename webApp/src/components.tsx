@@ -17,6 +17,7 @@ import {
 } from "./addressSearch";
 import type { PlaceRecord, RouteRecord } from "./platform/storage";
 import { mapLineStyles, mapStroke, type MapLineKind } from "./mapLineStyle";
+import { NavigationIcon } from "./NavigationIcon";
 export interface DialogNotice {
   kind: "error" | "success";
   message: string;
@@ -437,7 +438,10 @@ export function SafeLink({
   if (!href || !/^https?:\/\//i.test(href)) return <span>{children}</span>;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer">
-      {children} ↗
+      {children}
+      <span className="external-link-icon" aria-hidden="true">
+        <NavigationIcon name="plan" />
+      </span>
     </a>
   );
 }

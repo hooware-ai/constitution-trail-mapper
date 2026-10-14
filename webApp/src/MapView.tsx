@@ -22,6 +22,7 @@ const credit = (href: string, text: string) =>
   `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 
 export function MapView({
+  attributionHost,
   features,
   route,
   gapFocus,
@@ -48,6 +49,7 @@ export function MapView({
   showTileControl = true,
   showCaption = true,
 }: {
+  attributionHost?: HTMLElement | null;
   features: Feature[];
   route: RouteResult | null;
   gapFocus?: { id: string } | null;
@@ -83,6 +85,16 @@ export function MapView({
   showTileControl?: boolean;
   showCaption?: boolean;
 }) {
+  const [attributionElement, setAttributionElement] =
+    useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!attributionHost || !attributionElement) return;
+    const originalParent = attributionElement.parentElement;
+    attributionHost.append(attributionElement);
+    return () => {
+      originalParent?.append(attributionElement);
+    };
+  }, [attributionHost, attributionElement]);
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
     layers = useRef<L.LayerGroup | null>(null);
@@ -104,6 +116,14 @@ export function MapView({
     [tileError, setTileError] = useState(false);
   useEffect(() => onTileError?.(tileError), [tileError, onTileError]);
   const tiles = tilesEnabled ?? localTiles;
+  useEffect(() => {
+    if (!attributionHost || !tileControl) return;
+    const originalParent = tileControl.parentElement;
+    attributionHost.append(tileControl);
+    return () => {
+      originalParent?.append(tileControl);
+    };
+  }, [attributionHost, tileControl]);
   useEffect(() => setTileError(false), [tiles]);
   const setTiles = onTilesChange ?? setLocalTiles;
   pick.current = onPick;
@@ -120,6 +140,7 @@ export function MapView({
     }).setView([40.502, -88.97], 13);
     // Leaflet's own prefix link would also replace this page; keep the credit, open it safely.
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
+    setAttributionElement(m.attributionControl.getContainer() ?? null);
     map.current = m;
     const tileHost = L.DomUtil.create("div", "map-street-control");
     L.DomEvent.disableClickPropagation(tileHost);
@@ -665,6 +686,13 @@ export function MapView({
     m.closePopup();
     m.setView(initial.center, initial.zoom, { animate: false });
   }
+  const caption = (
+    <div className="map-caption">
+      {fixture
+        ? "Synthetic review network · not real trails"
+        : "Bloomington–Normal · Constitution Trail"}
+    </div>
+  );
   return (
     <section
       className={"map-wrap" + (picking ? " picking" : "")}
@@ -747,13 +775,8 @@ export function MapView({
           </button>,
           tileControl,
         )}
-      {showCaption && (
-        <div className="map-caption">
-          {fixture
-            ? "Synthetic review network · not real trails"
-            : "Bloomington–Normal · Constitution Trail"}
-        </div>
-      )}
+      {showCaption &&
+        (attributionHost ? createPortal(caption, attributionHost) : caption)}
       {picking && (
         <div className="map-picker">
           <p>Tap a point, or pan with arrow keys.</p>
