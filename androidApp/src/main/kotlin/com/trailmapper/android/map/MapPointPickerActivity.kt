@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.KeyboardHide
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -246,6 +248,7 @@ private fun MapPointPickerScreen(
                 },
                 onFocusChanged = { isSearchFocused = it },
                 onDismissSearch = { focusManager.clearFocus(); keyboardController?.hide() },
+                onHideKeyboard = { keyboardController?.hide() },
                 onClearSearch = {
                     searchText = ""
                     autocompleteSuggestions = emptyList()
@@ -301,11 +304,8 @@ private fun MapPointPickerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (isSearchFocused) Modifier.weight(1f) else Modifier.heightIn(max = availableHeight * 0.5f))
-                    .padding(12.dp),
+                    .padding(if (isSearchFocused) 2.dp else 12.dp),
             )
-            if (isSearchFocused) {
-                TextButton(onClick = { focusManager.clearFocus(); keyboardController?.hide() }) { Text("Back to map") }
-            }
             // Keep the map mounted while search uses the available keyboard viewport.
             Box(modifier = if (isSearchFocused) Modifier.height(0.dp) else Modifier.weight(1f)) {
                 GoogleMap(
@@ -332,23 +332,24 @@ private fun MapPointPickerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = availableHeight * 0.4f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
+                        .heightIn(max = availableHeight * 0.5f)
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        text = when {
-                            isResolvingPreviewAddress -> "Finding address..."
-                            selectedAddress != null -> selectedAddress.orEmpty()
-                            else -> "Address unavailable"
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        text = MapPointLabelSijko.coordinateTextFor(selectedPoint),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                        Text(
+                            text = when {
+                                isResolvingPreviewAddress -> "Finding address..."
+                                selectedAddress != null -> selectedAddress.orEmpty()
+                                else -> "Address unavailable"
+                            },
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = MapPointLabelSijko.coordinateTextFor(selectedPoint),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -400,6 +401,7 @@ private fun MapPointAutocompleteSearch(
     onSearchTextChange: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     onDismissSearch: () -> Unit,
+    onHideKeyboard: () -> Unit,
     onClearSearch: () -> Unit,
     onSuggestionSelected: (AddressAutocompletePrediction) -> Unit,
     modifier: Modifier = Modifier,
@@ -423,23 +425,27 @@ private fun MapPointAutocompleteSearch(
                 label = { Text("Search $targetLabel") },
                 placeholder = { Text("Address or place") },
                 leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = null,
-                    )
+                    IconButton(onClick = onDismissSearch) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to map")
+                    }
                 },
                 trailingIcon = {
-                    when {
-                        isResolving || isSelecting -> {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    Row {
+                        IconButton(onClick = onHideKeyboard) {
+                            Icon(Icons.Filled.KeyboardHide, contentDescription = "Hide keyboard to review full suggestions")
                         }
+                        when {
+                            isResolving || isSelecting -> {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            }
 
-                        searchText.isNotBlank() -> {
-                            IconButton(onClick = onClearSearch) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = "Clear map search",
-                                )
+                            searchText.isNotBlank() -> {
+                                IconButton(onClick = onClearSearch) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = "Clear map search",
+                                    )
+                                }
                             }
                         }
                     }

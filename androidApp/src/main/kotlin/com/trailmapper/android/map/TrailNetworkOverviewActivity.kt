@@ -284,6 +284,12 @@ private fun TrailNetworkMap(
         ) {
             paths.forEach { path ->
                 key(path.id) {
+                    // Dual opaque casings keep semantic strokes distinguishable from variable tiles.
+                    for (casing in networkStrokeCasings(if (path.proposed) 6f else 8f)) {
+                        Polyline(points = path.points, color = casing.color, width = casing.width,
+                            pattern = if (path.proposed) listOf(Dash(20f), Gap(12f)) else null,
+                            zIndex = (if (path.proposed) 1f else 2f) - casing.zOffset)
+                    }
                     Polyline(
                         points = path.points,
                         color = path.color,
@@ -360,11 +366,17 @@ private fun TrailNetworkFeature.mapColor(): Color = when {
     else -> TrailColor
 }
 
-private val TrailColor = Color(0xFF237A36)
-private val ParkColor = Color(0xFF007F84)
-private val SharedRoadColor = Color(0xFF355CB8)
-private val SupplementColor = Color(0xFFB01767)
-private val ProposedColor = Color(0xFF7851A9)
+internal val TrailColor = Color(0xFF237A36)
+internal val ParkColor = Color(0xFF007F84)
+internal val SharedRoadColor = Color(0xFF355CB8)
+internal val SupplementColor = Color(0xFFB01767)
+internal val ProposedColor = Color(0xFF7851A9)
 private val AdvisoryColor = Color(0xFFE3690B)
 private const val CountyMapUrl =
     "https://mcleangis.maps.arcgis.com/apps/instant/sidebar/index.html?appid=d98c151296fd4b03860af8f4df7787a4"
+
+internal data class NetworkStrokeCasing(val color: Color, val width: Float, val zOffset: Float)
+internal fun networkStrokeCasings(width: Float) = listOf(
+    NetworkStrokeCasing(Color.Black, width + 8f, 0.02f),
+    NetworkStrokeCasing(Color.White, width + 4f, 0.01f),
+)

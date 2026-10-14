@@ -18,6 +18,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -791,7 +792,8 @@ private fun TrailRouteMapScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val headerMaxHeight = maxHeight * 0.55f
         GoogleMap(
             mapColorScheme = trailMapperMapColorScheme(isSystemInDarkTheme()),
             modifier = Modifier.fillMaxSize(),
@@ -889,7 +891,8 @@ private fun TrailRouteMapScreen(
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .heightIn(max = headerMaxHeight),
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp,
@@ -897,6 +900,7 @@ private fun TrailRouteMapScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
