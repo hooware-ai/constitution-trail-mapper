@@ -175,7 +175,7 @@ for (const scheme of ["light", "dark"] as const) {
     await planPoint(page);
     await expect(preview).toBeVisible();
     const initial = await page
-      .locator("body")
+      .locator("html")
       .evaluate((e) => getComputedStyle(e).backgroundColor);
     await page.emulateMedia({
       colorScheme: scheme === "dark" ? "light" : "dark",
@@ -184,7 +184,7 @@ for (const scheme of ["light", "dark"] as const) {
     await expect
       .poll(() =>
         page
-          .locator("body")
+          .locator("html")
           .evaluate((e) => getComputedStyle(e).backgroundColor),
       )
       .not.toBe(initial);
