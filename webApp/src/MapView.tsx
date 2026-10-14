@@ -116,6 +116,14 @@ export function MapView({
     [tileError, setTileError] = useState(false);
   useEffect(() => onTileError?.(tileError), [tileError, onTileError]);
   const tiles = tilesEnabled ?? localTiles;
+  useEffect(() => {
+    if (!attributionHost || !tileControl) return;
+    const originalParent = tileControl.parentElement;
+    attributionHost.append(tileControl);
+    return () => {
+      originalParent?.append(tileControl);
+    };
+  }, [attributionHost, tileControl]);
   useEffect(() => setTileError(false), [tiles]);
   const setTiles = onTilesChange ?? setLocalTiles;
   pick.current = onPick;
@@ -678,6 +686,13 @@ export function MapView({
     m.closePopup();
     m.setView(initial.center, initial.zoom, { animate: false });
   }
+  const caption = (
+    <div className="map-caption">
+      {fixture
+        ? "Synthetic review network · not real trails"
+        : "Bloomington–Normal · Constitution Trail"}
+    </div>
+  );
   return (
     <section
       className={"map-wrap" + (picking ? " picking" : "")}
@@ -760,13 +775,8 @@ export function MapView({
           </button>,
           tileControl,
         )}
-      {showCaption && (
-        <div className="map-caption">
-          {fixture
-            ? "Synthetic review network · not real trails"
-            : "Bloomington–Normal · Constitution Trail"}
-        </div>
-      )}
+      {showCaption &&
+        (attributionHost ? createPortal(caption, attributionHost) : caption)}
       {picking && (
         <div className="map-picker">
           <p>Tap a point, or pan with arrow keys.</p>

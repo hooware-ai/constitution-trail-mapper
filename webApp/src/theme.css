@@ -357,6 +357,8 @@ nav button[aria-current="page"],
 }
 
 .ride-map-tools .leaflet-control-attribution {
+  position: static;
+  z-index: auto;
   float: none;
   margin: 0 0 8px;
   padding: 5px 8px;
@@ -365,4 +367,25 @@ nav button[aria-current="page"],
 }
 .ride-map-tools .leaflet-control-attribution a {
   color: #075c4d;
+}
+/* The existing short-wide split leaves a separate map column: keep tools there without covering the left dock. */
+@media (max-height: 500px) and (min-width: 640px) {
+  .navigation .ride-map-tools {
+    position: fixed;
+    left: calc(55% + 12px);
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    pointer-events: auto;
+  }
+}
+
+.ride-map-tools .map-street-control,
+.ride-map-tools .map-caption {
+  position: static;
+  z-index: auto;
+  float: none;
+  margin: 0 0 8px;
+  pointer-events: auto;
 }

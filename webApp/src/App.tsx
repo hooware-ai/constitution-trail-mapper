@@ -3021,7 +3021,6 @@ export function App({ refresh }: AppProps = {}) {
               </RideGuidance>
               <div className="ride-dock">
                 <div className="ride-dock-content">
-                  <div className="ride-map-tools" ref={setRideMapToolsHost} />
                   {routeAlerts}
                   {freshness && (
                     <RuntimeFreshnessStatus
@@ -3090,6 +3089,7 @@ export function App({ refresh }: AppProps = {}) {
                       Navigation is in beta and may experience issues.
                     </p>
                   )}
+                  <div className="ride-map-tools" ref={setRideMapToolsHost} />
                 </div>
                 <div className="ride-actions">
                   <details className="ride-details">

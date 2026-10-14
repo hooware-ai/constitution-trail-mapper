@@ -25,7 +25,7 @@ async function assertRideToolsReachable(page: Page) {
           r.x + r.width / 2,
           r.y + r.height / 2,
         );
-        return Boolean(hit && (e.contains(hit) || hit.contains(e)));
+        return Boolean(hit && e.contains(hit));
       }),
       selector + " is reachable without another overlay covering it",
     ).toBe(true);
