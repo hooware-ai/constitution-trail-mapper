@@ -443,13 +443,13 @@ private fun MapPointAutocompleteSearch(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             val configuration = LocalConfiguration.current
-            if (pickerUsesExtractEditor(configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
-                    configuration.fontScale)) {
-                PickerExtractQueryEditor(targetLabel, searchText, onSearchTextChange, onFocusChanged, onDismissSearch)
+            if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                PickerExtractQueryEditor(targetLabel, searchText, onSearchTextChange, onFocusChanged, onHideKeyboard)
                 if (isFocused) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onHideKeyboard) { Text("Review suggestions") }
                         TextButton(onClick = onDismissSearch) { Text("Back to map") }
+                        if (searchText.isNotBlank()) TextButton(onClick = onClearSearch) { Text("Clear") }
                     }
                 }
             } else {
@@ -626,7 +626,7 @@ internal val NullableMapPointStateSaver = Saver<MapPoint?, List<Double>>(
 internal fun pickerAddressMatchesSelection(previewPoint: MapPoint?, selectedPoint: MapPoint, address: String?): Boolean =
     previewPoint == selectedPoint && address != null
 
-internal fun pickerUsesExtractEditor(landscape: Boolean, fontScale: Float): Boolean = landscape && fontScale >= 2f
+internal fun pickerQueryImeOptions(): Int = EditorInfo.IME_ACTION_DONE
 
 /** Permit the IME's fullscreen query editor when its landscape viewport cannot fit scaled app text. */
 @Composable
@@ -650,11 +650,10 @@ private fun PickerExtractQueryEditor(
                 setSingleLine(true)
                 textSize = 16f // sp: retain the user's font scaling.
                 hint = "Search $targetLabel"
-                contentDescription = "Search $targetLabel"
                 setTextColor(foreground)
                 setHintTextColor(hintColor)
                 // Do not suppress fullscreen extraction; a 93px app viewport cannot fit font2 text.
-                imeOptions = EditorInfo.IME_ACTION_DONE
+                imeOptions = pickerQueryImeOptions()
                 setOnFocusChangeListener { _, focused -> focusChanged(focused) }
                 addTextChangedListener(object : TextWatcher {
                     override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -667,7 +666,7 @@ private fun PickerExtractQueryEditor(
                     if (action == EditorInfo.IME_ACTION_DONE) {
                         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
                             .hideSoftInputFromWindow(view.windowToken, 0)
-                        clearFocus()
+                        // Review predictions after extracted editing; Back to map dismisses explicitly.
                         done()
                         true
                     } else false
