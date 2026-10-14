@@ -974,13 +974,15 @@ private fun TrailRouteMapScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .heightIn(max = controlsMaxHeight)
-                .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .trailMapperLayoutDiagnostic("route-bottom-controls")
                 .padding(horizontal = 12.dp, vertical = 12.dp)
                 .fillMaxWidth(),
         ) {
-        SnackbarHost(hostState = previewSnackbarHostState)
+        // Feedback remains visible even when Save/Share are reached by scrolling the controls.
+        SnackbarHost(hostState = previewSnackbarHostState,
+            modifier = Modifier.fillMaxWidth().trailMapperLayoutDiagnostic("route-save-feedback"))
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
         RouteMapBottomControls(
             route = route,
             routeInstructions = routeInstructions,
@@ -1112,6 +1114,7 @@ private fun TrailRouteMapScreen(
             },
             modifier = Modifier.fillMaxWidth(),
         )
+        }
         }
     }
 

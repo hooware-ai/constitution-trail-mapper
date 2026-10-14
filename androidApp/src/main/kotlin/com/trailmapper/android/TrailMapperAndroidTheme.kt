@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.union
@@ -53,7 +54,8 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
             val controller = WindowCompat.getInsetsController(activity.window, view)
             if (tracker.needsRefresh(signature, controller.isAppearanceLightStatusBars,
                     controller.isAppearanceLightNavigationBars,
-                    usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, buttons))) {
+                    usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, buttons),
+                    usesDarkStatusIcons(Build.VERSION.SDK_INT, darkTheme))) {
                 applyTrailMapperSystemBarAppearance(activity, darkTheme)
             }
             windowDiagnostic.record(activity, darkTheme, "predraw")
@@ -96,6 +98,7 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
             if (Build.VERSION.SDK_INT >= 35) {
                 // App-owned opaque protection, outside consumed content insets and above its pixels.
                 val insets = WindowInsets.navigationBars
+                val statusInsets = WindowInsets.statusBars
                 val tappable = WindowInsets.tappableElement
                 val density = LocalDensity.current
                 val direction = LocalLayoutDirection.current
@@ -104,7 +107,10 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
                     val buttons = tappable.getLeft(density, direction) > 0 || tappable.getRight(density, direction) > 0 || tappable.getBottom(density) > 0
                     val edges = if (buttons) SystemBarInsets(insets.getLeft(density, direction), insets.getTop(density),
                         insets.getRight(density, direction), insets.getBottom(density)) else SystemBarInsets(0,0,0,0)
-                    for (rect in navigationProtectionRects(size.width, size.height, edges)) {
+                    val statusEdges = SystemBarInsets(statusInsets.getLeft(density, direction), statusInsets.getTop(density),
+                        statusInsets.getRight(density, direction), statusInsets.getBottom(density))
+                    for (rect in navigationProtectionRects(size.width, size.height, statusEdges) +
+                            navigationProtectionRects(size.width, size.height, edges)) {
                         drawRect(color, Offset(rect.x, rect.y), Size(rect.width, rect.height))
                     }
                 }
@@ -117,7 +123,7 @@ internal fun applyTrailMapperSystemBars(activity: ComponentActivity, darkTheme: 
     val light = trailMapperColorScheme(false).background.toArgb()
     val dark = trailMapperColorScheme(true).background.toArgb()
     val style = SystemBarStyle.auto(light, dark) { darkTheme }
-    activity.enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+    activity.enableEdgeToEdge(statusBarStyle = if (Build.VERSION.SDK_INT >= 35) SystemBarStyle.dark(dark) else style, navigationBarStyle = style)
     applyTrailMapperSystemBarAppearance(activity, darkTheme)
 }
 
@@ -126,7 +132,7 @@ private fun applyTrailMapperSystemBarAppearance(activity: ComponentActivity, dar
         ?.getInsets(WindowInsetsCompat.Type.tappableElement())
     val buttons = tappable?.let { it.left > 0 || it.right > 0 || it.bottom > 0 } ?: false
     WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
-        isAppearanceLightStatusBars = !darkTheme
+        isAppearanceLightStatusBars = usesDarkStatusIcons(Build.VERSION.SDK_INT, darkTheme)
         isAppearanceLightNavigationBars = !usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, buttons)
     }
     if (Build.VERSION.SDK_INT >= 29) {
@@ -144,18 +150,21 @@ internal class SystemBarAppearanceTracker(private val darkTheme: Boolean, privat
     private var previous: SystemBarInsets? = null
     private var writes = 0
     private var previousLightNavigationIcons: Boolean? = null
+    private var previousLightStatus: Boolean? = null
     fun onWindowFocusGained() {
         initialized = false
         writes = 0
     }
     fun needsRefresh(insets: SystemBarInsets?, lightStatus: Boolean, lightNavigation: Boolean,
-                     expectedLightNavigationIcons: Boolean = lightNavigationIcons): Boolean {
-        val changed = !initialized || previous != insets || previousLightNavigationIcons != expectedLightNavigationIcons
+                     expectedLightNavigationIcons: Boolean = lightNavigationIcons,
+                     expectedLightStatus: Boolean = !darkTheme): Boolean {
+        val changed = !initialized || previous != insets || previousLightNavigationIcons != expectedLightNavigationIcons || previousLightStatus != expectedLightStatus
         previousLightNavigationIcons = expectedLightNavigationIcons
+        previousLightStatus = expectedLightStatus
         if (changed) writes = 0
         initialized = true
         previous = insets
-        val drift = lightStatus == darkTheme || lightNavigation == expectedLightNavigationIcons
+        val drift = lightStatus != expectedLightStatus || lightNavigation == expectedLightNavigationIcons
         // A clean observation ends the drift episode; later resets get their own bounded budget.
         if (!changed && !drift) writes = 0
         // Bound stale API30/controller reads: never create an unbounded write/traversal loop.
@@ -180,3 +189,6 @@ internal fun navigationProtectionRects(width: Float, height: Float, insets: Syst
     if (top > 0f) add(NavigationProtectionRect(0f, 0f, width, top))
     if (bottom > 0f) add(NavigationProtectionRect(0f, height - bottom, width, bottom))
 }
+
+/** API35+ native hosts keep one dark status backdrop/white-icon contract across both content themes. */
+internal fun usesDarkStatusIcons(api: Int, darkTheme: Boolean): Boolean = api < 35 && !darkTheme

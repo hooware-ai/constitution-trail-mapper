@@ -28,6 +28,19 @@ class NavigationProtectionTest {
         assertFalse(tracker.needsRefresh(inset,true,false,true))
         assertTrue(tracker.needsRefresh(inset,true,true,false))
     }
+    @Test fun modernStatusPolarityStaysWhiteAcrossContentThemesAndFocusReturn() {
+        for (dark in listOf(false,true)) {
+            assertFalse(usesDarkStatusIcons(36,dark))
+            val tracker = SystemBarAppearanceTracker(dark)
+            val insets = SystemBarInsets(0,0,0,24)
+            assertTrue(tracker.needsRefresh(insets,false,!dark,dark,false))
+            assertFalse(tracker.needsRefresh(insets,false,!dark,dark,false))
+            tracker.onWindowFocusGained()
+            assertTrue(tracker.needsRefresh(insets,false,!dark,dark,false))
+        }
+        assertTrue(usesDarkStatusIcons(34,false))
+        assertFalse(usesDarkStatusIcons(34,true))
+    }
     @Test fun protectionCoversOnlyNavigationInsetIncludingLandscapeSides() {
         assertEquals(listOf(NavigationProtectionRect(0f, 752f, 400f, 48f)), navigationProtectionRects(400f, 800f, SystemBarInsets(0,0,0,48)))
         assertEquals(listOf(NavigationProtectionRect(0f, 0f, 48f, 400f)), navigationProtectionRects(800f, 400f, SystemBarInsets(48,0,0,0)))
