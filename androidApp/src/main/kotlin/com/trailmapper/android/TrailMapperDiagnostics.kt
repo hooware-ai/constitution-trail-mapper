@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -22,6 +23,7 @@ internal class TrailMapperWindowDiagnostic {
         val controller = WindowCompat.getInsetsController(window, view)
         val state = "activity=${activity.javaClass.simpleName} focus=${view.hasWindowFocus()} dark=$dark " +
             "bounds=${view.width}x${view.height} font=${activity.resources.configuration.fontScale} " +
+            "densityDpi=${activity.resources.configuration.densityDpi} orientation=${activity.resources.configuration.orientation} " +
             "nav=${insets?.getInsets(WindowInsetsCompat.Type.navigationBars())} " +
             "tap=${insets?.getInsets(WindowInsetsCompat.Type.tappableElement())} " +
             "ime=${insets?.getInsets(WindowInsetsCompat.Type.ime())} " +
@@ -37,5 +39,5 @@ internal class TrailMapperWindowDiagnostic {
 }
 internal fun Modifier.trailMapperLayoutDiagnostic(label: String): Modifier =
     if (!BuildConfig.DEBUG) this else onGloballyPositioned { coordinates ->
-        Log.d("TrailMapperLayout", "t=${SystemClock.uptimeMillis()} part=$label size=${coordinates.size} clippedWindowBounds=${coordinates.boundsInWindow()}")
+        Log.d("TrailMapperLayout", "t=${SystemClock.uptimeMillis()} part=$label size=${coordinates.size} positionInWindow=${coordinates.positionInWindow()} clippedWindowBounds=${coordinates.boundsInWindow()}")
     }

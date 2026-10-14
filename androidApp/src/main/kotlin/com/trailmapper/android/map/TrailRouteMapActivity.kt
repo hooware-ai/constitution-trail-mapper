@@ -903,6 +903,7 @@ private fun TrailRouteMapScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
+                    .trailMapperLayoutDiagnostic("route-header-scroll-content")
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
