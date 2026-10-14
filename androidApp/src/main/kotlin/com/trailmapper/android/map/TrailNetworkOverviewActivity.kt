@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -333,7 +334,8 @@ private fun NetworkLoadError(message: String, onRetry: () -> Unit, modifier: Mod
 @Composable
 private fun NetworkLegend(label: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Box(modifier = Modifier.size(9.dp).background(color, CircleShape))
+        Box(modifier = Modifier.size(9.dp).background(color, CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, CircleShape))
         Text(label, style = MaterialTheme.typography.labelSmall)
     }
 }
