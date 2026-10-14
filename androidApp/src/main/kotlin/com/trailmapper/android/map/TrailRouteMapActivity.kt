@@ -175,6 +175,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import android.location.Location
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.navigationBars
@@ -1145,7 +1146,7 @@ private fun TrailRouteMapScreen(
             onDismissRequest = { showDirectionsSheet = false },
             sheetState = directionsSheetState,
             scrimColor = Color.Transparent,
-            contentWindowInsets = { WindowInsets.navigationBars.union(WindowInsets.displayCutout) },
+            contentWindowInsets = { WindowInsets.safeDrawing },
         ) {
             DirectionsBottomSheetContent(
                 route = route,

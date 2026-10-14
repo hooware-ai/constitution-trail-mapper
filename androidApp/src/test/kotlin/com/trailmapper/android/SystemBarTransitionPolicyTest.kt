@@ -15,6 +15,13 @@ class SystemBarTransitionPolicyTest {
         assertTrue(tracker.needsRefresh(gesture, true, true))
         assertFalse(tracker.needsRefresh(gesture, true, true))
     }
+    @Test fun persistentReportedMismatchHasABoundedRepairBudget() {
+        val tracker = SystemBarAppearanceTracker(false)
+        val insets = SystemBarInsets(0, 0, 0, 48)
+        repeat(3) { assertTrue(tracker.needsRefresh(insets, false, false)) }
+        repeat(100) { assertFalse(tracker.needsRefresh(insets, false, false)) }
+        assertTrue(tracker.needsRefresh(SystemBarInsets(0, 0, 0, 24), false, false))
+    }
     @Test fun platformAppearanceDriftIsRepairedInBothModesIncludingSideNavigation() {
         for (dark in listOf(false, true)) {
             val tracker = SystemBarAppearanceTracker(dark)

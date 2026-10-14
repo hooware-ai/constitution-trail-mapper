@@ -85,10 +85,18 @@ internal data class SystemBarInsets(val left: Int, val top: Int, val right: Int,
 internal class SystemBarAppearanceTracker(private val darkTheme: Boolean) {
     private var initialized = false
     private var previous: SystemBarInsets? = null
+    private var writes = 0
     fun needsRefresh(insets: SystemBarInsets?, lightStatus: Boolean, lightNavigation: Boolean): Boolean {
-        val refresh = !initialized || previous != insets || lightStatus == darkTheme || lightNavigation == darkTheme
+        val changed = !initialized || previous != insets
+        if (changed) writes = 0
         initialized = true
         previous = insets
-        return refresh
+        val drift = lightStatus == darkTheme || lightNavigation == darkTheme
+        // Bound stale API30/controller reads: never create an unbounded write/traversal loop.
+        if ((changed || drift) && writes < 3) {
+            writes++
+            return true
+        }
+        return false
     }
 }
