@@ -288,7 +288,7 @@ private fun TrailNetworkMap(
                     for (casing in networkStrokeCasings(if (path.proposed) 6f else 8f)) {
                         Polyline(points = path.points, color = casing.color, width = casing.width,
                             pattern = if (path.proposed) listOf(Dash(20f), Gap(12f)) else null,
-                            zIndex = (if (path.proposed) 1f else 2f) - casing.zOffset)
+                            zIndex = casing.zIndex)
                     }
                     Polyline(
                         points = path.points,
@@ -375,8 +375,8 @@ private val AdvisoryColor = Color(0xFFE3690B)
 private const val CountyMapUrl =
     "https://mcleangis.maps.arcgis.com/apps/instant/sidebar/index.html?appid=d98c151296fd4b03860af8f4df7787a4"
 
-internal data class NetworkStrokeCasing(val color: Color, val width: Float, val zOffset: Float)
+internal data class NetworkStrokeCasing(val color: Color, val width: Float, val zIndex: Float)
 internal fun networkStrokeCasings(width: Float) = listOf(
-    NetworkStrokeCasing(Color.Black, width + 8f, 0.02f),
-    NetworkStrokeCasing(Color.White, width + 4f, 0.01f),
+    NetworkStrokeCasing(Color.Black, width + 8f, 0.48f),
+    NetworkStrokeCasing(Color.White, width + 4f, 0.49f),
 )

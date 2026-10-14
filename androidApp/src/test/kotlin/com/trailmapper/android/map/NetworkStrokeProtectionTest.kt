@@ -18,8 +18,9 @@ class NetworkStrokeProtectionTest {
         for (width in listOf(6f,8f)) {
             val casings = networkStrokeCasings(width)
             assertTrue(casings.size >= 2)
-            assertTrue(casings.all { it.width > width && it.zOffset > 0 })
+            assertTrue(casings.all { it.width > width && it.zIndex < 1f })
             assertTrue(casings[0].width > casings[1].width)
+            assertTrue(casings[0].zIndex < casings[1].zIndex)
             assertTrue(contrast(casings[0].color,casings[1].color)>=3.0)
             for (channel in 0..255) {
                 val tile = Color(channel,channel,channel)

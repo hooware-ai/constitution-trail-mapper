@@ -10,6 +10,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -169,6 +170,10 @@ private fun MapPointPickerScreen(
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    BackHandler(enabled = isSearchFocused) {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+    }
 
     LaunchedEffect(cameraPositionState, isSelectingAutocomplete) {
         if (isSelectingAutocomplete) {
@@ -238,6 +243,7 @@ private fun MapPointPickerScreen(
             MapPointAutocompleteSearch(
                 targetLabel = targetLabel,
                 searchText = searchText,
+                isFocused = isSearchFocused,
                 isResolving = isResolvingAutocomplete,
                 isSelecting = isSelectingAutocomplete,
                 suggestions = autocompleteSuggestions,
@@ -332,7 +338,7 @@ private fun MapPointPickerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = availableHeight * 0.5f)
+                        .heightIn(max = availableHeight * 0.4f)
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -394,6 +400,7 @@ private fun MapPointPickerScreen(
 private fun MapPointAutocompleteSearch(
     targetLabel: String,
     searchText: String,
+    isFocused: Boolean,
     isResolving: Boolean,
     isSelecting: Boolean,
     suggestions: List<AddressAutocompletePrediction>,
@@ -425,14 +432,20 @@ private fun MapPointAutocompleteSearch(
                 label = { Text("Search $targetLabel") },
                 placeholder = { Text("Address or place") },
                 leadingIcon = {
-                    IconButton(onClick = onDismissSearch) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to map")
+                    if (isFocused) {
+                        IconButton(onClick = onDismissSearch) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to map")
+                        }
+                    } else {
+                        Icon(Icons.Filled.Search, contentDescription = null)
                     }
                 },
                 trailingIcon = {
-                    Row {
-                        IconButton(onClick = onHideKeyboard) {
-                            Icon(Icons.Filled.KeyboardHide, contentDescription = "Hide keyboard to review full suggestions")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isFocused) {
+                            IconButton(onClick = onHideKeyboard) {
+                                Icon(Icons.Filled.KeyboardHide, contentDescription = "Hide keyboard to review full suggestions")
+                            }
                         }
                         when {
                             isResolving || isSelecting -> {
