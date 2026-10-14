@@ -11,6 +11,17 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.content.res.Configuration
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -171,9 +182,15 @@ private fun MapPointPickerScreen(
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    BackHandler(enabled = isSearchFocused) {
-        focusManager.clearFocus()
+    val rootView = LocalView.current
+    fun hideSearchKeyboard() {
         keyboardController?.hide()
+        (rootView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(rootView.windowToken, 0)
+    }
+    BackHandler(enabled = isSearchFocused) {
+        focusManager.clearFocus(); rootView.clearFocus()
+        hideSearchKeyboard()
     }
 
     LaunchedEffect(cameraPositionState, isSelectingAutocomplete) {
@@ -254,16 +271,16 @@ private fun MapPointPickerScreen(
                     autocompleteError = null
                 },
                 onFocusChanged = { isSearchFocused = it },
-                onDismissSearch = { focusManager.clearFocus(); keyboardController?.hide() },
-                onHideKeyboard = { keyboardController?.hide() },
+                onDismissSearch = { focusManager.clearFocus(); rootView.clearFocus(); hideSearchKeyboard() },
+                onHideKeyboard = { hideSearchKeyboard() },
                 onClearSearch = {
                     searchText = ""
                     autocompleteSuggestions = emptyList()
                     autocompleteError = null
                 },
                 onSuggestionSelected = { suggestion ->
-                    focusManager.clearFocus()
-                    keyboardController?.hide()
+                    focusManager.clearFocus(); rootView.clearFocus()
+                    hideSearchKeyboard()
                     autocompleteSuggestions = emptyList()
                     autocompleteError = null
                     isSelectingAutocomplete = true
@@ -321,8 +338,8 @@ private fun MapPointPickerScreen(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     onMapClick = { latLng ->
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
+                        focusManager.clearFocus(); rootView.clearFocus()
+                        hideSearchKeyboard()
                         autocompleteSuggestions = emptyList()
                         autocompleteError = null
                         selectedPoint = latLng.toMapPoint()
@@ -422,9 +439,20 @@ private fun MapPointAutocompleteSearch(
         color = MaterialTheme.colorScheme.surface,
     ) {
         Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()).padding(8.dp),
+            modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            val configuration = LocalConfiguration.current
+            if (pickerUsesExtractEditor(configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
+                    configuration.fontScale)) {
+                PickerExtractQueryEditor(targetLabel, searchText, onSearchTextChange, onFocusChanged, onDismissSearch)
+                if (isFocused) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onHideKeyboard) { Text("Review suggestions") }
+                        TextButton(onClick = onDismissSearch) { Text("Back to map") }
+                    }
+                }
+            } else {
             OutlinedTextField(
                 value = searchText,
                 onValueChange = onSearchTextChange,
@@ -471,6 +499,8 @@ private fun MapPointAutocompleteSearch(
                 keyboardActions = KeyboardActions(onDone = { onDismissSearch() }),
             )
 
+            }
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             MapPointAutocompleteResults(
                 suggestions = suggestions,
                 isResolving = isResolving,
@@ -478,6 +508,7 @@ private fun MapPointAutocompleteSearch(
                 error = error,
                 onSuggestionSelected = onSuggestionSelected,
             )
+            }
         }
     }
 }
@@ -594,3 +625,62 @@ internal val NullableMapPointStateSaver = Saver<MapPoint?, List<Double>>(
 
 internal fun pickerAddressMatchesSelection(previewPoint: MapPoint?, selectedPoint: MapPoint, address: String?): Boolean =
     previewPoint == selectedPoint && address != null
+
+internal fun pickerUsesExtractEditor(landscape: Boolean, fontScale: Float): Boolean = landscape && fontScale >= 2f
+
+/** Permit the IME's fullscreen query editor when its landscape viewport cannot fit scaled app text. */
+@Composable
+private fun PickerExtractQueryEditor(
+    targetLabel: String,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+    onDone: () -> Unit,
+) {
+    val queryChanged by rememberUpdatedState(onQueryChange)
+    val focusChanged by rememberUpdatedState(onFocusChanged)
+    val done by rememberUpdatedState(onDone)
+    val foreground = MaterialTheme.colorScheme.onSurface.toArgb()
+    val hintColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+    AndroidView(
+        modifier = Modifier.fillMaxWidth().trailMapperLayoutDiagnostic("picker-native-extract-field"),
+        factory = { context ->
+            EditText(context).apply {
+                isSaveEnabled = false // Compose owns the saved query; avoid duplicate native state.
+                setSingleLine(true)
+                textSize = 16f // sp: retain the user's font scaling.
+                hint = "Search $targetLabel"
+                contentDescription = "Search $targetLabel"
+                setTextColor(foreground)
+                setHintTextColor(hintColor)
+                // Do not suppress fullscreen extraction; a 93px app viewport cannot fit font2 text.
+                imeOptions = EditorInfo.IME_ACTION_DONE
+                setOnFocusChangeListener { _, focused -> focusChanged(focused) }
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {
+                        queryChanged(text?.toString().orEmpty())
+                    }
+                    override fun afterTextChanged(text: Editable?) = Unit
+                })
+                setOnEditorActionListener { view, action, _ ->
+                    if (action == EditorInfo.IME_ACTION_DONE) {
+                        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                            .hideSoftInputFromWindow(view.windowToken, 0)
+                        clearFocus()
+                        done()
+                        true
+                    } else false
+                }
+            }
+        },
+        update = { view ->
+            view.setTextColor(foreground)
+            view.setHintTextColor(hintColor)
+            if (view.text.toString() != query) {
+                view.setText(query)
+                view.setSelection(query.length)
+            }
+        },
+    )
+}

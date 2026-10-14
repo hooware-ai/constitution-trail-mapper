@@ -794,7 +794,9 @@ private fun TrailRouteMapScreen(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val headerMaxHeight = maxHeight * 0.55f
+        val overlayBudget = routeMapOverlayBudget(maxHeight.value)
+        val headerMaxHeight = overlayBudget.header.dp
+        val controlsMaxHeight = overlayBudget.controls.dp
         GoogleMap(
             mapColorScheme = trailMapperMapColorScheme(isSystemInDarkTheme()),
             modifier = Modifier.fillMaxSize(),
@@ -890,10 +892,10 @@ private fun TrailRouteMapScreen(
         Surface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .heightIn(max = headerMaxHeight)
                 .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .fillMaxWidth()
-                .heightIn(max = headerMaxHeight)
                 .trailMapperLayoutDiagnostic("route-header"),
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -971,6 +973,8 @@ private fun TrailRouteMapScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .heightIn(max = controlsMaxHeight)
+                .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .trailMapperLayoutDiagnostic("route-bottom-controls")
                 .padding(horizontal = 12.dp, vertical = 12.dp)
@@ -1806,3 +1810,9 @@ private const val OFF_ROUTE_WARNING_METERS = TrailRouteNavigationSnapshotSijko.O
 private const val METERS_PER_MILE = 1609.344
 private val DIRECTIONS_SHEET_MAX_HEIGHT = 560.dp
 private val ADVISORY_CORRIDOR_COLOR = Color(0xFFCE7019)
+
+internal data class RouteMapOverlayBudget(val header: Float, val controls: Float)
+internal fun routeMapOverlayBudget(height: Float): RouteMapOverlayBudget {
+    val available = height.coerceAtLeast(0f)
+    return RouteMapOverlayBudget(available * 0.4f, available * 0.5f)
+}
