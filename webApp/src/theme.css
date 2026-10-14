@@ -1,0 +1,288 @@
+/* Curated system themes. Map imagery, route strokes and safety-cue colours keep their original palette. */
+.navigation-icon {
+  width: 1em;
+  height: 1em;
+  display: block;
+  margin: auto;
+}
+.external-link-icon {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: 0.15em;
+  vertical-align: -0.1em;
+}
+.external-link-icon > .navigation-icon {
+  width: 100%;
+  height: 100%;
+}
+:root {
+  color-scheme: only light;
+  --control-line: #60786c;
+}
+input:not([type="checkbox"]),
+textarea {
+  border-color: var(--control-line);
+}
+nav button[aria-current="page"],
+.tabs button[aria-selected="true"] {
+  box-shadow: inset 0 -3px var(--ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: only dark;
+    color: #e3f3ea;
+    background: #101c17;
+    --ink: #e3f3ea;
+    --muted: #b9cec2;
+    --line: #839c8e;
+    --control-line: #93afa0;
+    --surface: #1a2c23;
+    --hover: #2b4637;
+    --selected: #2b5040;
+    --link: #a4e9d0;
+    --warning-surface: #3d2d16;
+    --warning-text: #ffdfa9;
+    --warning-line: #dfad5e;
+    --info-surface: #203444;
+    --info-text: #d4ebfb;
+    --success-surface: #193c2b;
+    --success-text: #c1efcf;
+  }
+  button,
+  input:not([type="checkbox"]),
+  textarea,
+  header,
+  nav,
+  .panel,
+  dialog,
+  .tile-toggle,
+  .map-wrap > .map-picker,
+  .map-caption,
+  .ride-credit,
+  .ride-map-control button,
+  .ride-map-control .ride-tiles,
+  .ride-map-error,
+  .ride-map-fallback .ride-map-control span,
+  .navigation .ride-guidance,
+  .ride-dock,
+  .ride-stop,
+  .skip,
+  .skip-link,
+  .preview .start-dock {
+    background: var(--surface);
+    color: var(--ink);
+  }
+  button {
+    border-color: var(--control-line);
+  }
+  button:hover {
+    background: var(--hover);
+  }
+  button.primary,
+  .map-street-control button.street-map-toggle[aria-pressed="true"],
+  .ride-map-control .ride-recenter:not(:disabled) {
+    background: #08725f;
+    color: white;
+    border-color: #8fddbf;
+  }
+  button.primary:hover {
+    background: #075b4c;
+  }
+  a {
+    color: var(--link);
+  }
+  nav button[aria-current="page"],
+  .selected,
+  .tabs button[aria-selected="true"],
+  .distance-presets button[aria-pressed="true"] {
+    background: var(--selected);
+    color: var(--ink);
+    border-color: var(--control-line);
+  }
+  .map-street-control button.street-map-toggle {
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .map-street-control button.street-map-toggle[aria-pressed="true"] {
+    background: #08725f;
+    color: white;
+  }
+  .brand small,
+  .caption,
+  .muted,
+  .route-row > span,
+  .route-stats > div > span,
+  .directions .direction-distance,
+  .route-details,
+  .closure-status,
+  .guidance + p,
+  .wake-status,
+  .more-actions,
+  .map-key-details,
+  .ride-progress span {
+    color: var(--muted);
+  }
+  .preview-actions button {
+    color: var(--ink);
+    border-color: var(--control-line);
+  }
+  .review-banner,
+  .update .badge,
+  .searching,
+  .row-actions button,
+  .guidance,
+  .share-preview,
+  .ride-details summary {
+    background: #233d30;
+    color: var(--ink);
+  }
+  .test-mode-banner,
+  .offline-banner,
+  .map-error,
+  .callout,
+  .help-critical,
+  .warning,
+  .closure-list,
+  .guidance.off-route,
+  .navigation .ride-guidance.off-route,
+  .navigation .ride-guidance.location-lost,
+  .navigation .ride-guidance.permission-denied,
+  .navigation .ride-guidance.unsupported,
+  .navigation .ride-guidance.paused,
+  .explore-basemap-error:not(:empty) {
+    background: var(--warning-surface);
+    color: var(--warning-text);
+    border-color: var(--warning-line);
+  }
+  .unresolved,
+  .update-status,
+  .foreground-note,
+  .start-reason,
+  .ride-safety {
+    color: var(--warning-text);
+  }
+  .foreground-note,
+  .closure-advisory {
+    border-color: var(--warning-line);
+  }
+  .resolved,
+  .route-glyph,
+  .ride-turn-icon,
+  .ride-progress strong {
+    color: var(--success-text);
+  }
+  .success-note {
+    background: var(--success-surface);
+    color: var(--success-text);
+    border-color: #83c89d;
+  }
+  .badge {
+    background: #39264a;
+    color: #eedaff;
+  }
+  .danger {
+    color: #ffb7ae;
+    border-color: #ffb7ae;
+  }
+  .error {
+    background: #44241e;
+    color: #ffd0c3;
+    border-color: #f1a18b;
+  }
+  .access-connections {
+    background: var(--info-surface);
+    color: var(--info-text);
+    border-color: #98b7ce;
+  }
+  .access-connections .connection-total,
+  .connection-number {
+    color: var(--info-text);
+  }
+  .connection-number {
+    background: var(--surface);
+    border-color: #98b7ce;
+  }
+  .access-connections button:hover {
+    background: #304b60;
+  }
+  .toast {
+    border: 1px solid var(--line);
+  }
+  .toast button {
+    background: transparent;
+    color: white;
+  }
+  dialog::backdrop {
+    background: #020b08bb;
+  }
+  ::placeholder {
+    color: var(--muted);
+    opacity: 1;
+  }
+  /* Both sides of the focus outline have a known dark surround, including over a light map. */
+  :focus-visible {
+    outline-color: #8ed6ff;
+    box-shadow: 0 0 0 8px var(--surface);
+  }
+  .ride-guidance:focus-visible {
+    outline-color: #8ed6ff;
+  }
+  /* Keep browser darkening away from map imagery and semantic map colours; theme its controls explicitly. */
+  .leaflet-container,
+  .maplibregl-map {
+    color-scheme: only light;
+  }
+  .leaflet-control-zoom a,
+  .leaflet-control-attribution,
+  .leaflet-popup-content-wrapper,
+  .leaflet-popup-tip,
+  .leaflet-tooltip,
+  .maplibregl-ctrl-group,
+  .maplibregl-ctrl-attrib {
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .leaflet-container .leaflet-control-attribution a,
+  .maplibregl-ctrl-attrib a {
+    color: var(--link);
+  }
+  .leaflet-control-zoom a:hover {
+    background: var(--hover);
+  }
+  .leaflet-tooltip.closure-label {
+    background: var(--warning-surface);
+    color: var(--warning-text);
+    border-color: var(--warning-line);
+  }
+  .maplibregl-ctrl-group button {
+    background: var(--surface);
+  }
+  .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+    filter: invert(1);
+  }
+  .map-wrap,
+  .map {
+    color: #153e35;
+  }
+  .ride-map-loading {
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .legend-line {
+    background: #f6faf8;
+  }
+}
+
+@media (forced-colors: active) {
+  nav button[aria-current="page"],
+  .tabs button[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
+  :focus-visible {
+    outline-color: CanvasText;
+    box-shadow: none;
+  }
+}
