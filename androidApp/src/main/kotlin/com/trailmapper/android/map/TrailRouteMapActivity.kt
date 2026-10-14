@@ -5,6 +5,7 @@
 package com.trailmapper.android.map
 
 import com.trailmapper.android.trailMapperLayoutDiagnostic
+import com.trailmapper.android.TrailMapperDialogStatusAppearance
 import com.trailmapper.android.TrailMapperAndroidTheme
 
 import android.Manifest
@@ -1123,6 +1124,7 @@ private fun TrailRouteMapScreen(
             onDismissRequest = { renameText = null },
             title = { Text("Rename route") },
             text = {
+                TrailMapperDialogStatusAppearance("RouteRenameDialog")
                 OutlinedTextField(
                     value = text,
                     onValueChange = { renameText = it },
@@ -1163,6 +1165,7 @@ private fun TrailRouteMapScreen(
             scrimColor = Color.Transparent,
             contentWindowInsets = { WindowInsets.safeDrawing },
         ) {
+            TrailMapperDialogStatusAppearance("DirectionsSheetDialog")
             DirectionsBottomSheetContent(
                 route = route,
                 instructions = routeInstructions,
@@ -1179,6 +1182,7 @@ private fun TrailRouteMapScreen(
             onDismissRequest = { reviewedAdvisoryId = null },
             title = { Text(advisory.title) },
             text = {
+                TrailMapperDialogStatusAppearance("RouteAdvisoryDialog")
                 Column(
                     modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),

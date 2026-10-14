@@ -16,7 +16,10 @@ class ThemeResourceContrastTest {
             val dark = folder == "values-night"
             val root = DocumentBuilderFactory.newInstance().newDocumentBuilder()
                 .parse(File("src/main/res/$folder/styles.xml")).documentElement
-            val nodes = root.getElementsByTagName("item")
+            val styles = root.getElementsByTagName("style")
+            val appTheme = (0 until styles.length).map { styles.item(it) as Element }
+                .single { it.getAttribute("name") == "AppTheme" }
+            val nodes = appTheme.getElementsByTagName("item")
             val items = (0 until nodes.length).associate { i ->
                 val item = nodes.item(i) as Element
                 item.getAttribute("name") to item.textContent.trim()

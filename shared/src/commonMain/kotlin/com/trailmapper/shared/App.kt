@@ -1107,6 +1107,7 @@ private fun TrailAccountSheet(
 ) {
     val content = TrailAccountSheetSijko.contentFor(account, isResolvingAccount, message)
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        LocalPlatformModalWindowAppearance.current("MainAccountSheetDialog")
         Column(
             modifier = Modifier
                 .fillMaxWidth()
