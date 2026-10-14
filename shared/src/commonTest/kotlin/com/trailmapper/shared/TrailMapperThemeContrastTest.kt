@@ -34,12 +34,22 @@ class TrailMapperThemeContrastTest {
             for ((name, pair) in pairs) {
                 assertTrue(contrast(pair.first, pair.second) >= 4.5, "$name regular text contrast")
             }
+            for (container in listOf(scheme.surfaceContainerLowest, scheme.surfaceContainerLow,
+                scheme.surfaceContainer, scheme.surfaceContainerHigh, scheme.surfaceContainerHighest,
+                scheme.surfaceBright, scheme.surfaceDim)) {
+                assertTrue(contrast(scheme.onSurface, container) >= 4.5, "container text contrast")
+                assertTrue(contrast(scheme.onSurfaceVariant, container) >= 4.5, "container secondary text contrast")
+            }
+            for (base in listOf(scheme.surface, scheme.background)) {
+                assertTrue(contrast(scheme.primary, base) >= 4.5, "text button contrast")
+                assertTrue(contrast(scheme.error, base) >= 4.5, "error text contrast")
+            }
             assertTrue(contrast(scheme.outline, scheme.surface) >= 3.0, "input outline contrast")
         }
     }
 
     @Test
-    fun systemNavigationIconPolicyHasHighContrastBackdropInBothModes() {
+    fun idealizedSystemNavigationIconPolicyProxyHasHighContrastBackdropInBothModes() {
         assertTrue(contrast(Color.Black, trailMapperColorScheme(false).background) >= 3.0)
         assertTrue(contrast(Color.White, trailMapperColorScheme(true).background) >= 3.0)
     }

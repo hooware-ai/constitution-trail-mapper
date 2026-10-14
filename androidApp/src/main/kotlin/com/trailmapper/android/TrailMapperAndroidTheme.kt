@@ -8,7 +8,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -28,7 +32,7 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
     TrailMapperTheme(darkTheme = darkTheme) {
         // Paint behind the transparent API35+ bars and consume their insets once. A map/image cannot become
         // the low-contrast backdrop of system Back/Home/Overview; child Scaffolds receive consumed insets.
-        Box(Modifier.fillMaxSize().background(background).systemBarsPadding()) {
+        Box(Modifier.fillMaxSize().background(background).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
             content()
         }
     }

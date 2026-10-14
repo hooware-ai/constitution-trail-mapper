@@ -70,4 +70,11 @@ private val TrailMapperDarkColors = darkColorScheme(
     inverseOnSurface = Color(0xFF263C31),
     inversePrimary = Color(0xFF08725F),
     surfaceTint = Color(0xFF8BDCC0),
+    surfaceContainerLowest = Color(0xFF0C1712),
+    surfaceContainerLow = Color(0xFF16271E),
+    surfaceContainer = Color(0xFF1A2C23),
+    surfaceContainerHigh = Color(0xFF20352A),
+    surfaceContainerHighest = Color(0xFF294137),
+    surfaceBright = Color(0xFF294137),
+    surfaceDim = Color(0xFF101C17),
 )
