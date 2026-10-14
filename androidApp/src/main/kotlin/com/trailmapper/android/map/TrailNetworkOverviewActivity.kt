@@ -74,6 +74,7 @@ import com.trailmapper.shared.routing.TrailRouteAdvisorySijko
 import com.trailmapper.shared.sijko.MapPickerDefaultsSijko
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.isSystemInDarkTheme
 
 class TrailNetworkOverviewActivity : ComponentActivity() {
     private val overviewModel by lazy {
@@ -275,6 +276,7 @@ private fun TrailNetworkMap(
     var mapLoaded by remember { mutableStateOf(false) }
     Box(modifier) {
         GoogleMap(
+            mapColorScheme = trailMapperMapColorScheme(isSystemInDarkTheme()),
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = camera,
             uiSettings = MapUiSettings(mapToolbarEnabled = false),

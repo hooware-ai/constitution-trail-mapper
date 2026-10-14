@@ -50,7 +50,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -71,6 +70,13 @@ import com.trailmapper.shared.sijko.RouteEndpointTarget
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 
 class MapPointPickerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -136,12 +142,12 @@ private fun MapPointPickerScreen(
     onCancel: () -> Unit,
     onPointConfirmed: (MapPoint, String?) -> Unit,
 ) {
-    var selectedPoint by remember { mutableStateOf(defaultPoint) }
+    var selectedPoint by rememberSaveable(targetLabel, stateSaver = MapPointStateSaver) { mutableStateOf(defaultPoint) }
     var addressPreviewPoint by remember { mutableStateOf<MapPoint?>(null) }
-    var selectedAddress by remember { mutableStateOf<String?>(null) }
+    var selectedAddress by rememberSaveable(targetLabel) { mutableStateOf<String?>(null) }
     var isResolvingPreviewAddress by remember { mutableStateOf(false) }
     var isResolvingAddress by remember { mutableStateOf(false) }
-    var searchText by remember { mutableStateOf("") }
+    var searchText by rememberSaveable(targetLabel) { mutableStateOf("") }
     var isSearchFocused by remember { mutableStateOf(false) }
     var autocompleteSuggestions by remember { mutableStateOf(emptyList<AddressAutocompletePrediction>()) }
     var isResolvingAutocomplete by remember { mutableStateOf(false) }
@@ -218,26 +224,9 @@ private fun MapPointPickerScreen(
         isResolvingPreviewAddress = false
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.weight(1f)) {
-            GoogleMap(
-                modifier = Modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState,
-                onMapClick = { latLng ->
-                    focusManager.clearFocus()
-                    keyboardController?.hide()
-                    autocompleteSuggestions = emptyList()
-                    autocompleteError = null
-                    selectedPoint = latLng.toMapPoint()
-                    cameraPositionState.move(CameraUpdateFactory.newLatLng(latLng))
-                },
-            ) {
-                Marker(
-                    state = rememberUpdatedMarkerState(position = selectedLatLng),
-                    title = targetLabel,
-                )
-            }
-
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        val availableHeight = maxHeight
+        Column(modifier = Modifier.fillMaxSize()) {
             MapPointAutocompleteSearch(
                 targetLabel = targetLabel,
                 searchText = searchText,
@@ -303,61 +292,83 @@ private fun MapPointPickerScreen(
                     }
                 },
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
+                    .heightIn(max = availableHeight * 0.5f)
                     .padding(12.dp),
             )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = when {
-                    isResolvingPreviewAddress -> "Finding address..."
-                    selectedAddress != null -> selectedAddress.orEmpty()
-                    else -> "Address unavailable"
-                },
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = MapPointLabelSijko.coordinateTextFor(selectedPoint),
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedButton(
-                    onClick = onCancel,
-                    modifier = Modifier.weight(1f),
-                    enabled = !isResolvingAddress,
-                ) {
-                    Text("Cancel")
-                }
-                Button(
-                    onClick = {
-                        val point = selectedPoint
-                        val address = selectedAddress.takeIf { addressPreviewPoint == point }
-                        isResolvingAddress = true
-                        scope.launch {
-                            onPointConfirmed(
-                                point,
-                                address ?: resolveAddress(point),
-                            )
-                        }
+            Box(modifier = Modifier.weight(1f)) {
+                GoogleMap(
+                    mapColorScheme = trailMapperMapColorScheme(isSystemInDarkTheme()),
+                    modifier = Modifier.fillMaxSize(),
+                    cameraPositionState = cameraPositionState,
+                    onMapClick = { latLng ->
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        autocompleteSuggestions = emptyList()
+                        autocompleteError = null
+                        selectedPoint = latLng.toMapPoint()
+                        cameraPositionState.move(CameraUpdateFactory.newLatLng(latLng))
                     },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isResolvingAddress,
                 ) {
-                    if (isResolvingAddress) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                    } else {
-                        Text("Set point")
+                    Marker(
+                        state = rememberUpdatedMarkerState(position = selectedLatLng),
+                        title = targetLabel,
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = availableHeight * 0.4f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = when {
+                        isResolvingPreviewAddress -> "Finding address..."
+                        selectedAddress != null -> selectedAddress.orEmpty()
+                        else -> "Address unavailable"
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = MapPointLabelSijko.coordinateTextFor(selectedPoint),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isResolvingAddress,
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            val point = selectedPoint
+                            val address = selectedAddress.takeIf { addressPreviewPoint == point }
+                            isResolvingAddress = true
+                            scope.launch {
+                                onPointConfirmed(
+                                    point,
+                                    address ?: resolveAddress(point),
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isResolvingAddress,
+                    ) {
+                        if (isResolvingAddress) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        } else {
+                            Text("Set point")
+                        }
                     }
                 }
             }
@@ -386,7 +397,7 @@ private fun MapPointAutocompleteSearch(
         color = MaterialTheme.colorScheme.surface,
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             OutlinedTextField(
@@ -447,8 +458,7 @@ private fun MapPointAutocompleteResults(
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 280.dp),
+            .fillMaxWidth(),
     ) {
         if (isResolving || isSelecting) {
             Row(
@@ -471,22 +481,19 @@ private fun MapPointAutocompleteResults(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .clickable { onSuggestionSelected(suggestion) }
                     .padding(horizontal = 8.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     text = suggestion.primaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 if (suggestion.secondaryText.isNotBlank()) {
                     Text(
                         text = suggestion.secondaryText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -534,3 +541,9 @@ private const val DEFAULT_ZOOM = 13f
 private const val SEARCH_RESULT_ZOOM = 16f
 private const val AUTOCOMPLETE_DEBOUNCE_MILLIS = 300L
 private const val ADDRESS_PREVIEW_DEBOUNCE_MILLIS = 600L
+
+
+internal val MapPointStateSaver = listSaver<MapPoint, Double>(
+    save = { listOf(it.latitude, it.longitude) },
+    restore = { MapPoint(latitude = it[0], longitude = it[1]) },
+)

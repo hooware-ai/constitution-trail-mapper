@@ -174,6 +174,11 @@ import com.trailmapper.android.routing.AndroidAccessNetworkProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import android.location.Location
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 
 class TrailRouteMapActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -391,7 +396,7 @@ private fun TrailRouteMapScreen(
     var exerciseDeparted by rememberSaveable(plannedRoute) { mutableStateOf(false) }
     var exerciseCompleted by rememberSaveable(plannedRoute) { mutableStateOf(false) }
     var pendingCompletedSession by remember(plannedRoute) { mutableStateOf<CompletedExerciseSession?>(null) }
-    val directionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val directionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
@@ -787,6 +792,7 @@ private fun TrailRouteMapScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         GoogleMap(
+            mapColorScheme = trailMapperMapColorScheme(isSystemInDarkTheme()),
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             properties = mapProperties,
@@ -1139,6 +1145,7 @@ private fun TrailRouteMapScreen(
             onDismissRequest = { showDirectionsSheet = false },
             sheetState = directionsSheetState,
             scrimColor = Color.Transparent,
+            contentWindowInsets = { WindowInsets.navigationBars.union(WindowInsets.displayCutout) },
         ) {
             DirectionsBottomSheetContent(
                 route = route,
