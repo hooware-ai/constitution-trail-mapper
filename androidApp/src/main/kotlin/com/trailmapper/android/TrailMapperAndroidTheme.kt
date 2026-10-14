@@ -45,9 +45,21 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
             }
             true
         }
+        val focusListener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) {
+                // Window-manager focus handoff can reset flags after the first Compose frame.
+                tracker.onWindowFocusGained()
+                applyTrailMapperSystemBarAppearance(activity, darkTheme)
+                view.invalidate()
+            }
+        }
+        view.viewTreeObserver.addOnWindowFocusChangeListener(focusListener)
         view.viewTreeObserver.addOnPreDrawListener(listener)
         onDispose {
-            if (view.viewTreeObserver.isAlive) view.viewTreeObserver.removeOnPreDrawListener(listener)
+            if (view.viewTreeObserver.isAlive) {
+                view.viewTreeObserver.removeOnPreDrawListener(listener)
+                view.viewTreeObserver.removeOnWindowFocusChangeListener(focusListener)
+            }
         }
     }
     TrailMapperTheme(darkTheme = darkTheme) {
@@ -86,12 +98,18 @@ internal class SystemBarAppearanceTracker(private val darkTheme: Boolean) {
     private var initialized = false
     private var previous: SystemBarInsets? = null
     private var writes = 0
+    fun onWindowFocusGained() {
+        initialized = false
+        writes = 0
+    }
     fun needsRefresh(insets: SystemBarInsets?, lightStatus: Boolean, lightNavigation: Boolean): Boolean {
         val changed = !initialized || previous != insets
         if (changed) writes = 0
         initialized = true
         previous = insets
         val drift = lightStatus == darkTheme || lightNavigation == darkTheme
+        // A clean observation ends the drift episode; later resets get their own bounded budget.
+        if (!changed && !drift) writes = 0
         // Bound stale API30/controller reads: never create an unbounded write/traversal loop.
         if ((changed || drift) && writes < 3) {
             writes++

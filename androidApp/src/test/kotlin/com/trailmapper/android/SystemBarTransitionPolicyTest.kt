@@ -22,6 +22,26 @@ class SystemBarTransitionPolicyTest {
         repeat(100) { assertFalse(tracker.needsRefresh(insets, false, false)) }
         assertTrue(tracker.needsRefresh(SystemBarInsets(0, 0, 0, 24), false, false))
     }
+    @Test fun shareProgressLateResetAfterCleanFrameGetsANewBoundedBudget() {
+        val tracker = SystemBarAppearanceTracker(false)
+        val buttons = SystemBarInsets(0, 0, 0, 48)
+        repeat(3) { assertTrue(tracker.needsRefresh(buttons, false, false)) }
+        assertFalse(tracker.needsRefresh(buttons, false, false))
+        assertFalse(tracker.needsRefresh(buttons, true, true))
+        repeat(3) { assertTrue(tracker.needsRefresh(buttons, true, false)) }
+        repeat(100) { assertFalse(tracker.needsRefresh(buttons, true, false)) }
+    }
+    @Test fun focusHandoffRearmsRepairWithoutChangingInsetsInBothThemes() {
+        for (dark in listOf(false, true)) {
+            val tracker = SystemBarAppearanceTracker(dark)
+            val buttons = SystemBarInsets(0, 0, 0, 48)
+            repeat(3) { assertTrue(tracker.needsRefresh(buttons, dark, dark)) }
+            assertFalse(tracker.needsRefresh(buttons, dark, dark))
+            tracker.onWindowFocusGained()
+            assertTrue(tracker.needsRefresh(buttons, dark, dark))
+            assertFalse(tracker.needsRefresh(buttons, !dark, !dark))
+        }
+    }
     @Test fun platformAppearanceDriftIsRepairedInBothModesIncludingSideNavigation() {
         for (dark in listOf(false, true)) {
             val tracker = SystemBarAppearanceTracker(dark)
