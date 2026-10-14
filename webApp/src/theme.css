@@ -258,9 +258,16 @@ nav button[aria-current="page"],
     cursor: default;
   }
   :root .leaflet-container a.leaflet-popup-close-button,
-  :root .leaflet-container a.leaflet-popup-close-button:hover {
+  :root .leaflet-container a.leaflet-popup-close-button:hover,
+  :root .leaflet-container a.leaflet-popup-close-button:focus {
     color: var(--link);
     background: var(--surface);
+  }
+  :root
+    .leaflet-container
+    .leaflet-control-zoom
+    a.leaflet-disabled:focus-visible {
+    opacity: 1;
   }
   .instruction-marker:focus {
     box-shadow: 0 0 0 8px var(--surface);
