@@ -335,3 +335,23 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(preset).toHaveCSS("border-top-color", "rgb(8, 114, 95)");
   });
 }
+
+test("dark: real map minimum zoom remains visibly disabled", async ({
+  page,
+}, info) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).waitFor();
+  const zoomOut = page.getByRole("button", { name: "Zoom out", exact: true });
+  for (
+    let i = 0;
+    i < 25 && (await zoomOut.getAttribute("aria-disabled")) !== "true";
+    i++
+  ) {
+    await zoomOut.click();
+  }
+  await expect(zoomOut).toHaveAttribute("aria-disabled", "true");
+  await expect(zoomOut).toHaveCSS("opacity", "0.55");
+  await expect(zoomOut).toHaveCSS("color", "rgb(185, 206, 194)");
+  await page.screenshot({ path: info.outputPath("disabled-zoom.png") });
+});

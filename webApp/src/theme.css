@@ -236,7 +236,7 @@ nav button[aria-current="page"],
   .maplibregl-map {
     color-scheme: only light;
   }
-  :root .leaflet-container .leaflet-bar a,
+  :root .leaflet-container .leaflet-control-zoom a,
   .leaflet-popup-content-wrapper,
   .leaflet-popup-tip,
   .leaflet-tooltip,
@@ -247,9 +247,23 @@ nav button[aria-current="page"],
   :root .leaflet-container .leaflet-popup-content a {
     color: var(--link);
   }
-  :root .leaflet-container .leaflet-bar a:hover,
-  :root .leaflet-container .leaflet-bar a:focus {
+  :root .leaflet-container .leaflet-control-zoom a:hover,
+  :root .leaflet-container .leaflet-control-zoom a:focus {
     background: var(--hover);
+  }
+  :root .leaflet-container .leaflet-control-zoom a.leaflet-disabled {
+    background: var(--surface);
+    color: var(--muted);
+    opacity: 0.55;
+    cursor: default;
+  }
+  :root .leaflet-container a.leaflet-popup-close-button,
+  :root .leaflet-container a.leaflet-popup-close-button:hover {
+    color: var(--link);
+    background: var(--surface);
+  }
+  .instruction-marker:focus {
+    box-shadow: 0 0 0 8px var(--surface);
   }
   .leaflet-tooltip.closure-label {
     background: var(--warning-surface);
@@ -259,7 +273,18 @@ nav button[aria-current="page"],
   :root .maplibregl-ctrl.maplibregl-ctrl-group button {
     background: var(--surface);
   }
-  :root .maplibregl-ctrl.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  :root
+    .maplibregl-ctrl.maplibregl-ctrl-group
+    button.maplibregl-ctrl-zoom-in
+    .maplibregl-ctrl-icon,
+  :root
+    .maplibregl-ctrl.maplibregl-ctrl-group
+    button.maplibregl-ctrl-zoom-out
+    .maplibregl-ctrl-icon,
+  :root
+    .maplibregl-ctrl.maplibregl-ctrl-group
+    button.maplibregl-ctrl-compass
+    .maplibregl-ctrl-icon {
     filter: invert(1);
   }
   .map-wrap,
