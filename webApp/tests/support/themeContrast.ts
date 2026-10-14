@@ -259,8 +259,13 @@ for (const scheme of ["light", "dark"] as const) {
       "color",
       "rgb(7, 92, 77)",
     );
+    // Startup focuses the main heading on the next animation frame after network adoption.
+    await expect(
+      page.getByRole("heading", { name: "Plan a ride", exact: true }),
+    ).toBeFocused();
     const zoom = page.getByRole("button", { name: "Zoom in", exact: true });
     await zoom.focus();
+    await expect(zoom).toBeFocused();
     await expect(zoom).toHaveCSS(
       "color",
       scheme === "dark" ? "rgb(227, 243, 234)" : "rgb(0, 0, 0)",
