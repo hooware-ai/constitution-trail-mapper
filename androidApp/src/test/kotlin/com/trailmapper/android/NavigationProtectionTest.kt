@@ -16,6 +16,18 @@ class NavigationProtectionTest {
         assertFalse(usesLightNavigationIcons(34, false))
         assertTrue(usesLightNavigationIcons(34, true))
     }
+    @Test fun gestureAndThreeButtonTransitionsHaveDifferentBackdropPolicies() {
+        assertFalse(usesLightNavigationIcons(36, false, false))
+        assertTrue(usesLightNavigationIcons(36, false, true))
+        assertTrue(usesLightNavigationIcons(36, true, false))
+        val tracker = SystemBarAppearanceTracker(false)
+        val inset = SystemBarInsets(0,0,0,24)
+        assertTrue(tracker.needsRefresh(inset,true,true,false))
+        assertFalse(tracker.needsRefresh(inset,true,true,false))
+        assertTrue(tracker.needsRefresh(inset,true,false,true))
+        assertFalse(tracker.needsRefresh(inset,true,false,true))
+        assertTrue(tracker.needsRefresh(inset,true,true,false))
+    }
     @Test fun protectionCoversOnlyNavigationInsetIncludingLandscapeSides() {
         assertEquals(listOf(NavigationProtectionRect(0f, 752f, 400f, 48f)), navigationProtectionRects(400f, 800f, SystemBarInsets(0,0,0,48)))
         assertEquals(listOf(NavigationProtectionRect(0f, 0f, 48f, 400f)), navigationProtectionRects(800f, 400f, SystemBarInsets(48,0,0,0)))

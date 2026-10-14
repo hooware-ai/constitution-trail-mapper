@@ -4,6 +4,7 @@
  */
 package com.trailmapper.android.map
 
+import com.trailmapper.android.trailMapperLayoutDiagnostic
 import com.trailmapper.android.TrailMapperAndroidTheme
 
 import android.Manifest
@@ -892,7 +893,8 @@ private fun TrailRouteMapScreen(
                 .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .fillMaxWidth()
-                .heightIn(max = headerMaxHeight),
+                .heightIn(max = headerMaxHeight)
+                .trailMapperLayoutDiagnostic("route-header"),
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp,
@@ -969,6 +971,7 @@ private fun TrailRouteMapScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
+                .trailMapperLayoutDiagnostic("route-bottom-controls")
                 .padding(horizontal = 12.dp, vertical = 12.dp)
                 .fillMaxWidth(),
         ) {

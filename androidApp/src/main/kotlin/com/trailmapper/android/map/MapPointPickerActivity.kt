@@ -4,6 +4,7 @@
  */
 package com.trailmapper.android.map
 
+import com.trailmapper.android.trailMapperLayoutDiagnostic
 import com.trailmapper.android.TrailMapperAndroidTheme
 
 import android.app.Activity
@@ -237,7 +238,7 @@ private fun MapPointPickerScreen(
         isResolvingPreviewAddress = false
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding().trailMapperLayoutDiagnostic("picker-content-after-ime")) {
         val availableHeight = maxHeight
         Column(modifier = Modifier.fillMaxSize()) {
             MapPointAutocompleteSearch(
@@ -309,6 +310,7 @@ private fun MapPointPickerScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .trailMapperLayoutDiagnostic("picker-search-panel")
                     .then(if (isSearchFocused) Modifier.weight(1f) else Modifier.heightIn(max = availableHeight * 0.5f))
                     .padding(if (isSearchFocused) 2.dp else 12.dp),
             )
@@ -428,7 +430,8 @@ private fun MapPointAutocompleteSearch(
                 onValueChange = onSearchTextChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onFocusChanged { onFocusChanged(it.isFocused) },
+                    .onFocusChanged { onFocusChanged(it.isFocused) }
+                    .trailMapperLayoutDiagnostic("picker-field"),
                 label = { Text("Search $targetLabel") },
                 placeholder = { Text("Address or place") },
                 leadingIcon = {
