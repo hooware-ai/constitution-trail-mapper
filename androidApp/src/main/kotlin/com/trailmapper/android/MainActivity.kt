@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.content.res.Configuration
-import com.trailmapper.android.applyTrailMapperSystemBars
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
