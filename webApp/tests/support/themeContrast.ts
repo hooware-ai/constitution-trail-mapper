@@ -204,3 +204,134 @@ for (const scheme of ["light", "dark"] as const) {
     );
   });
 }
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`${scheme}: standalone adapter retains themed Help and measurable chooser input boundaries`, async ({
+    page,
+  }, info) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.addInitScript(() => {
+      const original = window.matchMedia.bind(window);
+      window.matchMedia = (query) => {
+        const result = original(query);
+        if (query === "(display-mode: standalone)")
+          Object.defineProperty(result, "matches", { value: true });
+        return result;
+      };
+    });
+    await page.goto("/");
+    const attribution = page.locator(".leaflet-control-attribution");
+    await expect(attribution).toBeVisible();
+    await expect(attribution).toHaveCSS(
+      "background-color",
+      "rgb(246, 250, 248)",
+    );
+    await expect(attribution).toHaveCSS("color", "rgb(21, 62, 53)");
+    await expect(attribution.locator("a").first()).toHaveCSS(
+      "color",
+      "rgb(7, 92, 77)",
+    );
+    const zoom = page.getByRole("button", { name: "Zoom in", exact: true });
+    await zoom.focus();
+    await expect(zoom).toHaveCSS(
+      "color",
+      scheme === "dark" ? "rgb(227, 243, 234)" : "rgb(0, 0, 0)",
+    );
+    if (scheme === "dark")
+      await expect(zoom).toHaveCSS("background-color", "rgb(43, 70, 55)");
+    await audit(page, info, "focused-zoom-and-attribution");
+    await page.getByRole("button", { name: /Go somewhere/ }).click();
+    await page.getByRole("button", { name: /^Start:/ }).click();
+    const input = page.getByRole("textbox", {
+      name: "Search places",
+      exact: true,
+    });
+    await expect(input).toBeVisible();
+    const boundary = await input.evaluate((e) => {
+      const s = getComputedStyle(e);
+      function luminance(rgb: string) {
+        const v = rgb
+          .match(/[\d.]+/g)!
+          .slice(0, 3)
+          .map(Number)
+          .map((x) => {
+            const c = x / 255;
+            return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+          });
+        return v[0] * 0.2126 + v[1] * 0.7152 + v[2] * 0.0722;
+      }
+      const a = luminance(s.borderTopColor),
+        b = luminance(s.backgroundColor);
+      return {
+        border: s.borderTopColor,
+        background: s.backgroundColor,
+        width: s.borderTopWidth,
+        contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+      };
+    });
+    expect(parseFloat(boundary.width)).toBeGreaterThan(0);
+    expect(boundary.contrast).toBeGreaterThanOrEqual(3);
+    await audit(page, info, "standalone-adapter-chooser");
+    await page.getByRole("button", { name: /Close Choose/ }).click();
+    await page
+      .getByRole("button", { name: "Help and about", exact: true })
+      .click();
+    await audit(page, info, "standalone-adapter-help");
+    await writeFile(
+      info.outputPath("input-boundary.json"),
+      JSON.stringify(
+        {
+          ...boundary,
+          scope:
+            "browser display-mode adapter; not installed PWA or OS navigation icons",
+        },
+        null,
+        2,
+      ),
+    );
+  });
+}
+
+test("Chromium forced-colors: focused current navigation has a distinct outward focus outline", async ({
+  page,
+  browserName,
+}, info) => {
+  test.skip(
+    browserName !== "chromium",
+    "WebKit does not emulate Windows forced-colors acceptance",
+  );
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Go somewhere/ }).waitFor();
+  const selected = page
+    .getByRole("navigation", { name: "Main navigation" })
+    .locator('[aria-current="page"]');
+  await expect(selected).toHaveCSS("outline-offset", "-3px");
+  await page.keyboard.press("Tab");
+  await selected.focus();
+  await expect(selected).toHaveCSS("outline-offset", "3px");
+  await expect(selected).toHaveCSS("outline-width", "3px");
+  await page.screenshot({
+    path: info.outputPath("forced-colors-focused-current.png"),
+  });
+});
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`${scheme}: pressed distance preset remains distinct`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/");
+    await page.getByRole("button", { name: /Make an exercise loop/ }).click();
+    const preset = page.getByRole("button", { name: "8 mi", exact: true });
+    await preset.click();
+    await expect(preset).toHaveAttribute("aria-pressed", "true");
+    if (scheme === "dark") {
+      await expect(preset).toHaveCSS("border-top-color", "rgb(143, 221, 191)");
+      expect(
+        await preset.evaluate((e) => getComputedStyle(e).boxShadow),
+      ).toContain("inset");
+    } else
+      await expect(preset).toHaveCSS("border-top-color", "rgb(8, 114, 95)");
+  });
+}

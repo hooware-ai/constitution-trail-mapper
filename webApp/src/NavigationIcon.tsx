@@ -30,7 +30,7 @@ export function NavigationIcon({
       {name === "help" && (
         <>
           <path d="M8 8a4 4 0 1 1 6 3.5c-1.5.8-2 1.5-2 3" />
-          <circle cx="12" cy="19" r=".6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none" />
         </>
       )}
     </svg>
