@@ -389,3 +389,8 @@ nav button[aria-current="page"],
   margin: 0 0 8px;
   pointer-events: auto;
 }
+/* Give Details a real column at large text sizes; a flex row could squeeze it to single letters and consume the scroller. */
+.ride-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+}
