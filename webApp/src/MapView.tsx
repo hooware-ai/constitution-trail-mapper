@@ -22,6 +22,7 @@ const credit = (href: string, text: string) =>
   `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 
 export function MapView({
+  attributionHost,
   features,
   route,
   gapFocus,
@@ -48,6 +49,7 @@ export function MapView({
   showTileControl = true,
   showCaption = true,
 }: {
+  attributionHost?: HTMLElement | null;
   features: Feature[];
   route: RouteResult | null;
   gapFocus?: { id: string } | null;
@@ -83,6 +85,16 @@ export function MapView({
   showTileControl?: boolean;
   showCaption?: boolean;
 }) {
+  const [attributionElement, setAttributionElement] =
+    useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!attributionHost || !attributionElement) return;
+    const originalParent = attributionElement.parentElement;
+    attributionHost.append(attributionElement);
+    return () => {
+      originalParent?.append(attributionElement);
+    };
+  }, [attributionHost, attributionElement]);
   const root = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
     layers = useRef<L.LayerGroup | null>(null);
@@ -120,6 +132,7 @@ export function MapView({
     }).setView([40.502, -88.97], 13);
     // Leaflet's own prefix link would also replace this page; keep the credit, open it safely.
     m.attributionControl.setPrefix(credit("https://leafletjs.com", "Leaflet"));
+    setAttributionElement(m.attributionControl.getContainer() ?? null);
     map.current = m;
     const tileHost = L.DomUtil.create("div", "map-street-control");
     L.DomEvent.disableClickPropagation(tileHost);

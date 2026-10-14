@@ -10,6 +10,31 @@ const variants = [
   ["light", 320, 640, "200%"],
   ["dark", 320, 640, "200%"],
 ] as const;
+async function assertRideToolsReachable(page: Page) {
+  for (const selector of [
+    ".ride-map-tools .ride-credit",
+    ".ride-map-tools .ride-map-control button",
+  ]) {
+    const item = page.locator(selector).first();
+    await expect(item).toBeVisible();
+    await item.scrollIntoViewIfNeeded();
+    expect(
+      await item.evaluate((e) => {
+        const r = e.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.x + r.width / 2,
+          r.y + r.height / 2,
+        );
+        return Boolean(hit && (e.contains(hit) || hit.contains(e)));
+      }),
+      selector + " is reachable without another overlay covering it",
+    ).toBe(true);
+  }
+  await expect(
+    page.getByRole("button", { name: "Stop navigation", exact: true }),
+  ).toBeVisible();
+}
+
 async function audit(page: Page, info: TestInfo, name: string) {
   const dialog = page.locator("dialog[open]");
   const builder = new AxeBuilder({ page }).withRules(["color-contrast"]);
@@ -105,10 +130,13 @@ for (const [scheme, width, height, font] of variants) {
     await page
       .getByRole("button", { name: "Start navigation", exact: true })
       .click();
+    await assertRideToolsReachable(page);
     await audit(page, info, "waiting");
     await page.evaluate(() => (window as any).__device.fix(40.51, -88.95, 5));
+    await assertRideToolsReachable(page);
     await audit(page, info, "guidance");
     await page.evaluate(() => (window as any).__device.fix(40.51, -88.95, 35));
+    await assertRideToolsReachable(page);
     await audit(page, info, "lost");
   });
 }

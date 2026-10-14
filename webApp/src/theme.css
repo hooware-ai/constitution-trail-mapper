@@ -334,3 +334,35 @@ nav button[aria-current="page"],
 :root .maplibregl-ctrl.maplibregl-ctrl-attrib a {
   color: #075c4d;
 }
+
+/* Ride controls and attribution share the existing dock scroller instead of sitting behind its variable height. */
+.ride-map-tools .ride-map-control {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  pointer-events: auto;
+}
+.ride-map-tools .ride-credit {
+  position: static;
+  max-width: 100%;
+  text-align: left;
+  margin-bottom: 8px;
+  pointer-events: auto;
+}
+.ride-map-tools .ride-map-error {
+  position: static;
+}
+
+.ride-map-tools .leaflet-control-attribution {
+  float: none;
+  margin: 0 0 8px;
+  padding: 5px 8px;
+  background: #f6faf8;
+  color: #153e35;
+}
+.ride-map-tools .leaflet-control-attribution a {
+  color: #075c4d;
+}

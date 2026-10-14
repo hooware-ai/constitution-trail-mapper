@@ -234,6 +234,8 @@ export interface AppProps {
     >;
 }
 export function App({ refresh }: AppProps = {}) {
+  const [rideMapToolsHost, setRideMapToolsHost] =
+    useState<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const startDockRef = usePreviewDockLayout(workspaceRef, panelRef);
@@ -2277,6 +2279,7 @@ export function App({ refresh }: AppProps = {}) {
             }
           >
             <RideMap
+              toolsHost={rideMapToolsHost}
               features={network?.features ?? []}
               route={showRoute}
               position={nav.fix}
@@ -3018,6 +3021,7 @@ export function App({ refresh }: AppProps = {}) {
               </RideGuidance>
               <div className="ride-dock">
                 <div className="ride-dock-content">
+                  <div className="ride-map-tools" ref={setRideMapToolsHost} />
                   {routeAlerts}
                   {freshness && (
                     <RuntimeFreshnessStatus

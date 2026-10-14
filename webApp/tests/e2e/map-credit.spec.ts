@@ -36,7 +36,7 @@ test("tapping the flat-map credit during a ride opens a new tab and the ride car
   await expect(page.locator(".ride-map-fallback .map-wrap")).toBeVisible();
   const before = page.url();
   const link = page
-    .locator(".ride-map-fallback .leaflet-control-attribution a")
+    .locator(".ride-map-tools .leaflet-control-attribution a")
     .first();
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("target", "_blank");
