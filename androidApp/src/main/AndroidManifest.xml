@@ -18,10 +18,12 @@
 
         <activity
             android:name=".map.MapPointPickerActivity"
+            android:windowSoftInputMode="adjustResize"
             android:exported="false" />
 
         <activity
             android:name=".map.TrailRouteMapActivity"
+            android:theme="@style/TrailMapperRouteMapLaunchTheme"
             android:exported="false" />
 
         <activity

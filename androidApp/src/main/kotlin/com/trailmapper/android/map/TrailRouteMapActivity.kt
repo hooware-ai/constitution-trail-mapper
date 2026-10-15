@@ -4,6 +4,10 @@
  */
 package com.trailmapper.android.map
 
+import com.trailmapper.android.trailMapperLayoutDiagnostic
+import com.trailmapper.android.TrailMapperDialogStatusAppearance
+import com.trailmapper.android.TrailMapperAndroidTheme
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -16,6 +20,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +49,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -172,9 +178,17 @@ import com.trailmapper.android.routing.AndroidAccessNetworkProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import android.location.Location
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 
 class TrailRouteMapActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The manifest theme protects the separate system starting window; content keeps AppTheme.
+        setTheme(com.trailmapper.android.R.style.AppTheme)
         super.onCreate(savedInstanceState)
         val route = TrailRouteMapJsonSijko.decode(intent.getStringExtra(EXTRA_ROUTE_JSON))
         val preview = previewRequestFrom(intent)
@@ -185,7 +199,7 @@ class TrailRouteMapActivity : ComponentActivity() {
         val recentTrailRouteStore = AndroidRecentTrailRouteStore(applicationContext)
 
         setContent {
-            MaterialTheme {
+            TrailMapperAndroidTheme(this@TrailRouteMapActivity, protectGestureNavigation = true) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -389,7 +403,7 @@ private fun TrailRouteMapScreen(
     var exerciseDeparted by rememberSaveable(plannedRoute) { mutableStateOf(false) }
     var exerciseCompleted by rememberSaveable(plannedRoute) { mutableStateOf(false) }
     var pendingCompletedSession by remember(plannedRoute) { mutableStateOf<CompletedExerciseSession?>(null) }
-    val directionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val directionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
@@ -783,8 +797,12 @@ private fun TrailRouteMapScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val overlayBudget = routeMapOverlayBudget(maxHeight.value)
+        val headerMaxHeight = overlayBudget.header.dp
+        val controlsMaxHeight = overlayBudget.controls.dp
         GoogleMap(
+            mapColorScheme = trailMapperMapColorScheme(isSystemInDarkTheme()),
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             properties = mapProperties,
@@ -878,9 +896,11 @@ private fun TrailRouteMapScreen(
         Surface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .heightIn(max = headerMaxHeight)
                 .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .trailMapperLayoutDiagnostic("route-header"),
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp,
@@ -888,6 +908,8 @@ private fun TrailRouteMapScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .trailMapperLayoutDiagnostic("route-header-scroll-content")
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -955,11 +977,16 @@ private fun TrailRouteMapScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .heightIn(max = controlsMaxHeight)
                 .navigationBarsPadding()
+                .trailMapperLayoutDiagnostic("route-bottom-controls")
                 .padding(horizontal = 12.dp, vertical = 12.dp)
                 .fillMaxWidth(),
         ) {
-        SnackbarHost(hostState = previewSnackbarHostState)
+        // Feedback remains visible even when Save/Share are reached by scrolling the controls.
+        SnackbarHost(hostState = previewSnackbarHostState,
+            modifier = Modifier.fillMaxWidth().trailMapperLayoutDiagnostic("route-save-feedback"))
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
         RouteMapBottomControls(
             route = route,
             routeInstructions = routeInstructions,
@@ -1092,6 +1119,7 @@ private fun TrailRouteMapScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         }
+        }
     }
 
     renameText?.let { text ->
@@ -1099,6 +1127,7 @@ private fun TrailRouteMapScreen(
             onDismissRequest = { renameText = null },
             title = { Text("Rename route") },
             text = {
+                TrailMapperDialogStatusAppearance("RouteRenameDialog")
                 OutlinedTextField(
                     value = text,
                     onValueChange = { renameText = it },
@@ -1133,11 +1162,16 @@ private fun TrailRouteMapScreen(
     }
 
     if (showDirectionsSheet && routeInstructions.isNotEmpty()) {
+        val directionsContainerColor = BottomSheetDefaults.ContainerColor
         ModalBottomSheet(
             onDismissRequest = { showDirectionsSheet = false },
             sheetState = directionsSheetState,
+            containerColor = directionsContainerColor,
             scrimColor = Color.Transparent,
+            contentWindowInsets = { WindowInsets.safeDrawing },
         ) {
+            TrailMapperDialogStatusAppearance("DirectionsSheetDialog", protectStatusInset = true,
+                navigationProtectionColor = directionsContainerColor)
             DirectionsBottomSheetContent(
                 route = route,
                 instructions = routeInstructions,
@@ -1154,6 +1188,7 @@ private fun TrailRouteMapScreen(
             onDismissRequest = { reviewedAdvisoryId = null },
             title = { Text(advisory.title) },
             text = {
+                TrailMapperDialogStatusAppearance("RouteAdvisoryDialog")
                 Column(
                     modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1788,3 +1823,9 @@ private const val OFF_ROUTE_WARNING_METERS = TrailRouteNavigationSnapshotSijko.O
 private const val METERS_PER_MILE = 1609.344
 private val DIRECTIONS_SHEET_MAX_HEIGHT = 560.dp
 private val ADVISORY_CORRIDOR_COLOR = Color(0xFFCE7019)
+
+internal data class RouteMapOverlayBudget(val header: Float, val controls: Float)
+internal fun routeMapOverlayBudget(height: Float): RouteMapOverlayBudget {
+    val available = height.coerceAtLeast(0f)
+    return RouteMapOverlayBudget(available * 0.4f, available * 0.5f)
+}
