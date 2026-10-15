@@ -187,6 +187,8 @@ import androidx.compose.foundation.layout.union
 
 class TrailRouteMapActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The manifest theme protects the separate system starting window; content keeps AppTheme.
+        setTheme(com.trailmapper.android.R.style.AppTheme)
         super.onCreate(savedInstanceState)
         val route = TrailRouteMapJsonSijko.decode(intent.getStringExtra(EXTRA_ROUTE_JSON))
         val preview = previewRequestFrom(intent)
@@ -197,7 +199,7 @@ class TrailRouteMapActivity : ComponentActivity() {
         val recentTrailRouteStore = AndroidRecentTrailRouteStore(applicationContext)
 
         setContent {
-            TrailMapperAndroidTheme(this@TrailRouteMapActivity) {
+            TrailMapperAndroidTheme(this@TrailRouteMapActivity, protectGestureNavigation = true) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,

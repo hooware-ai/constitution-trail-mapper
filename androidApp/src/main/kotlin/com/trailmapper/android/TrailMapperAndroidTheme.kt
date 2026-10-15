@@ -36,14 +36,14 @@ import androidx.core.view.WindowInsetsCompat
 
 /** Android-owned system bars use the same mode as shared Compose, including mode changes while open. */
 @Composable
-internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Composable () -> Unit) {
+internal fun TrailMapperAndroidTheme(activity: ComponentActivity, protectGestureNavigation: Boolean = false, content: @Composable () -> Unit) {
     val darkTheme = isSystemInDarkTheme()
     val background = trailMapperColorScheme(darkTheme).background
-    DisposableEffect(activity, darkTheme) {
+    DisposableEffect(activity, darkTheme, protectGestureNavigation) {
         // Configure edge-to-edge once per theme, rather than on every content recomposition.
-        applyTrailMapperSystemBars(activity, darkTheme)
+        applyTrailMapperSystemBars(activity, darkTheme, protectGestureNavigation)
         val view = activity.window.decorView
-        val tracker = SystemBarAppearanceTracker(darkTheme, usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme))
+        val tracker = SystemBarAppearanceTracker(darkTheme, usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, true))
         val windowDiagnostic = TrailMapperWindowDiagnostic()
         val snapshots = mutableListOf<Runnable>()
         val listener = ViewTreeObserver.OnPreDrawListener {
@@ -56,9 +56,9 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
             val controller = WindowCompat.getInsetsController(activity.window, view)
             if (tracker.needsRefresh(signature, controller.isAppearanceLightStatusBars,
                     controller.isAppearanceLightNavigationBars,
-                    usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, buttons),
+                    usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, buttons || protectGestureNavigation),
                     usesDarkStatusIcons(Build.VERSION.SDK_INT, darkTheme))) {
-                applyTrailMapperSystemBarAppearance(activity, darkTheme)
+                applyTrailMapperSystemBarAppearance(activity, darkTheme, protectGestureNavigation)
             }
             windowDiagnostic.record(activity, darkTheme, "predraw")
             true
@@ -68,7 +68,7 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
             if (hasFocus) {
                 // Window-manager focus handoff can reset flags after the first Compose frame.
                 tracker.onWindowFocusGained()
-                applyTrailMapperSystemBarAppearance(activity, darkTheme)
+                applyTrailMapperSystemBarAppearance(activity, darkTheme, protectGestureNavigation)
                 view.invalidate()
                 snapshots.forEach(view::removeCallbacks)
                 snapshots.clear()
@@ -111,7 +111,7 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
                 val color = trailMapperColorScheme(true).background
                 Canvas(Modifier.matchParentSize()) {
                     val buttons = tappable.getLeft(density, direction) > 0 || tappable.getRight(density, direction) > 0 || tappable.getBottom(density) > 0
-                    val edges = if (buttons) SystemBarInsets(insets.getLeft(density, direction), insets.getTop(density),
+                    val edges = if (buttons || protectGestureNavigation) SystemBarInsets(insets.getLeft(density, direction), insets.getTop(density),
                         insets.getRight(density, direction), insets.getBottom(density)) else SystemBarInsets(0,0,0,0)
                     val statusEdges = SystemBarInsets(statusInsets.getLeft(density, direction), statusInsets.getTop(density),
                         statusInsets.getRight(density, direction), statusInsets.getBottom(density))
@@ -125,7 +125,7 @@ internal fun TrailMapperAndroidTheme(activity: ComponentActivity, content: @Comp
     }
 }
 
-internal fun applyTrailMapperSystemBars(activity: ComponentActivity, darkTheme: Boolean) {
+internal fun applyTrailMapperSystemBars(activity: ComponentActivity, darkTheme: Boolean, protectGestureNavigation: Boolean = false) {
     if (Build.VERSION.SDK_INT >= 35) {
         // Future Compose AlertDialog windows inherit the same status-only contract. This runtime
         // overlay is not a startup AppTheme override and changes neither navigation nor content.
@@ -135,16 +135,16 @@ internal fun applyTrailMapperSystemBars(activity: ComponentActivity, darkTheme: 
     val dark = trailMapperColorScheme(true).background.toArgb()
     val style = SystemBarStyle.auto(light, dark) { darkTheme }
     activity.enableEdgeToEdge(statusBarStyle = if (Build.VERSION.SDK_INT >= 35) SystemBarStyle.dark(dark) else style, navigationBarStyle = style)
-    applyTrailMapperSystemBarAppearance(activity, darkTheme)
+    applyTrailMapperSystemBarAppearance(activity, darkTheme, protectGestureNavigation)
 }
 
-private fun applyTrailMapperSystemBarAppearance(activity: ComponentActivity, darkTheme: Boolean) {
+private fun applyTrailMapperSystemBarAppearance(activity: ComponentActivity, darkTheme: Boolean, protectGestureNavigation: Boolean) {
     val tappable = ViewCompat.getRootWindowInsets(activity.window.decorView)
         ?.getInsets(WindowInsetsCompat.Type.tappableElement())
     val buttons = tappable?.let { it.left > 0 || it.right > 0 || it.bottom > 0 } ?: false
     WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
         isAppearanceLightStatusBars = usesDarkStatusIcons(Build.VERSION.SDK_INT, darkTheme)
-        isAppearanceLightNavigationBars = !usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, buttons)
+        isAppearanceLightNavigationBars = !usesLightNavigationIcons(Build.VERSION.SDK_INT, darkTheme, buttons || protectGestureNavigation)
     }
     if (Build.VERSION.SDK_INT >= 29) {
         activity.window.isNavigationBarContrastEnforced = Build.VERSION.SDK_INT < 35
