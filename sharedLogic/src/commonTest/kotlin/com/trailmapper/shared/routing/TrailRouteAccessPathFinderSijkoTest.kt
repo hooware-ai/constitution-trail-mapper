@@ -11,6 +11,41 @@ import kotlin.test.assertTrue
 
 class TrailRouteAccessPathFinderSijkoTest {
     @Test
+    fun componentDiversityDoesNotEvictTheNearbySnapThatAvoidsALongHairpinDetour() {
+        val start = MapPoint(40.0, -89.0)
+        val destination = MapPoint(40.003, -88.9998)
+        val hairpin = AccessNetworkFeature(
+            id = "connected-hairpin",
+            roadClass = "S1400",
+            paths = listOf(listOf(start, MapPoint(40.02, -89.0), MapPoint(40.02, -88.9998), MapPoint(40.0, -88.9998))),
+        )
+        val unrelated = (1..3).flatMap { index ->
+            listOf(
+                AccessNetworkFeature(
+                    id = "unrelated-start-$index",
+                    roadClass = "S1400",
+                    paths = listOf(listOf(MapPoint(39.9998, -89.0 - index * 0.0002), MapPoint(40.0002, -89.0 - index * 0.0002))),
+                ),
+                AccessNetworkFeature(
+                    id = "unrelated-destination-$index",
+                    roadClass = "S1400",
+                    paths = listOf(listOf(MapPoint(40.0028, -88.9998 + index * 0.0002), MapPoint(40.0032, -88.9998 + index * 0.0002))),
+                ),
+            )
+        }
+        // Both hairpin arms were eligible nearby candidates before component diversification. The second arm
+        // needs a 17 m estimated connection, avoiding 4 km around the hairpin; unrelated fragments cannot evict it.
+        for (features in listOf(listOf(hairpin), listOf(hairpin) + unrelated)) {
+            val graph = AccessGraphBuilderSijko.buildGraph(features)
+            for ((from, to) in listOf(start to destination, destination to start)) {
+                val route = assertNotNull(TrailRouteAccessPathFinderSijko.findRoute(graph, from, to))
+                assertTrue(route.totalDistanceMeters < 400.0, "Unrelated components caused a ${route.totalDistanceMeters} m detour")
+                assertTrue(route.segments.filter { !it.isRouted }.sumOf { TrailDistanceSijko.pathLengthMeters(it.points) } < 20.0)
+            }
+        }
+    }
+
+    @Test
     fun denseDisconnectedRoadDoesNotCrowdOutTheConnectedRoadAtEitherEndpoint() {
         val endpoint = MapPoint(40.0, -89.0)
         val connectedRoadStart = MapPoint(40.0007, -89.0)

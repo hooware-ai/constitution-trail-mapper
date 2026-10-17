@@ -244,11 +244,12 @@ object TrailRouteAdvisorySijko {
         val estimated = route.segments.filter { !it.isRouted }
         if (closure.isCrossing) {
             val frame = frameOf(closure) ?: return false
-            val (low, high) = intervalOf(frame, closure)
             // Follow the source trail across the known crossing. A perpendicular road or unrelated nearby
             // connection is not trail travel; no unpublished closure interval is inferred around the crossing.
             return estimated.any { segment -> segment.points.zipWithNext().any { (start, end) ->
-                spansPosition(frame, start, end, low, high)
+                val alignment = frame.alignment(start, end)
+                alignment != null && alignment >= LongitudinalCosine &&
+                    TrailDistanceSijko.projectToSegment(closure.closedFrom, start, end).distanceMeters <= CrossingToleranceMeters
             } }
         }
         if (closure.id == UptownAdvisoryId) {
@@ -257,7 +258,7 @@ object TrailRouteAdvisorySijko {
                 val frame = TrailRouteSourceFrame(from, to)
                 estimated.any { segment ->
                     segment.points.any { insideInterval(frame, it, 0.0, frame.length, GraphReachMeters) } ||
-                        travelsAlongPath(frame, segment.points, 0.0, frame.length, GraphReachMeters)
+                        estimatedTravelsAlongSection(frame, segment.points, from, to)
                 }
             }
         }
@@ -267,7 +268,21 @@ object TrailRouteAdvisorySijko {
         return estimated.any { segment ->
             // An estimated hop has no source: it is judged with the graph's own reach.
             segment.points.any { insideInterval(frame, it, low, high, GraphReachMeters) } ||
-                travelsAlongPath(frame, segment.points, low, high, GraphReachMeters)
+                estimatedTravelsAlongSection(frame, segment.points, closure.closedFrom, closure.closedTo)
+        }
+    }
+
+    /** Judge the part near the finite closed section, even when a long connector's endpoints lie farther away. */
+    private fun estimatedTravelsAlongSection(frame: TrailRouteSourceFrame, points: List<MapPoint>, from: MapPoint, to: MapPoint): Boolean {
+        val low = minOf(frame.along(from), frame.along(to))
+        val high = maxOf(frame.along(from), frame.along(to))
+        return points.zipWithNext().any { (start, end) ->
+            val alignment = frame.alignment(start, end)
+            val a = frame.along(start)
+            val b = frame.along(end)
+            alignment != null && alignment >= LongitudinalCosine &&
+                minOf(maxOf(a, b), high) - maxOf(minOf(a, b), low) > SectionOverlapEpsilonMeters &&
+                segmentDistanceMeters(start, end, from, to) <= GraphReachMeters
         }
     }
 

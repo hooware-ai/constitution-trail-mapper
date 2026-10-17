@@ -1126,6 +1126,31 @@ class WebRoutingBridgeTest {
         }
     }
 
+    @Test fun aSlightlyOffLineStartOrDestinationConnectionCannotNavigateAcrossTheKnownCamelbackCrossing() {
+        val closure = TrailRouteClosureSijko.camelbackCrossing
+        val south = MapPoint(40.49808950410614, -88.9833938123798)
+        val north = MapPoint(40.49835871554693, -88.98342392332951)
+        val destination = MapPoint(40.49934582416316, -88.9835083409541)
+        // Only the north tail is mapped. The actual planner estimates a 30 m connection from the south,
+        // passing within 0.2 m of the closed crossing despite its start being 0.6 m off the source line.
+        val source = """{"layers":[{"features":[{"id":"54:1305","name":"North of Camelback","status":"Existing","routeRoles":["TrailBranches"],"facilityType":"Off-Road Trail","paths":[[[${north.longitude},${north.latitude}],[${destination.longitude},${destination.latitude}]]]}]}]}"""
+        for ((from, to) in listOf(south to destination, destination to south)) {
+            val bridge = loaded(source, trust = false)
+            assertTrue(plan(bridge, from = from, to = to, at = closure.activeFromEpochMillis - 1)["canNavigate"]!!.jsonPrimitive.boolean)
+            val result = plan(bridge, from = from, to = to, at = closure.activeFromEpochMillis)
+            assertNotEquals(JsonNull, result["route"])
+            assertEquals("current", result["network"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+            assertEquals(1, result["accessGaps"]!!.jsonArray.size)
+            assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+            assertEquals(closure.id, result["closures"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content)
+            val snapshot = call(bridge, buildJsonObject {
+                put("op", "snapshot"); put("route", result.getValue("route")); put("point", Json.encodeToJsonElement(from))
+                put("now", closure.activeFromEpochMillis)
+            })
+            assertFalse(snapshot["ok"]!!.jsonPrimitive.boolean)
+        }
+    }
+
     private fun mapPoint(bridge: WebRoutingBridge, point: MapPoint, proposed: Boolean = false, at: Long = now): JsonObject =
         call(bridge, buildJsonObject {
             put("op", "mapPoint"); put("point", Json.encodeToJsonElement(point)); put("proposed", proposed); put("now", at)

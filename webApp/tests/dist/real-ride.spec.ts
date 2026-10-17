@@ -107,14 +107,17 @@ test("a real catalog trip reaches the ride camera without hiding estimated acces
   ).toBeVisible();
 });
 
-test("the same real route cannot Start when the estimated connection assumption is off", async ({
+test("the same real route can Start without a private estimated-connection override", async ({
   page,
   request,
 }) => {
-  test.skip(
-    !county || privateMode,
-    "requires the strict county review artifact",
-  );
+  test.skip(!county || privateMode, "requires the default county artifact");
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { watchPosition: () => 1, clearWatch() {} },
+    });
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Go somewhere/ })).toBeVisible({
@@ -127,7 +130,19 @@ test("the same real route cannot Start when the estimated connection assumption 
   await planCatalogRoute(page);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(page.locator(".test-mode-banner")).toHaveCount(0);
-  await expect(page.locator(".ride-map, .ride-map-fallback")).toHaveCount(0);
+  await expect(page.locator(".start-reason")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Ride in progress", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Stop navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
 });

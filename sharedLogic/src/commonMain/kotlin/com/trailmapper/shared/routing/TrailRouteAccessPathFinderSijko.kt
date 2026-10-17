@@ -88,12 +88,15 @@ object TrailRouteAccessPathFinderSijko {
                 snapDistanceMeters = snap.accessDistanceMeters,
             )
         }
-        // Several nearby edges can belong to the same disconnected street. Check
-        // other road components before using the remaining budget on more of it.
-        val nearestPerComponent = eligibleSnaps.distinctBy { snap -> components[snap.edge.fromNodeId] }
-        return (nearestPerComponent + eligibleSnaps)
-            .distinct()
+        // Preserve nearby alternatives on the same road (for example both arms of a hairpin).
+        // Add a bounded set from other components when disconnected fragments fill those nearest slots.
+        val nearest = eligibleSnaps.take(snapCandidateLimit)
+        val represented = nearest.map { components[it.edge.fromNodeId] }.toSet()
+        val alternatives = eligibleSnaps
+            .filter { components[it.edge.fromNodeId] !in represented }
+            .distinctBy { components[it.edge.fromNodeId] }
             .take(snapCandidateLimit)
+        return (nearest + alternatives)
             .map { snap ->
                 TrailRouteEndpointAccessSijko.estimated(
                     endpointPoint = endpointPoint,
