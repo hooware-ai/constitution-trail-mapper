@@ -148,13 +148,15 @@ any feature referenced by those rules require an explicit remapping review.
 
 `runReviewedRouterControls` in `tools/lib/reviewed-router-controls.mjs` verifies the
 checkout's core input/output manifest before and after running actual Kotlin
-`dispatch`. It initializes the exact admitted package with estimated access and
+`dispatch`. It initializes the exact admitted package with the estimated-connection override and
 serialized-route trust disabled. Access packages use the same hash-verifying base and
 endpoint-local tile loader as the worker, with tile loads before each operation;
 the report records exactly which admitted parts were loaded. Required control categories are point, loop,
 disconnected, unverified-access, closure and saved-route. Category-specific behavior
-checks cannot be replaced with a generic successful-dispatch assertion. Caller-owned
-assertions pin additional exact expected fields. Every accepted close must have a
+checks cannot be replaced with a generic successful-dispatch assertion. The unverified-access
+category requires an unrouted Access segment matching each reported gap; an estimated
+connection can allow Start without becoming verified geometry. Caller-owned assertions
+pin eligibility and additional exact expected fields. Every accepted close must have a
 gate control naming its exact closure and affected features; every accepted reopen
 must have a navigable saved-route control on its exact affected features.
 Saved routes come from preceding

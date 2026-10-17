@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { fix, simulateDevice } from "../webkit/support";
 
 // A saved route rebuilt from the owner's screenshot (start 111 ft, "Near S Hershey Rd" 37 ft, "Near Prospect Ave" under 1 ft,
 // destination 90 ft), opened through the real preview. Notification cards are temporarily hidden; genuine interior
@@ -85,13 +86,11 @@ async function openSeeded(page: Page) {
   ).toBeVisible();
 }
 
-test("connection notification cards leave no headings or rows while the same estimated route remains blocked", async ({
+test("start, intermediate and end connections allow navigation without notification cards or a confirmation hurdle", async ({
   page,
-}) => {
-  test.skip(
-    process.env.TRAIL_ASSUME_ESTIMATED_CONNECTIONS === "1",
-    "asserts the strict Start state",
-  );
+}, info) => {
+  await page.clock.install();
+  await simulateDevice(page);
   await openSeeded(page);
   await expect(page.locator(".access-connections")).toHaveCount(0);
   await expect(page.locator("#connections-title")).toHaveCount(0);
@@ -101,16 +100,68 @@ test("connection notification cards leave no headings or rows while the same est
   ).toHaveCount(0);
   await expect(page.getByText(/select one to see it/)).toHaveCount(0);
   await expect(page.locator(".connection-marker")).toHaveCount(1);
-  // Honest status: three connections are still estimated (start, the road-to-trail step, destination) and Start is blocked.
+  // All three connections remain estimated; the sub-foot mapped join is not a separate gap.
   await expect(
     page.locator('.map-wrap[data-estimated-connections="3"]'),
   ).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(
     page.getByText(/still has estimated connections that are not confirmed/),
+  ).toHaveCount(0);
+  await expect(page.locator(".start-reason")).toHaveCount(0);
+  await expect(
+    page.locator(".warning").filter({ hasText: /estimated|unverified/i }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: info.outputPath("three-connections-start-enabled.png"),
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Ride in progress", exact: true }),
   ).toBeVisible();
+  // Drive the existing route through its driveway, intermediate connector and destination.
+  // Browser-scoped synthetic GPS only; no real location or user record is changed.
+  const progress: number[] = [];
+  for (const north of [
+    -111 * FT,
+    0,
+    75,
+    150,
+    150 + 37 * FT,
+    225,
+    300,
+    375,
+    450,
+    525,
+    600,
+    675,
+    750,
+    800,
+    800 + 90 * FT,
+  ]) {
+    await page.clock.fastForward(30_000);
+    await fix(page, 40.5 + north / 111_195, -88.95);
+    await expect(page.locator(".guidance.navigating")).toBeVisible();
+    const stored = await page.evaluate(() =>
+      JSON.parse(
+        localStorage.getItem(
+          "trail-mapper.fixture:trail-mapper.web.active-ride.v1",
+        )!,
+      ),
+    );
+    progress.push(stored.routeProgressMeters);
+  }
+  expect(progress.every((p, i) => i === 0 || p >= progress[i - 1])).toBe(true);
+  expect(progress.at(-1)).toBeGreaterThan(800);
+  await info.attach("connector-progress.json", {
+    body: JSON.stringify(progress),
+    contentType: "application/json",
+  });
 });
 
 test("the remaining unverified map marker works by keyboard without a notification card", async ({

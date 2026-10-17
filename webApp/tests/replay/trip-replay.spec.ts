@@ -323,6 +323,47 @@ for (const journey of journeys)
     expect(errors).toEqual([]);
   });
 
+test("[simulated trip] stopped movement and small GPS jitter keep progress stable, then movement resumes", async ({
+  page,
+}) => {
+  await seedRide(page, square, 1000);
+  await page.goto("/");
+  const initial = coordinate([0, 1000]);
+  await acceptedFix(page, initial.latitude, initial.longitude);
+  await page.clock.fastForward(5000);
+  const moving = coordinate([20, 1000]);
+  await acceptedFix(page, moving.latitude, moving.longitude);
+  const before = await rideState(page);
+  for (const point of [
+    [20, 1000],
+    [21, 1001],
+    [19, 999],
+    [20, 1000],
+  ] as const) {
+    await page.clock.fastForward(10_000);
+    const at = coordinate(point);
+    await acceptedFix(page, at.latitude, at.longitude);
+    await expectPhase(page, "navigating");
+  }
+  const stopped = await rideState(page);
+  expect(stopped.routeProgressMeters).toBeGreaterThanOrEqual(
+    before.routeProgressMeters,
+  );
+  expect(stopped.routeProgressMeters - before.routeProgressMeters).toBeLessThan(
+    5,
+  );
+  expect(
+    stopped.creditedDistanceMeters - before.creditedDistanceMeters,
+  ).toBeLessThan(5);
+  await page.clock.fastForward(5000);
+  const resumed = coordinate([40, 1000]);
+  await acceptedFix(page, resumed.latitude, resumed.longitude);
+  await expectPhase(page, "navigating");
+  expect((await rideState(page)).routeProgressMeters).toBeGreaterThan(
+    stopped.routeProgressMeters + 10,
+  );
+});
+
 test("[simulated trip] sustained departure needs confirmation, then a mapped reroute and fresh fix", async ({
   page,
 }) => {

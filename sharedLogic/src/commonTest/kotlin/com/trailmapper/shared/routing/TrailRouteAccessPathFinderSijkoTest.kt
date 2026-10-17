@@ -11,6 +11,47 @@ import kotlin.test.assertTrue
 
 class TrailRouteAccessPathFinderSijkoTest {
     @Test
+    fun denseDisconnectedRoadDoesNotCrowdOutTheConnectedRoadAtEitherEndpoint() {
+        val endpoint = MapPoint(40.0, -89.0)
+        val connectedRoadStart = MapPoint(40.0007, -89.0)
+        val destination = MapPoint(40.006, -89.0)
+        val disconnectedLoop = listOf(
+            MapPoint(39.9998, -89.0003),
+            MapPoint(39.9998, -88.9997),
+            MapPoint(40.0002, -88.9997),
+            MapPoint(40.0002, -89.0003),
+            MapPoint(39.9998, -89.0003),
+        )
+        val graph = AccessGraphBuilderSijko.buildGraph(
+            disconnectedLoop.zipWithNext().mapIndexed { index, (first, second) ->
+                AccessNetworkFeature(
+                    id = "nearby-disconnected-street-$index",
+                    roadClass = "S1400",
+                    paths = listOf(listOf(first, second)),
+                )
+            } + AccessNetworkFeature(
+                id = "connected-street",
+                roadClass = "S1400",
+                paths = listOf(listOf(connectedRoadStart, destination)),
+            ),
+        )
+        // All four nearer edges are one disconnected street component, even though
+        // the source data gives each edge a different feature ID.
+        assertTrue(NearestTrailSnapSijko.nearestSnaps(graph, endpoint, 4)
+            .all { it.edge.sourceFeatureId != "connected-street" })
+
+        listOf(endpoint to destination, destination to endpoint).forEach { (start, end) ->
+            val route = assertNotNull(
+                TrailRouteAccessPathFinderSijko.findRoute(graph, start, end),
+                "A nearby connected street must remain a candidate when nearer edges are disconnected",
+            )
+            assertTrue(route.segments.any { it.isRouted && connectedRoadStart in it.points })
+            assertTrue(route.segments.filter { !it.isRouted }
+                .sumOf { TrailDistanceSijko.pathLengthMeters(it.points) } < 80.0)
+        }
+    }
+
+    @Test
     fun choosesConnectedRoadSnapWhenNearestRoadSnapIsDisconnected() {
         val start = MapPoint(latitude = 40.0, longitude = -89.0)
         val disconnectedRoadStart = MapPoint(latitude = 40.00005, longitude = -89.0)

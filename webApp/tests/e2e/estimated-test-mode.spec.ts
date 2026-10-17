@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 
 // The PRIVATE TEST MODE (TRAIL_ASSUME_ESTIMATED_CONNECTIONS=1 at build time) assumes estimated road-to-trail connections are
-// traversable. Default builds are strict. The same synthetic route (a start 365 ft from the nearest mapped trail) is checked
+// traversable. Default builds also allow navigation while preserving the unverified geometry. The same synthetic route
+// (a start 365 ft from the nearest mapped trail) is checked
 // both ways: each test runs only in the build it describes.
 const testMode = process.env.TRAIL_ASSUME_ESTIMATED_CONNECTIONS === "1";
 
@@ -42,16 +43,24 @@ async function planFromLocation(page: Page, latitude: number) {
 const start = (page: Page) =>
   page.getByRole("button", { name: "Start navigation", exact: true });
 
-test("default build: no test banner, the estimated connection blocks Start", async ({
+test("default build: an ordinary start connection permits navigation without a warning hurdle", async ({
   page,
 }) => {
-  test.skip(testMode, "runs in the default (strict) build only");
+  test.skip(testMode, "runs in the default build only");
   await planFromLocation(page, 40.489);
   await expect(page.getByText(/PRIVATE TEST MODE/)).toHaveCount(0);
   await expect(
     page.locator('.map-wrap[data-estimated-connections="1"]'),
   ).toHaveCount(1);
-  await expect(start(page)).toBeDisabled();
+  await expect(page.locator(".start-reason")).toHaveCount(0);
+  await expect(
+    page.locator(".warning").filter({ hasText: /estimated|unverified/i }),
+  ).toHaveCount(0);
+  await expect(start(page)).toBeEnabled();
+  await start(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Ride in progress", exact: true }),
+  ).toBeVisible();
 });
 
 test("private test mode: preview cards are hidden, foreground limits remain, and the same estimated connection can Start", async ({

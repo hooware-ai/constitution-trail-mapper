@@ -173,7 +173,11 @@ export async function reviewedRouterFixture({
         proposed: false,
         now: before,
       },
-      assertions: [a(["canNavigate"], false)],
+      assertions: [
+        a(["canNavigate"], true),
+        a(["route", "segments", "0", "type"], "Access"),
+        a(["route", "segments", "0", "isRouted"], false),
+      ],
     },
     {
       id: "preclosure",

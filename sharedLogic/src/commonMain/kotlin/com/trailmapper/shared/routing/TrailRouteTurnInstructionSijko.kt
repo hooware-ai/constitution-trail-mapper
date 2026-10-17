@@ -9,39 +9,51 @@ import kotlin.math.abs
 object TrailRouteTurnInstructionSijko {
     fun instructionsFor(route: TrailRoute): List<TrailRouteInstruction> {
         val legs = TrailRouteInstructionLegSijko.legsFor(route)
-        if (legs.isEmpty()) {
-            return emptyList()
-        }
+        val firstMapped = legs.firstOrNull { it.isRouted } ?: return emptyList()
 
         val instructions = mutableListOf(
             TrailRouteInstruction(
                 maneuver = TrailRouteInstructionManeuver.Start,
-                text = "Start on ${legs.first().routeLabel()}",
+                text = if (legs.first().isRouted) "Start on ${firstMapped.routeLabel()}" else "Head toward ${firstMapped.routeLabel()}",
                 distanceMeters = 0.0,
                 point = legs.first().start,
             ),
         )
-        var mappedDistanceSinceLastInstruction = 0.0
+        var distanceSinceLastInstruction = 0.0
 
         for (index in 1 until legs.size) {
             val previous = legs[index - 1]
             val current = legs[index]
             val next = legs.getOrNull(index + 1)
-            mappedDistanceSinceLastInstruction += previous.distanceMeters
+            distanceSinceLastInstruction += previous.distanceMeters
+
+            // A connection without mapped geometry still takes travel distance. Never infer a turn or a
+            // named road from it, or compare bearings on opposite sides as though they met at a junction.
+            if (!current.isRouted) continue
+            if (!previous.isRouted) {
+                instructions += TrailRouteInstruction(
+                    maneuver = TrailRouteInstructionManeuver.Continue,
+                    text = "Continue onto ${current.routeLabel()}",
+                    distanceMeters = distanceSinceLastInstruction,
+                    point = current.start,
+                )
+                distanceSinceLastInstruction = 0.0
+                continue
+            }
 
             // A reversal always gets its own instruction, even on a short unnamed spur.
             if (current.startsWithReversal) {
                 instructions += TrailRouteInstruction(
                     maneuver = TrailRouteInstructionManeuver.TurnAround,
                     text = "Turn around on ${current.routeLabel()}",
-                    distanceMeters = mappedDistanceSinceLastInstruction,
+                    distanceMeters = distanceSinceLastInstruction,
                     point = current.start,
                 )
-                mappedDistanceSinceLastInstruction = 0.0
+                distanceSinceLastInstruction = 0.0
                 continue
             }
 
-            if (TrailRouteInstructionTransientLegSijko.shouldDeferTransition(current, next)) {
+            if (TrailRouteInstructionTransientLegSijko.shouldDeferTransition(current, next?.takeIf { it.isRouted })) {
                 continue
             }
 
@@ -60,14 +72,14 @@ object TrailRouteTurnInstructionSijko {
                         previous = previous,
                         current = current,
                     ),
-                    distanceMeters = mappedDistanceSinceLastInstruction,
+                    distanceMeters = distanceSinceLastInstruction,
                     point = current.start,
                 )
-                mappedDistanceSinceLastInstruction = 0.0
+                distanceSinceLastInstruction = 0.0
             }
         }
 
-        mappedDistanceSinceLastInstruction += legs.last().distanceMeters
+        distanceSinceLastInstruction += legs.last().distanceMeters
         instructions += TrailRouteInstruction(
             maneuver = TrailRouteInstructionManeuver.Arrive,
             text = if (route.kind == TrailRouteKind.ExerciseLoop) {
@@ -75,7 +87,7 @@ object TrailRouteTurnInstructionSijko {
             } else {
                 "Arrive at destination"
             },
-            distanceMeters = mappedDistanceSinceLastInstruction,
+            distanceMeters = distanceSinceLastInstruction,
             point = route.destinationEndpoint() ?: legs.last().end,
         )
 

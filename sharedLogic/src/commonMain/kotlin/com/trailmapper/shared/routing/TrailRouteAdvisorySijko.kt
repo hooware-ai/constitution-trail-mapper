@@ -239,14 +239,32 @@ object TrailRouteAdvisorySijko {
         return TrailRouteClosureSijko.activeClosures(nowEpochMillis).any { entersClosedSection(route, it) }
     }
 
-    /** The same, for one closure (false for a closure with no mapped section). */
+    /** The same, for one closure, using only its existing mapped section or source crossing geometry. */
     fun entersClosedSection(route: TrailRoute, closure: TrailRouteClosure): Boolean {
-        if (!closure.boundsProjected || closure.isCrossing) {
-            return false
+        val estimated = route.segments.filter { !it.isRouted }
+        if (closure.isCrossing) {
+            val frame = frameOf(closure) ?: return false
+            val (low, high) = intervalOf(frame, closure)
+            // Follow the source trail across the known crossing. A perpendicular road or unrelated nearby
+            // connection is not trail travel; no unpublished closure interval is inferred around the crossing.
+            return estimated.any { segment -> segment.points.zipWithNext().any { (start, end) ->
+                spansPosition(frame, start, end, low, high)
+            } }
         }
+        if (closure.id == UptownAdvisoryId) {
+            // Uptown bends around the block: use the established source polyline, never a chord between its bounds.
+            return uptownCorridor.points.zipWithNext().any { (from, to) ->
+                val frame = TrailRouteSourceFrame(from, to)
+                estimated.any { segment ->
+                    segment.points.any { insideInterval(frame, it, 0.0, frame.length, GraphReachMeters) } ||
+                        travelsAlongPath(frame, segment.points, 0.0, frame.length, GraphReachMeters)
+                }
+            }
+        }
+        if (!closure.boundsProjected) return false
         val frame = frameOf(closure) ?: return false
         val (low, high) = intervalOf(frame, closure)
-        return route.segments.filter { !it.isRouted }.any { segment ->
+        return estimated.any { segment ->
             // An estimated hop has no source: it is judged with the graph's own reach.
             segment.points.any { insideInterval(frame, it, low, high, GraphReachMeters) } ||
                 travelsAlongPath(frame, segment.points, low, high, GraphReachMeters)

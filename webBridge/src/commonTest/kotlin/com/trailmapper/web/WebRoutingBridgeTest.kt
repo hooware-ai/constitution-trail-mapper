@@ -86,11 +86,11 @@ class WebRoutingBridgeTest {
         assertFalse(plan(loaded())["proposed"]!!.jsonPrimitive.boolean)
     }
 
-    @Test fun estimatedAccessCanBePreviewedButCannotStartNavigation() {
+    @Test fun estimatedStartCanNavigateWithoutClaimingTheConnectionIsMapped() {
         val bridge = loaded()
         val result = plan(bridge, from = MapPoint(40.4, -89.001))
         assertNotEquals(JsonNull, result["route"])
-        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
         assertTrue(result["segments"]!!.jsonArray.all { it.jsonObject["isRouted"]!!.jsonPrimitive.boolean })
         val raw = Json.decodeFromJsonElement<TrailRoute>(result.getValue("route"))
         assertTrue(raw.segments.any { !it.isRouted })
@@ -102,7 +102,7 @@ class WebRoutingBridgeTest {
         val snapshot = call(bridge, buildJsonObject {
             put("op", "snapshot"); put("route", result.getValue("route")); put("point", Json.encodeToJsonElement(start)); put("now", now)
         })
-        assertFalse(snapshot["ok"]!!.jsonPrimitive.boolean)
+        assertTrue(snapshot["ok"]!!.jsonPrimitive.boolean)
     }
 
     @Test fun estimatedGapCannotBeBridgedByDrawableMergeTolerance() {
@@ -122,7 +122,7 @@ class WebRoutingBridgeTest {
         val result = call(loaded(), buildJsonObject {
             put("op", "inspect"); put("route", Json.encodeToJsonElement(route)); put("now", now)
         })
-        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
         val drawable = result["segments"]!!.jsonArray
         assertEquals(2, drawable.size)
         assertEquals(Json.encodeToJsonElement(firstTrail.points), drawable[0].jsonObject["points"])
@@ -154,7 +154,7 @@ class WebRoutingBridgeTest {
         }
         assertEquals(243.275, result["accessDistance"]!!.jsonPrimitive.double)
         assertEquals(43.0, gaps.sumOf { it["distanceMeters"]!!.jsonPrimitive.double }, 1e-8)
-        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
         assertTrue(result["warnings"]!!.jsonArray.isEmpty())
         assertEquals(3, result["segments"]!!.jsonArray.size)
         assertEquals(result, inspect(route))
@@ -183,7 +183,7 @@ class WebRoutingBridgeTest {
             )
             val result = inspect(route)
             assertEquals(gapMeters > 0.01, result["accessGaps"]!!.jsonArray.isNotEmpty())
-            assertEquals(gapMeters <= 0.01, result["canNavigate"]!!.jsonPrimitive.boolean)
+            assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
             assertEquals(listOf(Json.encodeToJsonElement(trail.points)), result["segments"]!!.jsonArray.map { it.jsonObject["points"] })
         }
     }
@@ -860,7 +860,7 @@ class WebRoutingBridgeTest {
             val gap = result["accessGaps"]!!.jsonArray.single().jsonObject
             assertEquals("interior", gap["kind"]!!.jsonPrimitive.content)
             assertEquals(join, gap["distanceMeters"]!!.jsonPrimitive.double, 1e-3)
-            assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+            assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
         }
     }
 
@@ -947,8 +947,9 @@ class WebRoutingBridgeTest {
         val kept = Json.decodeFromJsonElement<TrailRoute>(result["route"]!!)
         assertEquals(4, kept.segments.count { !it.isRouted })
         assertEquals(route.totalDistanceMeters, result["distance"]!!.jsonPrimitive.double, 1e-9)
-        // Strict Start is still blocked by the remaining estimated connections, and the private test mode still warns about all three.
-        assertFalse(result["canNavigate"]!!.jsonPrimitive.boolean)
+        // Missing map connections do not block Start, and remain honest metadata without a generic warning.
+        assertTrue(result["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(result["warnings"]!!.jsonArray.isEmpty())
         val assumed = inspect(route, loaded(assume = true))
         assertTrue(assumed["canNavigate"]!!.jsonPrimitive.boolean)
         assertTrue(assumed["warnings"]!!.jsonArray.any { it.jsonPrimitive.content.contains("3 estimated connection") })
@@ -973,7 +974,7 @@ class WebRoutingBridgeTest {
         assertEquals("Along the route", label(TrailRouteSegmentType.Access, TrailRouteSegmentType.Trail, null, true))
     }
 
-    // ---- PRIVATE TEST MODE: estimated connections assumed traversable (default off) ----
+    // ---- Estimated connections navigate normally; legacy private review annotations remain explicit. ----
 
     private fun gappedRoute(roles: Set<TrailNetworkRole> = emptySet()): TrailRoute {
         val gapStart = MapPoint(40.3999, -89.0)
@@ -984,12 +985,12 @@ class WebRoutingBridgeTest {
         )
     }
 
-    @Test fun estimatedConnectionsBlockStartByDefaultAndOnlyAnExplicitTestModeAllowsIt() {
+    @Test fun estimatedConnectionsNavigateByDefaultWithoutEnablingThePrivateTestMode() {
         val route = gappedRoute()
         val strict = inspect(route)
         val explicitOff = inspect(route, loaded(assume = false))
         val assumed = inspect(route, loaded(assume = true))
-        assertFalse(strict["canNavigate"]!!.jsonPrimitive.boolean)
+        assertTrue(strict["canNavigate"]!!.jsonPrimitive.boolean)
         assertEquals(strict, explicitOff)
         assertFalse(strict["assumedConnections"]!!.jsonPrimitive.boolean)
         assertTrue(assumed["canNavigate"]!!.jsonPrimitive.boolean)
@@ -1006,12 +1007,14 @@ class WebRoutingBridgeTest {
         assertTrue(strict["warnings"]!!.jsonArray.none { it.jsonPrimitive.content.contains("TEST MODE") })
     }
 
-    @Test fun testModeIsResetByTheNextInitializeAndIsNeverImpliedByTrustingSerializedRoutes() {
+    @Test fun testModeAnnotationIsResetByTheNextInitializeAndIsNeverImpliedByTrustingSerializedRoutes() {
         val bridge = loaded(assume = true)
         assertTrue(inspect(gappedRoute(), bridge)["canNavigate"]!!.jsonPrimitive.boolean)
         call(bridge, buildJsonObject { put("op", "initialize"); put("trails", fixture); put("now", now) })
         assertFalse(inspect(gappedRoute(), bridge)["canNavigate"]!!.jsonPrimitive.boolean)
-        assertFalse(inspect(gappedRoute(), loaded(trust = true))["canNavigate"]!!.jsonPrimitive.boolean)
+        val ordinary = inspect(gappedRoute(), loaded(trust = true))
+        assertTrue(ordinary["canNavigate"]!!.jsonPrimitive.boolean)
+        assertFalse(ordinary["assumedConnections"]!!.jsonPrimitive.boolean)
     }
 
     @Test fun testModeStillBlocksProposedTrailsAndStaleNetworks() {
@@ -1024,17 +1027,103 @@ class WebRoutingBridgeTest {
         assertFalse(stale["canNavigate"]!!.jsonPrimitive.boolean)
     }
 
-    @Test fun testModeLetsAnEstimatedGapRouteTakeNavigationSnapshotsButStrictStillRefuses() {
+    @Test fun defaultAndPrivateReviewRoutesBothAllowEstimatedConnectionNavigationSnapshots() {
         val route = gappedRoute()
         fun snap(bridge: WebRoutingBridge) = call(bridge, buildJsonObject {
             put("op", "snapshot"); put("route", Json.encodeToJsonElement(route)); put("point", Json.encodeToJsonElement(start))
             put("progress", 0.0); put("accuracy", 5.0); put("timestamp", now); put("now", now); put("resume", true)
         })
         val strict = snap(loaded())
-        assertEquals(false, strict["ok"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals(true, strict["ok"]?.jsonPrimitive?.booleanOrNull)
         val assumed = snap(loaded(assume = true))
         assertNotEquals(false, assumed["ok"]?.jsonPrimitive?.booleanOrNull)
         assertTrue(assumed["canNavigate"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun startDestinationAndInteriorEstimatedConnectionsKeepContinuousNavigationProgress() {
+        for (position in listOf("start", "destination", "interior")) {
+            fun segment(from: Double, to: Double, mapped: Boolean) = TrailRouteSegment(
+                type = if (mapped) TrailRouteSegmentType.Trail else TrailRouteSegmentType.Access,
+                points = listOf(northMeters(from), northMeters(to)), isRouted = mapped,
+                name = if (mapped) "Test Trail" else null,
+            )
+            val segments = when (position) {
+                "start" -> listOf(segment(0.0, 30.0, false), segment(30.0, 330.0, true))
+                "destination" -> listOf(segment(0.0, 300.0, true), segment(300.0, 330.0, false))
+                else -> listOf(segment(0.0, 150.0, true), segment(150.0, 180.0, false), segment(180.0, 330.0, true))
+            }
+            val route = TrailRoute(segments = segments, totalDistanceMeters = 330.0, ordinaryAccessDistanceMeters = 30.0, totalCost = 1.0)
+            val bridge = loaded()
+            val description = inspect(route, bridge)
+            assertTrue(description["canNavigate"]!!.jsonPrimitive.boolean, position)
+            assertFalse(description["assumedConnections"]!!.jsonPrimitive.boolean, position)
+            assertTrue(description["warnings"]!!.jsonArray.isEmpty(), position)
+            assertEquals(1, description["accessGaps"]!!.jsonArray.size, position)
+            assertFalse(Json.decodeFromJsonElement<TrailRoute>(description["route"]!!).segments.single { !it.isRouted }.isRouted)
+            var state: JsonElement = JsonNull
+            for (meters in 0..330 step 10) {
+                val timestamp = now + meters * 1_000L
+                val result = call(bridge, buildJsonObject {
+                    put("op", "snapshot"); put("route", Json.encodeToJsonElement(route)); put("point", Json.encodeToJsonElement(northMeters(meters.toDouble())))
+                    put("state", state); put("accuracy", 5.0); put("timestamp", timestamp); put("now", timestamp)
+                    put("resume", meters == 0)
+                })
+                assertTrue(result["ok"]!!.jsonPrimitive.boolean, "$position at $meters m: $result")
+                assertEquals(meters.toDouble(), result["progress"]!!.jsonPrimitive.double, 0.001, position)
+                assertEquals(330.0 - meters, result["remaining"]!!.jsonPrimitive.double, 0.001, position)
+                assertFalse(result["offRoute"]!!.jsonPrimitive.boolean, "$position at $meters m")
+                state = result["state"]!!
+            }
+        }
+    }
+
+    @Test fun anEntirelyEstimatedLineDoesNotBecomeAMappedNavigationRoute() {
+        val route = TrailRoute(
+            segments = listOf(TrailRouteSegment(TrailRouteSegmentType.Access, listOf(start, finish), isRouted = false)),
+            totalDistanceMeters = 3000.0, ordinaryAccessDistanceMeters = 3000.0, totalCost = 1.0,
+        )
+        assertFalse(inspect(route)["canNavigate"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun estimatedConnectionsCannotEnterAnActiveMappedClosureAtStartEndOrInBetween() {
+        val closure = TrailRouteClosureSijko.willowTrailCrossing
+        val inside = MapPoint(
+            (closure.closedFrom.latitude + closure.closedTo.latitude) / 2,
+            (closure.closedFrom.longitude + closure.closedTo.longitude) / 2,
+        )
+        fun segment(from: MapPoint, to: MapPoint, mapped: Boolean) = TrailRouteSegment(
+            if (mapped) TrailRouteSegmentType.Trail else TrailRouteSegmentType.Access,
+            listOf(from, to), isRouted = mapped,
+        )
+        val before = segment(closure.sourceLine.first(), closure.closedFrom, true)
+        val after = segment(closure.closedTo, closure.sourceLine.last(), true)
+        val cases = listOf(
+            listOf(segment(inside, closure.closedFrom, false), before.copy(points = before.points.reversed())),
+            listOf(before, segment(closure.closedFrom, inside, false)),
+            listOf(before, segment(closure.closedFrom, closure.closedTo, false), after),
+        )
+        for (segments in cases) {
+            val route = TrailRoute(
+                segments = segments, totalDistanceMeters = segments.sumOf { TrailDistanceSijko.pathLengthMeters(it.points) },
+                ordinaryAccessDistanceMeters = segments.filter { !it.isRouted }.sumOf { TrailDistanceSijko.pathLengthMeters(it.points) }, totalCost = 1.0,
+            )
+            val bridge = loaded()
+            fun description(at: Long) = call(bridge, buildJsonObject {
+                put("op", "inspect"); put("route", Json.encodeToJsonElement(route)); put("now", at)
+            })
+            assertTrue(description(closure.activeFromEpochMillis - 1)["canNavigate"]!!.jsonPrimitive.boolean)
+            // The ordinary travel gate sees no trail travel inside the closed interval: the estimated-hop check must apply too.
+            assertTrue(TrailRouteClosureGateSijko.blockingAdvisories(route, closure.activeFromEpochMillis, emptyList()).isEmpty())
+            for (at in listOf(closure.activeFromEpochMillis, closure.estimatedEndEpochMillis!! + 1)) {
+                val blocked = description(at)
+                assertFalse(blocked["canNavigate"]!!.jsonPrimitive.boolean)
+                assertEquals(closure.id, blocked["closures"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content)
+                val snapshot = call(bridge, buildJsonObject {
+                    put("op", "snapshot"); put("route", Json.encodeToJsonElement(route)); put("point", Json.encodeToJsonElement(segments.first().points.first())); put("now", at)
+                })
+                assertFalse(snapshot["ok"]!!.jsonPrimitive.boolean)
+            }
+        }
     }
 
     private fun mapPoint(bridge: WebRoutingBridge, point: MapPoint, proposed: Boolean = false, at: Long = now): JsonObject =

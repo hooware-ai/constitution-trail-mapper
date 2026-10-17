@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { coreEntry } from "../../tools/lib/core.mjs";
 import { canonicalSha256 } from "../../tools/lib/canonical-json.mjs";
 import {
@@ -9,6 +10,7 @@ import {
 } from "../../tools/lib/reviewed-refresh.mjs";
 import {
   bindCompiledCatalog,
+  hasUnverifiedAccess,
   runReviewedRouterControls,
 } from "../../tools/lib/reviewed-router-controls.mjs";
 import { reviewedRouterFixture as fixture } from "../support/reviewed-router-fixture.mjs";
@@ -72,6 +74,57 @@ test(
     await assert.rejects(
       runReviewedRouterControls({ ...args, cases: lied }),
       /missing representative/,
+    );
+  },
+);
+
+test(
+  "unverified-access requires matching unrouted geometry, never a verified segment relabelled as a gap",
+  { skip },
+  async () => {
+    const args = await fixture();
+    const core = await import(pathToFileURL(coreEntry).href);
+    const call = (request) =>
+      JSON.parse(core.dispatch(JSON.stringify(request)));
+    assert.equal(
+      call({
+        op: "initialize",
+        trails: args.snapshot.body.toString("utf8"),
+        trustSerializedRoutes: false,
+        assumeEstimatedConnections: false,
+        now: args.now,
+      }).ok,
+      true,
+    );
+    const estimated = call(args.cases.find((c) => c.id === "access").request);
+    assert.equal(estimated.canNavigate, true);
+    assert.equal(hasUnverifiedAccess(estimated), true);
+    const markedVerified = structuredClone(estimated);
+    markedVerified.route.segments[0].isRouted = true;
+    assert.equal(hasUnverifiedAccess(markedVerified), false);
+    const mismatchedGap = structuredClone(estimated);
+    mismatchedGap.accessGaps[0].from.latitude += 0.001;
+    assert.equal(hasUnverifiedAccess(mismatchedGap), false);
+    const missingGeometry = structuredClone(estimated);
+    missingGeometry.route.segments.shift();
+    assert.equal(hasUnverifiedAccess(missingGeometry), false);
+    const verified = call(args.cases.find((c) => c.id === "point").request);
+    verified.accessGaps = estimated.accessGaps;
+    assert.equal(hasUnverifiedAccess(verified), false);
+  },
+);
+
+test(
+  "a fully mapped route cannot satisfy unverified-access by changing its control category",
+  { skip },
+  async () => {
+    const args = await fixture();
+    args.cases.find((c) => c.id === "access").request = structuredClone(
+      args.cases.find((c) => c.id === "point").request,
+    );
+    await assert.rejects(
+      runReviewedRouterControls(args),
+      /control access does not exercise unverified-access/,
     );
   },
 );

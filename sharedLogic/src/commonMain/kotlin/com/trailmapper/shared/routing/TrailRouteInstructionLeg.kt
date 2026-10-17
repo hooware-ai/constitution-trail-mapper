@@ -16,6 +16,8 @@ internal data class TrailRouteInstructionLeg(
     val routeRoles: Set<TrailNetworkRole>,
     val displayStyle: TrailRouteDisplayStyle,
     val name: String?,
+    /** Estimated geometry contributes distance, but cannot supply a mapped road or turn instruction. */
+    val isRouted: Boolean = true,
     /** The rider reaches this leg by turning back along the line just ridden. */
     val startsWithReversal: Boolean = false,
     /** This leg starts at a verified choice point where the route turns within the same trail. */
