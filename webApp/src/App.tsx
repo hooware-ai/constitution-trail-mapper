@@ -618,7 +618,9 @@ export function App({ refresh }: AppProps = {}) {
                       "Ride restoration was interrupted. Review the route before Start.",
                     );
                   snapshotState.current = undefined;
-                  const carried = carriedStoreRef.current?.read();
+                  const carried = carriedStoreRef.current?.read(
+                    ride.record.key,
+                  );
                   carriedRef.current =
                     carried && carried.recordKey === ride.record.key
                       ? carried.carried
@@ -666,7 +668,7 @@ export function App({ refresh }: AppProps = {}) {
               );
               if (inspected.canNavigate) {
                 snapshotState.current = undefined;
-                const carried = carriedStoreRef.current?.read();
+                const carried = carriedStoreRef.current?.read(ride.record.key);
                 carriedRef.current =
                   carried && carried.recordKey === ride.record.key
                     ? carried.carried
@@ -1390,13 +1392,26 @@ export function App({ refresh }: AppProps = {}) {
         request.record.draft as Draft,
         mode === "return" ? "Returning to start" : request.record.title,
       );
+      // The replacement ride is recovered separately. Retain the carry for the actually saved ride until its replacement
+      // is saved too, including when several in-memory rejoins happen while active-ride writes keep failing.
+      const recoverableRide = carried ? activeRef.current?.read() : undefined;
+      if (
+        carried &&
+        (recoverableRide?.ok === false ||
+          !carriedStoreRef.current?.write(
+            { recordKey: record.key, carried },
+            recoverableRide?.state?.record.key,
+          ))
+      )
+        throw new Error(
+          "Your ride history could not be saved, so your current route was kept. Check browser storage and try rejoining the loop again.",
+        );
       setPreview(result);
       setReverseOf(null);
       setSelected(record);
       snapshotState.current = undefined;
       if (carried) {
         carriedRef.current = carried;
-        carriedStoreRef.current?.write({ recordKey: record.key, carried });
       }
       controller.replaceRoute(record);
       applyStore(storeRef.current!.recordSuccess(record));
@@ -2136,10 +2151,6 @@ export function App({ refresh }: AppProps = {}) {
             online,
             stale,
             closureCount: preview.closures.length,
-            estimatedConnections: preview.accessGaps?.length ?? 0,
-            endpointConnections:
-              preview.accessGaps?.filter((gap) => gap.kind === "endpoint")
-                .length ?? 0,
           })
         : null;
   useEffect(() => {
@@ -2881,7 +2892,7 @@ export function App({ refresh }: AppProps = {}) {
                     preview.canNavigate &&
                     preview.assumedConnections && (
                       <p className="warning" role="note">
-                        {`Private test mode: this route can start only because its estimated connections (${preview.accessGaps?.length ?? 0}) are assumed traversable. They are not confirmed. Verify the actual connection before riding.`}
+                        {`Private test mode: this route includes ${preview.accessGaps?.length ?? 0} estimated connections. Their geometry is not confirmed by map data.`}
                       </p>
                     )}
                   {!preview.canNavigate && (
@@ -2889,12 +2900,8 @@ export function App({ refresh }: AppProps = {}) {
                       {stale
                         ? "Navigation is unavailable until this route is recalculated on the current trail data."
                         : selected?.temporary
-                          ? preview.accessGaps?.length
-                            ? "This recalculated route cannot be started: it still has estimated connections that are not confirmed. Your saved route is unchanged."
-                            : "This recalculated route cannot be started: review the notices above. Your saved route is unchanged."
-                          : preview.accessGaps?.length
-                            ? "Navigation needs a continuously mapped route. This route still has estimated connections that are not confirmed."
-                            : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
+                          ? "This recalculated route cannot be started: review the notices above. Your saved route is unchanged."
+                          : "Navigation is unavailable for this route. Review the notices above before choosing another route."}
                     </p>
                   )}
 

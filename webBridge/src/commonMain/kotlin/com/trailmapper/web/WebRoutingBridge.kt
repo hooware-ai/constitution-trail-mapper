@@ -28,9 +28,8 @@ class WebRoutingBridge {
     /** Fixture-only: accept serialized routes that carry no feature identities (hand-built test geometry). */
     private var trustSerializedRoutes = false
     /**
-     * PRIVATE TEST MODE, off unless a review build asks at initialize: a route with estimated (unverified) access
-     * connections may start, resume and navigate. Nothing about the connections changes: they stay unrouted segments, stay in
-     * `accessGaps`, and the description says the assumption is in force. Closures, stale networks and Proposed trails still block.
+     * Legacy private review annotation, off unless requested at initialize. Normal navigation does not need this flag.
+     * Connections stay unrouted segments and remain in `accessGaps`; the flag only adds the private review warning.
      */
     private var assumeEstimatedConnections = false
     private var featureIndex: Map<String, TrailNetworkFeature> = emptyMap()
@@ -303,8 +302,12 @@ class WebRoutingBridge {
     private fun describe(route: TrailRoute, now: Long): JsonObject {
         validateRoute(route)
         val derived = derivedClosureLegs(route)
-        val advisories = TrailRouteAdvisorySijko.forRoute(route, now, derived)
-        val blocking = TrailRouteClosureGateSijko.blockingAdvisories(route, now, derived)
+        // Estimated geometry may not enter a known closed section merely because it is absent from mapped trail travel.
+        val estimatedClosureAdvisories = TrailRouteClosureSijko.activeClosures(now)
+            .filter { TrailRouteAdvisorySijko.entersClosedSection(route, it) }
+            .map { closure -> TrailRouteAdvisory(closure.id, closure.title, closure.guidance, closure.noticeUrl, closure.mappingNote) }
+        val advisories = (TrailRouteAdvisorySijko.forRoute(route, now, derived) + estimatedClosureAdvisories).distinctBy { it.id }
+        val blocking = (TrailRouteClosureGateSijko.blockingAdvisories(route, now, derived) + estimatedClosureAdvisories).distinctBy { it.id }
         val accessGaps = accessGapJson(route)
         val estimated = accessGaps.isNotEmpty()
         val proposed = route.edges.any { it.status == TrailFeatureStatus.Proposed } ||
@@ -324,7 +327,7 @@ class WebRoutingBridge {
         val assumed = estimated && assumeEstimatedConnections
         if (assumed) {
             val total = accessGaps.sumOf { it.jsonObject.getValue("distanceMeters").jsonPrimitive.double }
-            warnings += "PRIVATE TEST MODE: this route includes ${accessGaps.size} estimated connection(s), about ${kotlin.math.round(total)} m in all, that the map data does not confirm. They are assumed connected only in this private test build. Verify the actual connection before riding."
+            warnings += "PRIVATE TEST MODE: this route includes ${accessGaps.size} estimated connection(s), about ${kotlin.math.round(total)} m in all, that the map data does not confirm. This review annotation does not change navigation eligibility. Verify the actual connection before riding."
         }
         if (proposed) warnings += "This route includes proposed trails and is preview-only. They are not confirmed usable infrastructure."
         return buildJsonObject {
@@ -355,7 +358,9 @@ class WebRoutingBridge {
             put("evaluatedAt", now)
             put("network", network.toJson())
             put("assumedConnections", assumed)
-            put("canNavigate", networkCurrent && blocking.isEmpty() && (!estimated || assumeEstimatedConnections) && !proposed && route.segments.any { it.points.size >= 2 })
+            // Missing mapped connectivity is uncertainty, not a closure. Keep estimated segments in the route and
+            // accessGaps for honest rendering/details, but apply the same real restrictions to every route.
+            put("canNavigate", networkCurrent && blocking.isEmpty() && !proposed && route.segments.any { it.isRouted && it.points.size >= 2 })
         }
     }
 

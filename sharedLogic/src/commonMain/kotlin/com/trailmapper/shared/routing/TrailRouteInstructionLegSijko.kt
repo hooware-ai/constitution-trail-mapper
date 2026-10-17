@@ -16,13 +16,10 @@ internal object TrailRouteInstructionLegSijko {
         // Verified choice points recorded when the route was built; none for older saved routes.
         val choicePoints = route.traversalEdges.flatMap { it.junctionCoordinates }.toSet()
         // Same drawable basis as navigation and TrailRouteTraversalShapeSijko, including its short joins
-        // between same-style segments; unrouted estimated access stays separate and is dropped below.
+        // between same-style segments. Estimated access stays separate and contributes distance only.
         val pieces = TrailRouteDrawableSegmentMergeSijko
             .merge(route.segments)
-            .filterNot { segment ->
-                segment.type == TrailRouteSegmentType.Access && !segment.isRouted
-            }
-            .flatMap { segment -> segment.legPieces(choicePoints) }
+            .flatMap { segment -> segment.legPieces(if (segment.isRouted) choicePoints else emptySet()) }
         val legs = mutableListOf<TrailRouteInstructionLeg>()
         var pendingReversal = false
         var pendingJunctionTurn = false
@@ -136,6 +133,7 @@ internal object TrailRouteInstructionLegSijko {
             routeRoles = routeRoles,
             displayStyle = displayStyle,
             name = TrailRouteNameSijko.normalized(name),
+            isRouted = isRouted,
         )
     }
 

@@ -193,7 +193,7 @@ class TrailRouteTurnInstructionSijkoTest {
     }
 
     @Test
-    fun estimatedStartAndEndAreSuppressedWhileArrivalUsesDestinationEndpoint() {
+    fun estimatedStartAndEndKeepTravelDistanceWithoutInventingMappedRoads() {
         val routeStart = MapPoint(latitude = 40.0, longitude = -89.0)
         val mappedStart = MapPoint(latitude = 40.001, longitude = -89.0)
         val mappedEnd = MapPoint(latitude = 40.002, longitude = -89.0)
@@ -219,14 +219,18 @@ class TrailRouteTurnInstructionSijkoTest {
             ),
         )
 
-        assertEquals(2, instructions.size)
-        assertEquals("Start on Constitution Trail", instructions.first().text)
-        assertEquals(mappedStart, instructions.first().point)
+        assertEquals(3, instructions.size)
+        assertEquals("Head toward Constitution Trail", instructions.first().text)
+        assertEquals(routeStart, instructions.first().point)
+        assertEquals("Continue onto Constitution Trail", instructions[1].text)
+        assertEquals(mappedStart, instructions[1].point)
         assertEquals(destination, instructions.last().point)
+        assertEquals(TrailDistanceSijko.metersBetween(routeStart, destination), instructions.sumOf { it.distanceMeters }, 0.001)
+        assertTrue(instructions.none { "mapped access road" in it.text })
     }
 
     @Test
-    fun instructionDistancesExcludeEstimatedAccessGaps() {
+    fun instructionDistancesIncludeEstimatedAccessGapsWithoutGivingThemTurnInstructions() {
         val routeStart = MapPoint(latitude = 40.0, longitude = -89.0)
         val firstMappedStart = MapPoint(latitude = 40.001, longitude = -89.0)
         val nameChange = MapPoint(latitude = 40.002, longitude = -89.0)
@@ -260,18 +264,45 @@ class TrailRouteTurnInstructionSijkoTest {
             ),
         )
 
-        assertEquals(3, instructions.size)
-        assertEquals("Continue onto Second Street", instructions[1].text)
+        assertEquals(4, instructions.size)
+        assertEquals("Continue onto First Street", instructions[1].text)
         assertEquals(
-            TrailDistanceSijko.pathLengthMeters(firstMappedPoints),
+            TrailDistanceSijko.metersBetween(routeStart, firstMappedStart),
             instructions[1].distanceMeters,
             absoluteTolerance = 0.001,
         )
+        assertEquals("Continue onto Second Street", instructions[2].text)
         assertEquals(
-            TrailDistanceSijko.pathLengthMeters(secondMappedPoints),
+            TrailDistanceSijko.pathLengthMeters(firstMappedPoints),
+            instructions[2].distanceMeters,
+            absoluteTolerance = 0.001,
+        )
+        assertEquals(
+            TrailDistanceSijko.pathLengthMeters(secondMappedPoints) + TrailDistanceSijko.metersBetween(lastMappedEnd, destination),
             instructions.last().distanceMeters,
             absoluteTolerance = 0.001,
         )
+    }
+
+    @Test
+    fun estimatedInteriorConnectionNeverInventsATurnBetweenMappedLegs() {
+        val start = MapPoint(40.0, -89.0)
+        val roadEnd = MapPoint(40.001, -89.0)
+        val trailStart = MapPoint(40.0011, -88.9998)
+        val destination = MapPoint(40.0011, -88.998)
+        val route = routeWith(
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(start, roadEnd), name = "Oak Street"),
+            TrailRouteSegment(TrailRouteSegmentType.Access, listOf(roadEnd, trailStart), isRouted = false, name = "Unverified crossing"),
+            TrailRouteSegment(TrailRouteSegmentType.Trail, listOf(trailStart, destination), name = "Test Trail"),
+        )
+        val instructions = TrailRouteTurnInstructionSijko.instructionsFor(route)
+        val transition = instructions[1]
+        assertEquals(TrailRouteInstructionManeuver.Continue, transition.maneuver)
+        assertEquals("Continue onto Test Trail", transition.text)
+        assertEquals(trailStart, transition.point)
+        assertEquals(TrailDistanceSijko.metersBetween(start, roadEnd) + TrailDistanceSijko.metersBetween(roadEnd, trailStart), transition.distanceMeters, 0.001)
+        assertEquals(route.totalDistanceMeters, instructions.sumOf { it.distanceMeters }, 0.001)
+        assertTrue(instructions.none { "Unverified crossing" in it.text || "right" in it.text || "left" in it.text })
     }
 
     @Test

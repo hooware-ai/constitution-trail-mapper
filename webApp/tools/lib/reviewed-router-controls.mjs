@@ -11,6 +11,30 @@ const refuse = (message) => {
   throw new Error(`Router admission refused: ${message}`);
 };
 const same = (a, b) => canonicalSha256(a) === canonicalSha256(b);
+// Eligibility is checked by each case's assertions. This category proves that
+// estimated connections retain their unverified geometry even when Start is allowed.
+export function hasUnverifiedAccess(result) {
+  const segments = result.route?.segments;
+  return (
+    Array.isArray(segments) &&
+    Array.isArray(result.accessGaps) &&
+    result.accessGaps.length > 0 &&
+    result.accessGaps.every(
+      (gap) =>
+        Number.isFinite(gap.distanceMeters) &&
+        gap.distanceMeters > 0 &&
+        segments.some(
+          (segment) =>
+            segment.type === "Access" &&
+            segment.isRouted === false &&
+            Array.isArray(segment.points) &&
+            segment.points.length >= 2 &&
+            same(segment.points[0], gap.from) &&
+            same(segment.points.at(-1), gap.to),
+        ),
+    )
+  );
+}
 export function bindCompiledCatalog(ledger, catalog) {
   if (
     catalog.schema !== "trail-mapper.compiled-closures/1" ||
@@ -150,8 +174,8 @@ export async function runReviewedRouterControls({
       "unverified-access":
         request.op === "plan" &&
         result.route &&
-        result.canNavigate === false &&
-        result.accessGaps?.length > 0,
+        typeof result.canNavigate === "boolean" &&
+        hasUnverifiedAccess(result),
       closure:
         ["inspect", "snapshot"].includes(request.op) &&
         c.routeFrom &&

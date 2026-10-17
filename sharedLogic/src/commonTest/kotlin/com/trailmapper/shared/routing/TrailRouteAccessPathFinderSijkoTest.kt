@@ -11,6 +11,82 @@ import kotlin.test.assertTrue
 
 class TrailRouteAccessPathFinderSijkoTest {
     @Test
+    fun componentDiversityDoesNotEvictTheNearbySnapThatAvoidsALongHairpinDetour() {
+        val start = MapPoint(40.0, -89.0)
+        val destination = MapPoint(40.003, -88.9998)
+        val hairpin = AccessNetworkFeature(
+            id = "connected-hairpin",
+            roadClass = "S1400",
+            paths = listOf(listOf(start, MapPoint(40.02, -89.0), MapPoint(40.02, -88.9998), MapPoint(40.0, -88.9998))),
+        )
+        val unrelated = (1..3).flatMap { index ->
+            listOf(
+                AccessNetworkFeature(
+                    id = "unrelated-start-$index",
+                    roadClass = "S1400",
+                    paths = listOf(listOf(MapPoint(39.9998, -89.0 - index * 0.0002), MapPoint(40.0002, -89.0 - index * 0.0002))),
+                ),
+                AccessNetworkFeature(
+                    id = "unrelated-destination-$index",
+                    roadClass = "S1400",
+                    paths = listOf(listOf(MapPoint(40.0028, -88.9998 + index * 0.0002), MapPoint(40.0032, -88.9998 + index * 0.0002))),
+                ),
+            )
+        }
+        // Both hairpin arms were eligible nearby candidates before component diversification. The second arm
+        // needs a 17 m estimated connection, avoiding 4 km around the hairpin; unrelated fragments cannot evict it.
+        for (features in listOf(listOf(hairpin), listOf(hairpin) + unrelated)) {
+            val graph = AccessGraphBuilderSijko.buildGraph(features)
+            for ((from, to) in listOf(start to destination, destination to start)) {
+                val route = assertNotNull(TrailRouteAccessPathFinderSijko.findRoute(graph, from, to))
+                assertTrue(route.totalDistanceMeters < 400.0, "Unrelated components caused a ${route.totalDistanceMeters} m detour")
+                assertTrue(route.segments.filter { !it.isRouted }.sumOf { TrailDistanceSijko.pathLengthMeters(it.points) } < 20.0)
+            }
+        }
+    }
+
+    @Test
+    fun denseDisconnectedRoadDoesNotCrowdOutTheConnectedRoadAtEitherEndpoint() {
+        val endpoint = MapPoint(40.0, -89.0)
+        val connectedRoadStart = MapPoint(40.0007, -89.0)
+        val destination = MapPoint(40.006, -89.0)
+        val disconnectedLoop = listOf(
+            MapPoint(39.9998, -89.0003),
+            MapPoint(39.9998, -88.9997),
+            MapPoint(40.0002, -88.9997),
+            MapPoint(40.0002, -89.0003),
+            MapPoint(39.9998, -89.0003),
+        )
+        val graph = AccessGraphBuilderSijko.buildGraph(
+            disconnectedLoop.zipWithNext().mapIndexed { index, (first, second) ->
+                AccessNetworkFeature(
+                    id = "nearby-disconnected-street-$index",
+                    roadClass = "S1400",
+                    paths = listOf(listOf(first, second)),
+                )
+            } + AccessNetworkFeature(
+                id = "connected-street",
+                roadClass = "S1400",
+                paths = listOf(listOf(connectedRoadStart, destination)),
+            ),
+        )
+        // All four nearer edges are one disconnected street component, even though
+        // the source data gives each edge a different feature ID.
+        assertTrue(NearestTrailSnapSijko.nearestSnaps(graph, endpoint, 4)
+            .all { it.edge.sourceFeatureId != "connected-street" })
+
+        listOf(endpoint to destination, destination to endpoint).forEach { (start, end) ->
+            val route = assertNotNull(
+                TrailRouteAccessPathFinderSijko.findRoute(graph, start, end),
+                "A nearby connected street must remain a candidate when nearer edges are disconnected",
+            )
+            assertTrue(route.segments.any { it.isRouted && connectedRoadStart in it.points })
+            assertTrue(route.segments.filter { !it.isRouted }
+                .sumOf { TrailDistanceSijko.pathLengthMeters(it.points) } < 80.0)
+        }
+    }
+
+    @Test
     fun choosesConnectedRoadSnapWhenNearestRoadSnapIsDisconnected() {
         val start = MapPoint(latitude = 40.0, longitude = -89.0)
         val disconnectedRoadStart = MapPoint(latitude = 40.00005, longitude = -89.0)

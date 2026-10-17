@@ -36,7 +36,7 @@ async function planFromLocation(page: Page, latitude: number) {
   ).toBeVisible();
 }
 
-test("an obvious start connection is not announced, but it is still estimated: dashed on the map, counted, and Start stays blocked", async ({
+test("an ordinary start connection stays dashed and counted while navigation and recalculation work naturally", async ({
   page,
 }, info) => {
   const errors: string[] = [];
@@ -62,10 +62,10 @@ test("an obvious start connection is not announced, but it is still estimated: d
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(
     page.getByText(/still has estimated connections that are not confirmed/),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await page.screenshot({
     path: `output/playwright/access-gap-dashed-${info.project.name}.png`,
     fullPage: true,
@@ -77,19 +77,15 @@ test("an obvious start connection is not announced, but it is still estimated: d
   await page
     .getByRole("button", { name: "Recalculate route", exact: true })
     .click();
-  // The still-unverified connection means the temporary result cannot be started, and it says so.
-  await expect(
-    page.getByText(
-      /A recalculated route was found but it cannot be started yet/,
-    ),
-  ).toBeVisible();
+  // Recalculating retains uncertainty without turning it into a navigation blocker.
+  await expect(page.getByText(/Recalculated route ready/)).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   expect(errors).toEqual([]);
 });
 
-test("a sub-foot start connection is still estimated and still blocks navigation", async ({
+test("a sub-foot start connection retains its geometry without blocking navigation", async ({
   page,
 }) => {
   await planFromLocation(page, 40.489998);
@@ -98,7 +94,7 @@ test("a sub-foot start connection is still estimated and still blocks navigation
   ).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
 });
 
 test("fully mapped route has no connection notice or markers", async ({

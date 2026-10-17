@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { makeCounty } from "../support/county-fixture.mjs";
 import { buildPackage } from "../../tools/lib/dataset-package.mjs";
 import { canonicalSha256 } from "../../tools/lib/canonical-json.mjs";
@@ -457,7 +458,7 @@ test("offline CLI produces a reproducible pinned artifact and preserves input pa
       spawnSync(
         process.execPath,
         [
-          cli.pathname,
+          fileURLToPath(cli),
           "--config",
           join(dir, "config.json"),
           "--out",

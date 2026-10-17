@@ -679,36 +679,51 @@ export interface CarriedRide {
   recordKey: string;
   carried: { distanceMeters: number; traversalEdges: unknown[] };
 }
+const isCarriedRide = (value: unknown): value is CarriedRide =>
+  object(value) &&
+  text(value.recordKey) &&
+  object(value.carried) &&
+  finite(value.carried.distanceMeters) &&
+  value.carried.distanceMeters >= 0 &&
+  Array.isArray(value.carried.traversalEdges);
 export class CarriedRideStore {
   constructor(private storage: StoragePort) {}
-  read(): CarriedRide | null {
+  read(recordKey?: string): CarriedRide | null {
     try {
       const raw = this.storage.getItem(CARRIED_RIDE_KEY);
       if (!raw) return null;
       const value: unknown = JSON.parse(raw);
-      if (
-        object(value) &&
-        value.version === 1 &&
-        text(value.recordKey) &&
-        object(value.carried) &&
-        finite(value.carried.distanceMeters) &&
-        value.carried.distanceMeters >= 0 &&
-        Array.isArray(value.carried.traversalEdges)
-      )
-        return {
-          recordKey: value.recordKey,
-          carried: value.carried as CarriedRide["carried"],
-        };
+      if (object(value) && value.version === 1 && isCarriedRide(value)) {
+        const ride =
+          !recordKey || value.recordKey === recordKey
+            ? value
+            : isCarriedRide(value.previous) &&
+                value.previous.recordKey === recordKey
+              ? value.previous
+              : null;
+        return ride
+          ? { recordKey: ride.recordKey, carried: ride.carried }
+          : null;
+      }
     } catch {
       /* unreadable: treated as nothing carried */
     }
     return null;
   }
-  write(ride: CarriedRide): boolean {
+  /** Retain only the carry belonging to the actually saved active ride, in case its replacement cannot be saved. */
+  write(ride: CarriedRide, recoveryRecordKey?: string): boolean {
+    const previous =
+      recoveryRecordKey && recoveryRecordKey !== ride.recordKey
+        ? this.read(recoveryRecordKey)
+        : null;
     try {
       this.storage.setItem(
         CARRIED_RIDE_KEY,
-        JSON.stringify({ version: 1, ...ride }),
+        JSON.stringify({
+          version: 1,
+          ...ride,
+          ...(previous ? { previous } : {}),
+        }),
       );
       return true;
     } catch {

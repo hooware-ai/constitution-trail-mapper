@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import {
   verifyAddressPackage,
@@ -12,7 +12,7 @@ import {
 test("a public county build always includes its pinned address index and cannot silently disable it", () => {
   assert.equal(
     addressIndexBuildFile("/repo", "county", "public", undefined),
-    "/repo/data/generated/web-address-index.json",
+    resolve("/repo", "data/generated/web-address-index.json"),
   );
   for (const override of ["", "/other/index.json"])
     assert.throws(
@@ -52,7 +52,7 @@ test("only the explicitly synthetic, unapproved county harness omits real county
   ])
     assert.equal(
       build(evidence),
-      "/repo/data/generated/web-address-index.json",
+      resolve("/repo", "data/generated/web-address-index.json"),
     );
   assert.throws(
     () =>

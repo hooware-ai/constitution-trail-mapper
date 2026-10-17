@@ -159,14 +159,10 @@ test("navigation says its one caption once, survives an interruption and can be 
   }
 });
 
-test("a blocked Start says why right beside it: estimated connections, offline", async ({
+test("estimated geometry permits Start while offline still explains its block beside the button", async ({
   page,
   context,
 }) => {
-  test.skip(
-    process.env.TRAIL_ASSUME_ESTIMATED_CONNECTIONS === "1",
-    "asserts the strict Start state",
-  );
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "geolocation", {
       value: {
@@ -189,11 +185,31 @@ test("a blocked Start says why right beside it: estimated connections, offline",
     .click();
   await choose(page, "Destination", "Review trailhead · East");
   await page.getByRole("button", { name: "Find route", exact: true }).click();
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
+  await expect(start(page)).toBeEnabled();
+  await expect(page.locator("#start-reason")).toHaveCount(0);
+  await expect(start(page)).toHaveAttribute(
+    "aria-describedby",
+    "foreground-note",
+  );
+  await expect(
+    page.getByText(
+      /This route still has estimated connections that are not confirmed/,
+    ),
+  ).toHaveCount(0);
+  await start(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Ride in progress", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Stop navigation" }).last().click();
+  await expect(start(page)).toBeEnabled();
+
+  await context.setOffline(true);
   await expect(start(page)).toBeDisabled();
   const reason = page.locator("#start-reason");
-  await expect(reason).toContainText(
-    "1 estimated connection (start/end included) is not confirmed",
-  );
+  await expect(reason).toContainText("You're offline");
   // It is visible with the button, in the same screen, directly under it.
   const b = (await start(page).boundingBox())!;
   const r = (await reason.boundingBox())!;
@@ -204,13 +220,9 @@ test("a blocked Start says why right beside it: estimated connections, offline",
     "aria-describedby",
     "foreground-note start-reason",
   );
-  // The full explanation is still on the page, unchanged.
-  await expect(
-    page.getByText(
-      /This route still has estimated connections that are not confirmed/,
-    ),
-  ).toBeVisible();
-  void context;
+  await context.setOffline(false);
+  await expect(start(page)).toBeEnabled();
+  await expect(reason).toHaveCount(0);
 });
 
 test("offline gives a plain reason beside an otherwise allowed Start, and online restores it", async ({
