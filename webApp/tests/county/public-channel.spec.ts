@@ -136,19 +136,31 @@ test("public supported guidance uses fresh simulated location and shows the note
   await expect(note).toHaveCount(0);
 });
 
-test("public estimated gaps keep planning and saving but block Start and a carried private ride", async ({
+test("public estimated gaps allow Start and recover a valid carried ride only after a fresh fix", async ({
   page,
 }) => {
+  const { simulateDevice, fix } = await import("../webkit/support");
+  await simulateDevice(page);
   await approvedPublicFixture(page);
   await planPublic(page, "Synthetic off-trail start");
   const start = page.getByRole("button", {
     name: "Start navigation",
     exact: true,
   });
-  await expect(start).toBeDisabled();
+  await expect(start).toBeEnabled();
+  await expect(
+    page.getByRole("region", {
+      name: "Route map with unverified connections",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
+  await expect(page.locator("#start-reason")).toHaveCount(0);
   await expect(
     page.getByText(/Can't start: .*estimated connection/),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const record = await page.evaluate(() => {
     const library = JSON.parse(
@@ -157,7 +169,21 @@ test("public estimated gaps keep planning and saving but block Start and a carri
     if (library.saved.length !== 1) throw Error("Estimated plan was not saved");
     return library.saved[0];
   });
-  // The old private override could have left an active ride in this same browser. Reinspection must refuse it.
+  expect(
+    record.route.segments.some((segment: any) => segment.isRouted === false),
+  ).toBe(true);
+  await start.click();
+  await expect(page.locator(".ride-guidance h2")).toHaveText(
+    "Reacquiring location\u2026",
+  );
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
+  await fix(page, 40.4998, -88.9903);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Stop navigation", exact: true })
+    .click();
+
+  // A previous private build could have left this valid route active in the same browser. The public build reinspects it.
   await page.evaluate(
     (record) =>
       localStorage.setItem(
@@ -174,11 +200,80 @@ test("public estimated gaps keep planning and saving but block Start and a carri
     record,
   );
   await page.reload();
+  await expect(page.locator(".ride-guidance h2")).toHaveText(
+    "Reacquiring location\u2026",
+  );
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
   await expect(
     page.getByText(
       "Your previous ride needs review before navigation can resume.",
     ),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Stop navigation", exact: true }),
   ).toBeVisible();
+  await fix(page, 40.4998, -88.9903);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const recovered = await page.evaluate(() =>
+    JSON.parse(
+      localStorage.getItem(
+        "trail-mapper.county:trail-mapper.web.active-ride.v1",
+      )!,
+    ),
+  );
+  expect(recovered.record.key).toBe(record.key);
+  expect(recovered.record.route).toEqual(record.route);
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(
+          localStorage.getItem(
+            "trail-mapper.county:trail-mapper.web.library.v1",
+          )!,
+        ).saved.length,
+    ),
+  ).toBe(1);
+});
+
+test("public recovery still refuses an estimated route whose mapped trail is absent from the current network", async ({
+  page,
+}) => {
+  const { simulateDevice, fix } = await import("../webkit/support");
+  await simulateDevice(page);
+  await approvedPublicFixture(page);
+  await planPublic(page, "Synthetic off-trail start");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.evaluate(() => {
+    const library = JSON.parse(
+      localStorage.getItem("trail-mapper.county:trail-mapper.web.library.v1")!,
+    );
+    const record = structuredClone(library.saved[0]);
+    const edge = record.route.edges.find((edge: any) => edge.sourceFeatureId);
+    if (!edge) throw Error("Expected a mapped edge to revalidate");
+    edge.sourceFeatureId = "54:no-longer-present";
+    localStorage.setItem(
+      "trail-mapper.county:trail-mapper.web.active-ride.v1",
+      JSON.stringify({
+        version: 1,
+        record,
+        routeProgressMeters: 0,
+        creditedDistanceMeters: 0,
+        riddenMeters: 0,
+        updatedAt: Date.now(),
+      }),
+    );
+  });
+  await page.reload();
+  await expect(
+    page.getByText(/Your previous ride was not resumed/),
+  ).toBeVisible();
+  await expect(page.locator(".stale-route")).toContainText(
+    "no longer in the data",
+  );
+  await expect(
+    page.getByRole("button", { name: "Start navigation", exact: true }),
+  ).toBeDisabled();
+  await fix(page, 40.4998, -88.9903);
   await expect(page.locator(".guidance.navigating")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Stop navigation", exact: true }),

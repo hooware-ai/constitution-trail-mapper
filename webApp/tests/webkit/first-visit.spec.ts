@@ -177,7 +177,7 @@ test("[engine] an exercise loop is validated, planned and previewed", async ({
   ).toBeVisible();
 });
 
-test("[sim-device] a route with an unverified connection explains it at the decision point and blocks navigation; a fully mapped route does not", async ({
+test("[sim-device] unverified endpoint geometry stays visible and can start after recalculation", async ({
   page,
 }) => {
   await simulateDevice(page);
@@ -192,32 +192,43 @@ test("[sim-device] a route with an unverified connection explains it at the deci
     .getByRole("button", { name: /^Review trailhead · East/ })
     .click();
   await page.getByRole("button", { name: "Find route", exact: true }).click();
-  // An endpoint gap is shown on the map and blocks Start. Only interior gaps
-  // appear in the numbered "connections to check" list.
-  await expect(page.locator("#start-reason")).toContainText(
-    "1 estimated connection",
-  );
+  // Endpoint geometry stays unverified on the map without a blanket Start block.
   await expect(
     page.locator('.map-wrap[data-estimated-connections="1"]'),
   ).toHaveCount(1);
   await expect(page.locator(".access-connections")).toHaveCount(0);
-  await expect(startButton(page)).toBeDisabled();
+  await expect(startButton(page)).toBeEnabled();
+  await expect(page.locator("#start-reason")).toHaveCount(0);
   await expect(
     page.getByRole("region", {
       name: "Route map with unverified connections",
       exact: true,
     }),
   ).toBeVisible();
-  await expect(page.getByText(/ready to navigate/i)).toHaveCount(0);
   await page
     .getByRole("button", { name: "Recalculate route", exact: true })
     .click();
   await expect(
     page.getByText(
-      /A recalculated route was found but it cannot be started yet/,
+      "Recalculated route ready. It is not saved, and your saved route is unchanged.",
     ),
   ).toBeVisible();
-  await expect(startButton(page)).toBeDisabled();
+  await expect(startButton(page)).toBeEnabled();
+  await expect(page.locator("#start-reason")).toHaveCount(0);
+  await expect(
+    page.locator('.map-wrap[data-estimated-connections="1"]'),
+  ).toHaveCount(1);
+  await startButton(page).click();
+  await expect(
+    page.getByRole("heading", { name: "Ride in progress", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/^PRIVATE TEST MODE/)).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Stop navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeVisible();
 });
 
 test("[sim-device] a fully mapped route from the current location has no connection warning and can start", async ({

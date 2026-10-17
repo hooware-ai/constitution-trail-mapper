@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { fix, simulateDevice } from "../webkit/support";
 import {
   buildAddressIndex,
   serializeAddressIndex,
@@ -140,9 +141,10 @@ for (const field of ["Start", "Destination"] as const) {
   });
 }
 
-test("an address endpoint far from any mapped trail keeps its unverified connection and Start stays blocked", async ({
+test("an address endpoint far from mapped trails keeps its unverified connection and can start with fresh location", async ({
   page,
 }) => {
+  await simulateDevice(page);
   await serveIndex(page);
   await openChooser(page, "Start");
   await search(page).fill("100 test ave");
@@ -160,13 +162,45 @@ test("an address endpoint far from any mapped trail keeps its unverified connect
   await expect(
     page.getByRole("heading", { name: "Route preview", exact: true }),
   ).toBeVisible();
-  // The address point was not moved onto a trail: the start connection is still there (dashed, not announced) and blocks Start.
+  // The address point was not moved onto a trail: its estimated connection remains visible without a warning hurdle.
   await expect(
     page.locator('.map-wrap[data-estimated-connections="1"]'),
   ).toHaveCount(1);
   await expect(
+    page.getByRole("region", {
+      name: "Route map with unverified connections",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator("#start-reason")).toHaveCount(0);
+  await expect(
     page.getByRole("button", { name: "Start navigation", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Start navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reacquiring location\u2026" }),
+  ).toBeVisible();
+  await expect(page.locator(".guidance.navigating")).toHaveCount(0);
+  await fix(page, 40.489, -88.95);
+  await expect(page.locator(".guidance.navigating")).toBeVisible();
+  const active = await page.evaluate(() =>
+    JSON.parse(
+      localStorage.getItem(
+        "trail-mapper.fixture:trail-mapper.web.active-ride.v1",
+      )!,
+    ),
+  );
+  expect(active.record.draft.start).toMatchObject({
+    latitude: 40.489,
+    longitude: -88.95,
+  });
+  expect(
+    active.record.route.segments.some(
+      (segment: any) => segment.isRouted === false,
+    ),
+  ).toBe(true);
 });
 
 test("when the address data cannot be loaded the chooser says so and every other way to choose still works", async ({
