@@ -2454,6 +2454,15 @@ test("Explore offers native's map controls: closure areas switch, Show all trail
       zoom: Number(el.getAttribute("data-zoom")),
       center: el.getAttribute("data-center"),
     }));
+  const showAll = page.getByRole("button", {
+    name: "Show all trails",
+    exact: true,
+  });
+  // This fixture's proposed eastern spur changes the all-feature bounds.
+  // Wait for the filtered fit to move the center before capturing its baseline.
+  const initial = await view();
+  await showAll.click();
+  await expect.poll(async () => (await view()).center).not.toBe(initial.center);
   const fitted = await view();
   expect(fitted.zoom).toBeGreaterThan(0);
   // One step at a time: each zoom animates, and a click during it is not a second step.
@@ -2466,13 +2475,8 @@ test("Explore offers native's map controls: closure areas switch, Show all trail
     await page.keyboard.press("ArrowRight");
   await expect.poll(async () => (await view()).center).not.toBe(fitted.center);
   const panned = (await view()).center;
-  const showAll = page.getByRole("button", {
-    name: "Show all trails",
-    exact: true,
-  });
   await showAll.click();
-  // Back to the fitting zoom, and away from where the pan left it. (The first view also frames hidden proposed trails, so
-  // the fit of the DRAWN trails is compared with itself below, not with that first view.)
+  // Return to the drawn-trails fit established above, away from the pan.
   await expect.poll(async () => (await view()).zoom).toBe(fitted.zoom);
   await expect.poll(async () => (await view()).center).not.toBe(panned);
   const refit = await view();

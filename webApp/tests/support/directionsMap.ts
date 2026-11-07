@@ -244,10 +244,11 @@ for (const { name, width, height, fontSize, oldLayout } of [
       if (!oldLayout) return;
       await page.evaluate(() => {
         const body = document.querySelector<HTMLElement>(".ride-dock-body");
-        const progress = document.querySelector(".ride-progress");
-        if (body && progress) {
-          body.append(progress);
+        const directions = document.querySelector(".ride-directions");
+        if (body && directions) {
+          body.append(directions);
           body.style.removeProperty("display");
+          body.parentElement!.style.removeProperty("min-height");
         }
       });
     };
@@ -273,7 +274,11 @@ for (const { name, width, height, fontSize, oldLayout } of [
           const content = document.querySelector(".ride-dock-content")!;
           const progress = document.querySelector(".ride-progress")!;
           const body = document.querySelector<HTMLElement>(".ride-dock-body");
-          if (body) body.style.display = "contents";
+          if (body) {
+            body.style.display = "contents";
+            body.parentElement!.style.minHeight = "0";
+          }
+          progress.append(document.querySelector(".ride-directions")!);
           content.insertBefore(
             progress,
             content.querySelector(".navigation-beta-note, .ride-map-tools"),

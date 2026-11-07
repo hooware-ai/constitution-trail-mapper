@@ -15,6 +15,7 @@ import {
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { RideGuidance } from "./RideGuidance";
+import { useRideDockLayout } from "./rideDockLayout";
 import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
 import { directionGroupStarts } from "./directionGroups";
 import { ManeuverIcon } from "./ManeuverIcon";
@@ -241,6 +242,7 @@ export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const startDockRef = usePreviewDockLayout(workspaceRef, panelRef);
+  const rideDockRef = useRideDockLayout();
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
@@ -2026,11 +2028,21 @@ export function App({ refresh }: AppProps = {}) {
       announce({ kind: "error", message: errorText(e) });
     }
   }
+  const focusScreenRef = useRef(screen);
   useEffect(() => {
+    const screenChanged = focusScreenRef.current !== screen;
     const frame = requestAnimationFrame(() => {
+      // Commit the screen only when its frame runs; a network update may cancel
+      // and replace this frame without losing a pending navigation announcement.
+      focusScreenRef.current = screen;
       const heading = panelRef.current?.querySelector<HTMLElement>("h1");
       if (heading) {
         heading.tabIndex = -1;
+        // A late boot may replace the loading panel after the rider has opened
+        // or dismissed More. Preserve that focus; actual screen changes still
+        // announce their heading, and an untouched boot focuses its new panel.
+        const active = document.activeElement;
+        if (!screenChanged && active && active !== document.body) return;
         heading.focus({ preventScroll: true });
       }
     });
@@ -3051,7 +3063,7 @@ export function App({ refresh }: AppProps = {}) {
                   )}
                 </div>
               </RideGuidance>
-              <div className="ride-dock">
+              <div className="ride-dock" ref={rideDockRef}>
                 <div className="ride-dock-body">
                   <div className="ride-dock-content">
                     {routeAlerts}
@@ -3106,6 +3118,14 @@ export function App({ refresh }: AppProps = {}) {
                         )}
                       </div>
                     )}
+                    <div className="ride-progress">
+                      <strong>
+                        {nav.guidance
+                          ? `${miles(nav.guidance.remainingMeters)} mi`
+                          : "—"}
+                      </strong>
+                      <span>remaining</span>
+                    </div>
                     {nav.phase === "navigating" && (
                       <p className="caption navigation-beta-note" role="note">
                         Navigation is in beta and may experience issues.
@@ -3113,17 +3133,12 @@ export function App({ refresh }: AppProps = {}) {
                     )}
                     <div className="ride-map-tools" ref={setRideMapToolsHost} />
                   </div>
-                  <div className="ride-progress">
-                    <strong>
-                      {nav.guidance
-                        ? `${miles(nav.guidance.remainingMeters)} mi`
-                        : "—"}
-                    </strong>
-                    <span>remaining</span>
-                    <button onClick={() => setPopup("directions")}>
-                      Directions
-                    </button>
-                  </div>
+                  <button
+                    className="ride-directions"
+                    onClick={() => setPopup("directions")}
+                  >
+                    Directions
+                  </button>
                 </div>
                 <div className="ride-actions">
                   <details className="ride-details">

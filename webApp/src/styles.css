@@ -1895,7 +1895,7 @@ dialog::backdrop {
   color: #092e28;
   box-shadow: 0 4px 22px #17382c40;
   pointer-events: auto;
-  flex-shrink: 0;
+  flex-shrink: 1;
   min-height: 100px;
   max-height: 50%;
   overflow-y: auto;
@@ -1937,7 +1937,7 @@ dialog::backdrop {
 }
 .ride-dock {
   flex-shrink: 1;
-  min-height: 0;
+  min-height: var(--ride-dock-min-height, 0px);
   display: flex;
   flex-direction: column;
   width: min(100%, 540px);
@@ -1951,10 +1951,11 @@ dialog::backdrop {
 .ride-dock-body {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  /* Keep the complete Directions target and a usable strip of scroll content. */
+  min-height: var(--ride-body-min-height, 0px);
 }
 .ride-dock-content {
-  min-height: 0;
+  min-height: 44px;
   overflow-y: auto;
 }
 .navigation-beta-note {
@@ -1966,8 +1967,6 @@ dialog::backdrop {
   color: #762b00;
 }
 .ride-progress {
-  /* Loading map tools or notices must not move Directions during a tap. */
-  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1982,7 +1981,9 @@ dialog::backdrop {
   color: #47645b;
   font-size: 0.85rem;
 }
-.ride-progress button {
+.ride-directions {
+  /* Only this action is anchored; large remaining-distance text can scroll. */
+  flex-shrink: 0;
   min-height: 52px;
   margin-left: auto;
   border-radius: 14px;
@@ -2004,7 +2005,7 @@ dialog::backdrop {
 .ride-stop {
   min-height: 52px;
   border-radius: 14px;
-  padding: 13px 15px;
+  padding: 8px;
   line-height: 1.2;
 }
 .ride-details summary {
@@ -2492,7 +2493,7 @@ dialog::backdrop {
   .navigation .ride-progress {
     flex-wrap: wrap;
   }
-  .navigation .ride-progress button {
+  .navigation .ride-directions {
     width: 100%;
     margin-left: 0;
   }

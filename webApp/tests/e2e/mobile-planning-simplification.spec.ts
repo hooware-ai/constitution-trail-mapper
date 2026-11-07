@@ -41,6 +41,66 @@ for (const colorScheme of ["light", "dark"] as const) {
   });
 }
 
+// Gate the real routing worker's boot request, not a fake network result.
+for (const interaction of [
+  "untouched",
+  "dismissed More",
+  "open More",
+] as const) {
+  test(`delayed trail boot preserves focus: ${interaction}`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const Original = window.Worker;
+      window.Worker = class extends Original {
+        postMessage(message: any) {
+          if (message?.request?.op === "boot") {
+            (window as any).__releaseFocusBoot = () =>
+              super.postMessage(message);
+          } else super.postMessage(message);
+        }
+      };
+    });
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Loading trails…" }),
+    ).toBeFocused();
+    await expect
+      .poll(() =>
+        page.evaluate(() => typeof (window as any).__releaseFocusBoot),
+      )
+      .toBe("function");
+    const more = page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("button", { name: "More", exact: true });
+    const close = page.getByRole("button", { name: "Close More", exact: true });
+    if (interaction !== "untouched") {
+      await more.press("Enter");
+      await expect(close).toBeFocused();
+      if (interaction === "dismissed More") {
+        await page.keyboard.press("Escape");
+        await expect(more).toBeFocused();
+      }
+    }
+    await page.evaluate(() => (window as any).__releaseFocusBoot());
+    // tabindex is assigned by the focus frame: wait for the precise effect
+    // that previously stole restored More focus, not an arbitrary timeout.
+    const heading = page.locator(".panel h1");
+    await expect(heading).toHaveText("Plan a ride");
+    await expect(heading).toHaveAttribute("tabindex", "-1");
+    if (interaction === "untouched") await expect(heading).toBeFocused();
+    else if (interaction === "dismissed More") await expect(more).toBeFocused();
+    else {
+      await expect(close).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(more).toBeFocused();
+    }
+    // Real screen changes must still announce the new panel.
+    await page.getByRole("button", { name: /Go somewhere/ }).click();
+    await expect(page.locator(".panel h1")).toBeFocused();
+  });
+}
+
 test("reference disclosures preserve map semantics and keyboard access to search privacy", async ({
   page,
 }) => {
