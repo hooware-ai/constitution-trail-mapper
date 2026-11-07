@@ -4,12 +4,16 @@
  */
 package com.trailmapper.android.map
 
+import com.trailmapper.android.TrailMapperAndroidTheme
+
 import android.content.Context
 import android.os.Bundle
+import android.content.res.Configuration
+import com.trailmapper.android.applyTrailMapperSystemBars
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -71,6 +75,7 @@ import com.trailmapper.shared.routing.TrailRouteAdvisorySijko
 import com.trailmapper.shared.sijko.MapPickerDefaultsSijko
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.isSystemInDarkTheme
 
 class TrailNetworkOverviewActivity : ComponentActivity() {
     private val overviewModel by lazy {
@@ -79,9 +84,10 @@ class TrailNetworkOverviewActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        applyTrailMapperSystemBars(this,
+            resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
         setContent {
-            MaterialTheme {
+            TrailMapperAndroidTheme(this@TrailNetworkOverviewActivity) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     TrailNetworkOverviewScreen(
                         result = overviewModel.result,
@@ -272,6 +278,7 @@ private fun TrailNetworkMap(
     var mapLoaded by remember { mutableStateOf(false) }
     Box(modifier) {
         GoogleMap(
+            mapColorScheme = trailMapperMapColorScheme(isSystemInDarkTheme()),
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = camera,
             uiSettings = MapUiSettings(mapToolbarEnabled = false),
@@ -279,6 +286,12 @@ private fun TrailNetworkMap(
         ) {
             paths.forEach { path ->
                 key(path.id) {
+                    // Dual opaque casings keep semantic strokes distinguishable from variable tiles.
+                    for (casing in networkStrokeCasings(if (path.proposed) 6f else 8f)) {
+                        Polyline(points = path.points, color = casing.color, width = casing.width,
+                            pattern = if (path.proposed) listOf(Dash(20f), Gap(12f)) else null,
+                            zIndex = casing.zIndex)
+                    }
                     Polyline(
                         points = path.points,
                         color = path.color,
@@ -331,7 +344,8 @@ private fun NetworkLoadError(message: String, onRetry: () -> Unit, modifier: Mod
 @Composable
 private fun NetworkLegend(label: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Box(modifier = Modifier.size(9.dp).background(color, CircleShape))
+        Box(modifier = Modifier.size(9.dp).background(color, CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, CircleShape))
         Text(label, style = MaterialTheme.typography.labelSmall)
     }
 }
@@ -354,11 +368,17 @@ private fun TrailNetworkFeature.mapColor(): Color = when {
     else -> TrailColor
 }
 
-private val TrailColor = Color(0xFF237A36)
-private val ParkColor = Color(0xFF007F84)
-private val SharedRoadColor = Color(0xFF355CB8)
-private val SupplementColor = Color(0xFFB01767)
-private val ProposedColor = Color(0xFF7851A9)
+internal val TrailColor = Color(0xFF237A36)
+internal val ParkColor = Color(0xFF007F84)
+internal val SharedRoadColor = Color(0xFF355CB8)
+internal val SupplementColor = Color(0xFFB01767)
+internal val ProposedColor = Color(0xFF7851A9)
 private val AdvisoryColor = Color(0xFFE3690B)
 private const val CountyMapUrl =
     "https://mcleangis.maps.arcgis.com/apps/instant/sidebar/index.html?appid=d98c151296fd4b03860af8f4df7787a4"
+
+internal data class NetworkStrokeCasing(val color: Color, val width: Float, val zIndex: Float)
+internal fun networkStrokeCasings(width: Float) = listOf(
+    NetworkStrokeCasing(Color.Black, width + 8f, 0.48f),
+    NetworkStrokeCasing(Color.White, width + 4f, 0.49f),
+)

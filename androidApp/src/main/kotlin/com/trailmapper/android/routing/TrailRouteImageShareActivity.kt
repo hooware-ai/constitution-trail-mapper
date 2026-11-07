@@ -4,6 +4,8 @@
  */
 package com.trailmapper.android.routing
 
+import com.trailmapper.android.TrailMapperAndroidTheme
+
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -41,7 +43,7 @@ class TrailRouteImageShareActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
+            TrailMapperAndroidTheme(this@TrailRouteImageShareActivity) {
                 TrailRouteShareProgressScreen()
             }
         }

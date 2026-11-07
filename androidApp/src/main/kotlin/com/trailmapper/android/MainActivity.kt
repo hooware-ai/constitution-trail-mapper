@@ -8,7 +8,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.enableEdgeToEdge
+import android.content.res.Configuration
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -80,7 +80,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        applyTrailMapperSystemBars(this,
+            resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
 
         val resultBridge = activityResults
         val appContext = applicationContext
@@ -128,23 +129,25 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            App(
-                currentLocationAddressProvider = currentLocationAddressProvider,
-                addressAutocompleteProvider = addressAutocompleteProvider,
-                mapPointSelectionProvider = mapPointSelectionProvider,
-                trailNetworkProvider = trailNetworkProvider,
-                accessNetworkProvider = accessNetworkProvider,
-                trailRouteMapPresenter = trailRouteMapPresenter,
-                trailNetworkMapPresenter = trailNetworkMapPresenter,
-                externalLinkOpener = externalLinkOpener,
-                savedTrailRouteStore = savedTrailRouteStore,
-                savedDestinationStore = savedDestinationStore,
-                completedExerciseSessionStore = completedExerciseSessionStore,
-                trailAccountProvider = resultBridge,
-                trailRouteShareProvider = trailRouteShareProvider,
-                recentTrailRouteStore = recentTrailRouteStore,
-                developerOptionsActions = developerOptionsActions,
-            )
+            TrailMapperAndroidTheme(this@MainActivity) {
+                App(
+                    currentLocationAddressProvider = currentLocationAddressProvider,
+                    addressAutocompleteProvider = addressAutocompleteProvider,
+                    mapPointSelectionProvider = mapPointSelectionProvider,
+                    trailNetworkProvider = trailNetworkProvider,
+                    accessNetworkProvider = accessNetworkProvider,
+                    trailRouteMapPresenter = trailRouteMapPresenter,
+                    trailNetworkMapPresenter = trailNetworkMapPresenter,
+                    externalLinkOpener = externalLinkOpener,
+                    savedTrailRouteStore = savedTrailRouteStore,
+                    savedDestinationStore = savedDestinationStore,
+                    completedExerciseSessionStore = completedExerciseSessionStore,
+                    trailAccountProvider = resultBridge,
+                    trailRouteShareProvider = trailRouteShareProvider,
+                    recentTrailRouteStore = recentTrailRouteStore,
+                    developerOptionsActions = developerOptionsActions,
+                )
+            }
         }
     }
 
