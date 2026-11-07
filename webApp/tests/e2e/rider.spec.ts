@@ -1,3 +1,4 @@
+import { openDisclosure, openMainPage } from "../support/simplifiedNavigation";
 import { test, expect, type Page } from "@playwright/test";
 
 async function choose(
@@ -136,6 +137,7 @@ test("exercise validation, recent route retention UI, proposed opt in and map se
   await page.getByRole("button", { name: /Make an exercise loop/ }).click();
   await choose(page, "Start", "Review trailhead · East");
 
+  await openDisclosure(page, "details.custom-distance");
   await page.getByRole("spinbutton", { name: "Custom miles" }).fill("0.1");
   await expect(
     page.getByRole("button", { name: "Make loop", exact: true }),
@@ -167,16 +169,14 @@ test("exercise validation, recent route retention UI, proposed opt in and map se
   await expect(
     page.getByRole("heading", { name: "No recent routes" }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page.getByText("Layers and map key", { exact: true }).click();
   const proposed = page.getByRole("checkbox", { name: /Show proposed trails/ });
   await expect(proposed).not.toBeChecked();
   await proposed.check();
   await expect(proposed).toBeChecked();
   await page.getByRole("button", { name: "Plan a ride", exact: true }).click();
+  await openDisclosure(page, "details.route-options");
   await expect(
     page.getByRole("checkbox", { name: /Include proposed trails/ }),
   ).not.toBeChecked();
@@ -1355,6 +1355,7 @@ for (const cancel of ["upper", "lower"] as const) {
     const proposed = page.getByRole("checkbox", {
       name: /Include proposed trails/,
     });
+    await openDisclosure(page, "details.route-options");
     await proposed.check();
     for (const field of ["Start", "Destination"] as const) {
       await page
@@ -2411,6 +2412,7 @@ test("a loop the network cannot reach is labeled the closest available loop, wit
   await page.goto("/");
   await page.getByRole("button", { name: /Make an exercise loop/ }).click();
   await choose(page, "Start", "Review trailhead · East");
+  await openDisclosure(page, "details.custom-distance");
   await page.getByRole("spinbutton", { name: "Custom miles" }).fill("40");
   await page.getByRole("button", { name: "Make loop", exact: true }).click();
   await expect(
@@ -2435,10 +2437,7 @@ test("Explore offers native's map controls: closure areas switch, Show all trail
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page.getByText("Layers and map key", { exact: true }).click();
   const closures = page.getByRole("checkbox", {
     name: /Reported closure areas/,
@@ -3342,6 +3341,7 @@ test("a loop that turns back shows a Turn around sign, a second pass legend and 
   await page.goto("/");
   await page.getByRole("button", { name: /Make an exercise loop/ }).click();
   await choose(page, "Start", "Review trailhead · East");
+  await openDisclosure(page, "details.custom-distance");
   await page.getByRole("spinbutton", { name: "Custom miles" }).fill("1");
   await page.getByRole("button", { name: "Make loop", exact: true }).click();
   await expect(
@@ -3589,6 +3589,7 @@ async function openShare(page: Page, miles = "1") {
   await page.goto("/");
   await page.getByRole("button", { name: /Make an exercise loop/ }).click();
   await choose(page, "Start", "Review trailhead · East");
+  await openDisclosure(page, "details.custom-distance");
   await page.getByRole("spinbutton", { name: "Custom miles" }).fill(miles);
   await page.getByRole("button", { name: "Make loop", exact: true }).click();
   await expect(
@@ -3767,6 +3768,7 @@ async function openPlannerLoop(page: Page) {
   await choose(page, "Start", "Review trailhead · East");
 }
 async function makeLoop(page: Page, miles: string) {
+  await openDisclosure(page, "details.custom-distance");
   await page.getByRole("spinbutton", { name: "Custom miles" }).fill(miles);
   await page.getByRole("button", { name: "Make loop", exact: true }).click();
   await expect(

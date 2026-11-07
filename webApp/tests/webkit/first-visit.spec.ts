@@ -1,3 +1,8 @@
+import {
+  openDisclosure,
+  openHelp,
+  openMainPage,
+} from "../support/simplifiedNavigation";
 // First-visit guest journey on WebKit (issue #41). Today's behavior: no sign-in, saves stay in this browser. These specs do
 // not call local saves "cloud" saves and do not exercise any account flow. Labels in the titles are explained in support.ts.
 import { test, expect } from "@playwright/test";
@@ -82,13 +87,17 @@ test("[engine] a first opening has no prior rider data, persists only a blank Ho
   expect(Number.isSafeInteger(session.updatedAt)).toBe(true);
   expect(session.updatedAt).toBeGreaterThanOrEqual(initial.at);
   expect(session.updatedAt).toBeLessThanOrEqual(now);
-  // Truthful local-only wording, and no sign-in controls, on the first screen.
+  // Truthful local-only wording on Home, with the full storage explanation in More.
   await expect(page.locator("body")).toContainText(
     "On this browser · no account",
   );
-  await expect(page.locator("body")).toContainText(
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "More", exact: true }),
+  ).toContainText(
     "Saved routes and places stay in this browser. No sign-in or cloud sync.",
   );
+  await page.getByRole("button", { name: "Close More", exact: true }).click();
   await expect(
     page.getByRole("button", {
       name: /sign in|log in|google|apple|create an account/i,
@@ -109,10 +118,7 @@ test("[engine] Explore shows the trail map, closures are not hidden, and propose
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await expect(
     page.getByRole("region", { name: "Trail network map", exact: true }),
   ).toBeVisible();
@@ -129,6 +135,7 @@ test("[engine] Explore shows the trail map, closures are not hidden, and propose
   ).toBeGreaterThan(100);
   await page.getByRole("button", { name: "Plan a ride", exact: true }).click();
   // The opt-in is not carried silently into planning.
+  await openDisclosure(page, "details.route-options");
   await expect(
     page.getByRole("checkbox", { name: /Include proposed trails/ }),
   ).not.toBeChecked();
@@ -163,6 +170,7 @@ test("[engine] an exercise loop is validated, planned and previewed", async ({
   await page.goto("/");
   await page.getByRole("button", { name: /Make an exercise loop/ }).click();
   await choose(page, "Start", "Review trailhead · East");
+  await openDisclosure(page, "details.custom-distance");
   await page.getByRole("spinbutton", { name: "Custom miles" }).fill("0.1");
   await expect(
     page.getByRole("button", { name: "Make loop", exact: true }),
@@ -395,7 +403,7 @@ test("[engine] Save keeps the route in this browser only, survives a reload, and
     /synced|saved to (the )?cloud|your account/i,
   );
 
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   const help = page.getByRole("dialog", { name: "Help and about" });
   await expect(help).toContainText(
     "only while this page stays open and visible",

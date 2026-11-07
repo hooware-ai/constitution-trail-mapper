@@ -1,3 +1,4 @@
+import { openMainPage } from "./simplifiedNavigation";
 import { test, expect } from "@playwright/test";
 import { openPlanner, choose } from "../webkit/support";
 // Observe the real default Canvas renderer; grayscale screenshots retain its stroke patterns.
@@ -23,10 +24,7 @@ test("[engine] noncolor network patterns match text cues with a grayscale screen
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page.getByText("Layers and map key", { exact: true }).click();
   await page.addStyleTag({
     content: ".leaflet-container, .legend { filter: grayscale(1); }",

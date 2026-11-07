@@ -1,3 +1,8 @@
+import {
+  openDisclosure,
+  openHelp,
+  openMainPage,
+} from "../support/simplifiedNavigation";
 // The county build that ALSO packages SYNTHETIC proposed trail segments through the rights-gated seam (served on its own
 // port by tests/support/serve-county.mjs --proposed; see playwright.county.config.ts). The segments are a separate
 // layer, off unless the rider opts in, and a route over them is a preview that cannot start navigation. The control
@@ -56,7 +61,10 @@ async function openPlanner(page: Page) {
 const findRoute = (page: Page) =>
   page.getByRole("button", { name: "Find route", exact: true });
 const proposedBox = (page: Page) =>
-  page.getByRole("checkbox", { name: /Include proposed trails/ });
+  page.getByRole("checkbox", {
+    name: /Include proposed trails/,
+    includeHidden: true,
+  });
 
 test("the proposed layer is off by default: without the opt-in the proposed end cannot be navigated to", async ({
   page,
@@ -84,6 +92,7 @@ test("with the explicit opt-in the proposed segments are routed as a preview tha
 }) => {
   await seedPlaces(page);
   await openPlanner(page);
+  await openDisclosure(page, "details.route-options");
   await proposedBox(page).check();
   await findRoute(page).click();
   await expect(
@@ -104,7 +113,7 @@ test("Help lists the proposed layer with the rights it was admitted under, and h
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   const help = page.getByRole("dialog", { name: "Help and about" });
   await expect(help).toContainText("Proposed trails (preview only):");
   await expect(help).toContainText("2 planned segments");
@@ -143,6 +152,7 @@ test("control: the standard county build has no proposed layer, and the switch s
   const page = await context.newPage();
   await seedPlaces(page);
   await openPlanner(page);
+  await openDisclosure(page, "details.route-options");
   const box = proposedBox(page);
   await expect(box).toBeDisabled();
   await expect(box).not.toBeChecked();
@@ -150,10 +160,7 @@ test("control: the standard county build has no proposed layer, and the switch s
   await page
     .getByRole("button", { name: "Trail Mapper home", exact: true })
     .click();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   const summary = page.getByText("Layers and map key", { exact: true });
   await expect(summary).toHaveAccessibleDescription(
     "Closure areas shown · Proposed trails unavailable in this data",

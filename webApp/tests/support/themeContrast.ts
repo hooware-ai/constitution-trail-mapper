@@ -1,3 +1,4 @@
+import { openHelp, openMainPage } from "./simplifiedNavigation";
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { writeFile } from "node:fs/promises";
@@ -86,15 +87,10 @@ for (const [scheme, width, height, font] of variants) {
       .getByRole("button", { name: "Trail Mapper home", exact: true })
       .click();
     for (const name of ["Saved", "Explore", "Updates"]) {
-      await page
-        .getByRole("navigation", { name: "Main navigation" })
-        .getByRole("button", { name, exact: true })
-        .click();
+      await openMainPage(page, name);
       await audit(page, info, name.toLowerCase());
     }
-    await page
-      .getByRole("button", { name: "Help and about", exact: true })
-      .click();
+    await openHelp(page);
     await audit(page, info, "help");
   });
   test(`${scheme} ${width}x${height} ${font}: real-route preview, Directions and Share contrast`, async ({
@@ -306,9 +302,7 @@ for (const scheme of ["light", "dark"] as const) {
     expect(boundary.contrast).toBeGreaterThanOrEqual(3);
     await audit(page, info, "standalone-adapter-chooser");
     await page.getByRole("button", { name: /Close Choose/ }).click();
-    await page
-      .getByRole("button", { name: "Help and about", exact: true })
-      .click();
+    await openHelp(page);
     await audit(page, info, "standalone-adapter-help");
     await writeFile(
       info.outputPath("input-boundary.json"),

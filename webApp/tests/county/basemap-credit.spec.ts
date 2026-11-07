@@ -1,3 +1,4 @@
+import { openMainPage } from "../support/simplifiedNavigation";
 // The optional street basemap and its OpenStreetMap credit, in the county build (the fixture build has no basemap). Tiles
 // are STUBBED: every request to the tile host is answered locally with a 1x1 image and any other outside host is aborted,
 // so this suite can never request a real tile.
@@ -439,10 +440,7 @@ for (const fontSize of ["100%", "150%"] as const) {
     await expect(
       page.getByRole("button", { name: /Go somewhere/ }),
     ).toBeVisible();
-    await page
-      .getByRole("navigation")
-      .getByRole("button", { name: "Explore", exact: true })
-      .click();
+    await openMainPage(page, "Explore");
     await expect(
       page.getByRole("heading", { name: "Trails around you" }),
     ).toBeVisible();

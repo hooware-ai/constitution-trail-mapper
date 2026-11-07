@@ -1,3 +1,4 @@
+import { openHelp } from "./simplifiedNavigation";
 import { test, expect } from "@playwright/test";
 test("[input-fault] permanent rejection unlocks editing and uses a new receipt; invalid controls never send", async ({
   page,
@@ -20,9 +21,7 @@ test("[input-fault] permanent rejection unlocks editing and uses a new receipt; 
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Help and about", exact: true })
-    .click();
+  await openHelp(page);
   const dialog = page.getByRole("dialog");
   await dialog
     .getByRole("button", { name: "Send feedback", exact: true })

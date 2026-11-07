@@ -1,3 +1,4 @@
+import { openMainPage } from "./simplifiedNavigation";
 import { test, expect } from "@playwright/test";
 
 for (const [width, height, font] of [
@@ -17,10 +18,7 @@ for (const [width, height, font] of [
     await expect(
       page.getByRole("button", { name: /Go somewhere/ }),
     ).toBeVisible();
-    await page
-      .getByRole("navigation", { name: "Main navigation" })
-      .getByRole("button", { name: "Updates", exact: true })
-      .click();
+    await openMainPage(page, "Updates");
     await page.evaluate(
       (size) => (document.documentElement.style.fontSize = size),
       font,
@@ -83,10 +81,7 @@ test("returning to the visible Updates page rechecks a past event without waitin
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name: "Updates", exact: true })
-    .click();
+  await openMainPage(page, "Updates");
   const card = page.locator('[data-event-advisory="haunted-trail-2026"]');
   await expect(card).toContainText("Reported event notice");
   await page.clock.setSystemTime(new Date("2026-10-25T00:00:00-05:00"));

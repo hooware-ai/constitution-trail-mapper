@@ -1083,7 +1083,7 @@ dialog::backdrop {
 }
 .main-nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding-inline: max(8px, calc((100% - 650px) / 2));
 }
@@ -2501,4 +2501,121 @@ dialog::backdrop {
 .ride-guidance:focus-visible {
   outline: 3px solid #006ca8;
   outline-offset: -3px;
+}
+
+/* Mobile simplification: prioritize the rider's next decision, disclose reference material on demand. */
+.plan .lead {
+  margin: 8px 0 16px;
+}
+.plan .route-choice {
+  min-height: 80px;
+  margin: 10px 0;
+}
+.home-map-key {
+  margin-top: 16px;
+}
+.home-map-key .legend {
+  margin-top: 0;
+}
+.planner-endpoints {
+  position: relative;
+}
+.point-endpoints {
+  padding-right: 58px;
+}
+.point-endpoints .swap {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  margin: 0;
+  padding: 0;
+  font-size: 1.4rem;
+}
+.planner-endpoints .field {
+  margin: 14px 0;
+}
+.planner-endpoints .endpoint-field {
+  padding: 10px 12px;
+}
+.route-options,
+.custom-distance,
+.search-explanation {
+  margin-top: 12px;
+}
+.custom-distance summary,
+.route-options summary {
+  padding: 12px 0;
+}
+.more-menu-actions {
+  display: grid;
+  gap: 10px;
+}
+.more-menu-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+}
+.more-menu-actions .navigation-icon {
+  flex: 0 0 24px;
+  margin: 0;
+}
+.more-menu-actions small {
+  margin-top: 3px;
+}
+
+@media (max-width: 760px) {
+  .plan .panel,
+  .planner .panel {
+    padding: 16px 18px 24px;
+  }
+  .plan h1,
+  .planner h1 {
+    font-size: 1.55rem;
+    margin: 8px 0 12px;
+  }
+  .plan .map-wrap {
+    height: clamp(150px, 25dvh, 210px);
+    min-height: 150px;
+  }
+  /* Endpoint decisions come first; map selection still opens the full dedicated picker. */
+  .planner .panel {
+    order: 0;
+    margin-top: 0;
+    border-radius: 0;
+  }
+  .planner .map-wrap {
+    order: 1;
+    height: 210px;
+    min-height: 210px;
+  }
+  .planner .back {
+    margin-bottom: 4px;
+  }
+  .planner fieldset {
+    margin: 16px 0;
+  }
+  .planner .wide {
+    margin-top: 10px;
+  }
+  .planner .help-only-nav {
+    padding-block: 4px;
+  }
+  .main-nav:not(.help-only-nav) > button {
+    max-width: 180px;
+  }
+  .leaflet-control-zoom a {
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 44px !important;
+  }
+  .more-dialog {
+    width: min(480px, calc(100% - 24px));
+  }
 }

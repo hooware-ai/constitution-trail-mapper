@@ -1,3 +1,4 @@
+import { openHelp, openMainPage } from "../support/simplifiedNavigation";
 import { test, expect, type Page } from "@playwright/test";
 
 async function choose(
@@ -25,7 +26,7 @@ async function plan(page: Page) {
   ).toBeVisible();
 }
 const helpButton = (page: Page) =>
-  page.getByRole("button", { name: /^Help/ }).first();
+  page.getByRole("button", { name: /^(Help|More$)/ }).first();
 const helpDialog = (page: Page) =>
   page.getByRole("dialog", { name: "Help and about" });
 
@@ -34,10 +35,10 @@ test("Help and about is reachable from every main screen and names what a rider 
 }) => {
   await page.goto("/");
   for (const tab of ["Plan", "Saved", "Explore", "Updates"]) {
-    await page.getByRole("button", { name: tab, exact: true }).click();
+    await openMainPage(page, tab);
     await expect(helpButton(page)).toBeVisible();
   }
-  await helpButton(page).click();
+  await openHelp(page);
   const dialog = helpDialog(page);
   await expect(dialog).toBeVisible();
   for (const heading of [
@@ -71,7 +72,7 @@ test("Help follows today's behaviour: browser-only storage, optional basemap, no
   const requested = new Set<string>();
   page.on("request", (request) => requested.add(new URL(request.url()).host));
   await plan(page);
-  await helpButton(page).click();
+  await openHelp(page);
   const dialog = helpDialog(page);
   await expect(dialog).toContainText("Stored in this browser only");
   await expect(dialog).toContainText("tile.openstreetmap.org");
@@ -117,7 +118,7 @@ test("the dialog is keyboard-operable: focus goes in, Escape closes it and retur
 }) => {
   await page.goto("/");
   // Focus and send the key in one browser action, before startup's heading-focus frame can intervene.
-  await helpButton(page).press("Enter");
+  await openHelp(page, true);
   const dialog = helpDialog(page);
   await expect(dialog).toBeVisible();
   const inside = await page.evaluate(() =>
@@ -145,7 +146,7 @@ test("browser Back closes Help instead of leaving the screen, and Help never sto
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Saved", exact: true }).click();
-  await helpButton(page).click();
+  await openHelp(page);
   await expect(helpDialog(page)).toBeVisible();
   await page.goBack();
   await expect(helpDialog(page)).toHaveCount(0);
@@ -214,7 +215,7 @@ test("opening Help during a ride leaves the ride active", async ({ page }) => {
   await expect(
     page.getByText("Keep this page open and visible. Guidance pauses"),
   ).toBeVisible();
-  await helpButton(page).click();
+  await openHelp(page);
   await expect(helpDialog(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
@@ -292,7 +293,7 @@ test("a problem report holds only the app version, can be reviewed and edited, a
     .click();
   const requests: string[] = [];
   page.on("request", (request) => requests.push(request.url()));
-  await helpButton(page).click();
+  await openHelp(page);
   await helpDialog(page)
     .getByRole("button", { name: "Write a problem report" })
     .click();
@@ -361,7 +362,7 @@ test("voluntary ride feedback is editable, copied exactly and leaves the planned
   }));
   const requests: string[] = [];
   page.on("request", (request) => requests.push(request.url()));
-  await helpButton(page).click();
+  await openHelp(page);
   await helpDialog(page)
     .getByRole("button", { name: "Write ride feedback" })
     .click();
@@ -429,7 +430,7 @@ test("a late feedback-copy result cannot speak for a different report view", asy
     });
   });
   await page.goto("/");
-  await helpButton(page).click();
+  await openHelp(page);
   await helpDialog(page)
     .getByRole("button", { name: "Write ride feedback" })
     .click();
@@ -473,7 +474,7 @@ test("ride feedback remains usable by keyboard on a narrow screen with large tex
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto("/");
   await page.addStyleTag({ content: "html {font-size:200% !important;}" });
-  await helpButton(page).press("Enter");
+  await openHelp(page, true);
   await helpDialog(page)
     .getByRole("button", { name: "Write ride feedback" })
     .press("Enter");
@@ -526,7 +527,7 @@ test("on a narrow screen with large text nothing is cut off or off-screen", asyn
   const box = await helpButton(page).boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(320 + 1);
-  await helpButton(page).click();
+  await openHelp(page);
   const dialog = helpDialog(page);
   await expect(dialog).toBeVisible();
   const overflow = await dialog.evaluate((el) => ({
@@ -553,7 +554,7 @@ test("Help, report and feedback views have no automatically detectable accessibi
 }) => {
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   await page.goto("/");
-  await helpButton(page).click();
+  await openHelp(page);
   await expect(helpDialog(page)).toBeVisible();
   const help = await new AxeBuilder({ page }).include("dialog[open]").analyze();
   expect(help.violations.map((v) => `${v.id}: ${v.nodes[0].html}`)).toEqual([]);
@@ -618,7 +619,7 @@ const pendingCopies = (page: Page) =>
   page.evaluate(() => (window as any).__copies.length as number);
 async function openReport(page: Page) {
   // From the page, open Help first; from inside Help (after Back) the topics are already showing.
-  if (!(await helpDialog(page).isVisible())) await helpButton(page).click();
+  if (!(await helpDialog(page).isVisible())) await openHelp(page);
   await helpDialog(page)
     .getByRole("button", { name: "Write a problem report" })
     .click();
@@ -748,10 +749,7 @@ test("Trail updates lists the October notices with official links that open safe
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Updates", exact: true })
-    .click();
+  await openMainPage(page, "Updates");
   await expect(
     page.getByRole("heading", { name: "Trail updates" }),
   ).toBeVisible();
@@ -838,7 +836,7 @@ for (const kind of ["report", "feedback"] as const) {
           () => getComputedStyle(document.documentElement).fontSize,
         ),
       ).toBe("32px");
-      await helpButton(page).press("Enter");
+      await openHelp(page, true);
       await helpDialog(page)
         .getByRole("button", {
           name:
@@ -903,7 +901,7 @@ for (const kind of ["report", "feedback"] as const) {
   }) => {
     await controllableClipboard(page);
     await page.goto("/");
-    await helpButton(page).click();
+    await openHelp(page);
     await helpDialog(page)
       .getByRole("button", {
         name:
@@ -973,7 +971,7 @@ test("Help shows the project mailto contact and preserves voluntary public GitHu
   page,
 }) => {
   await page.goto("/");
-  await helpButton(page).click();
+  await openHelp(page);
   const help = helpDialog(page);
   const contact = help.getByRole("link", {
     name: "hoowareapps@gmail.com",

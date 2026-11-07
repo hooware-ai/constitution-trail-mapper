@@ -1,3 +1,4 @@
+import { openHelp, openMainPage } from "../support/simplifiedNavigation";
 import { test, expect, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 
@@ -147,7 +148,7 @@ test("the county build loads its packaged data and says what it is, with no fixt
   await expect(page.getByRole("dialog")).not.toContainText("Review trailhead");
   await page.getByRole("button", { name: "Close Choose start" }).click();
   await page.getByRole("button", { name: "Trail Mapper home" }).click();
-  await page.getByRole("button", { name: "Updates", exact: true }).click();
+  await openMainPage(page, "Updates");
   const virginiaRoadNotice = page.locator(".updates-list article").filter({
     has: page.getByRole("heading", {
       name: "Virginia Avenue road access: Linden to Broadway",
@@ -662,7 +663,7 @@ test("recovery and restarts keep routing, saving and showing the exact data the 
   expect(stored.recent[0].dataset.contentSha256).toBe(original.content.sha256);
   expect(stored.recent[0].dataset.version).toBe(original.version);
   await page.getByRole("button", { name: "Trail Mapper home" }).click();
-  await page.getByRole("button", { name: "Updates", exact: true }).click();
+  await openMainPage(page, "Updates");
   await expect(page.getByRole("region", { name: "Trail data" })).toContainText(
     original.version,
   );
@@ -726,7 +727,7 @@ test("Help describes the packaged county data it is running on: coverage, licens
   await seedPlaces(page);
   await page.goto("/");
   await expect(page.locator(".review-banner")).toHaveCount(0);
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   const dialog = page.getByRole("dialog", { name: "Help and about" });
   await expect(dialog).toContainText(
     "Bloomington–Normal and nearby McLean County",
@@ -766,7 +767,7 @@ test("Help on the build WITHOUT road data says so, claims no road files, and the
   await seedPlaces(page);
   await page.goto("/");
   await expect(page.locator(".review-banner")).toHaveCount(0);
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   const dialog = page.getByRole("dialog", { name: "Help and about" });
   await expect(dialog).toContainText(
     "This build has no street-access data: the app routes only on the loaded features",
