@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { planPoint } from "../webkit/support";
+import { planPoint, simulateDevice } from "../webkit/support";
 
 test("[engine] preview directions can locate a real maneuver without changing the route", async ({
   page,
@@ -196,6 +196,189 @@ test("[engine] entering navigation clears preview selection and leaves direction
     .click();
   expect(errors).toEqual([]);
 });
+
+// Delay only the real lazy module, not the app or its click handler. Each case
+// releases it between native pointerdown/up at the ORIGINAL screen coordinates.
+// Both Chromium and WebKit import this support file. These are engine/layout
+// checks, not physical touch-device or GPS acceptance.
+for (const { name, width, height, fontSize, oldLayout } of [
+  { name: "a narrow phone", width: 320, height: 568, fontSize: 16 },
+  {
+    name: "a narrow phone at 200% text",
+    width: 320,
+    height: 568,
+    fontSize: 32,
+  },
+  {
+    name: "short landscape at 200% text",
+    width: 640,
+    height: 320,
+    fontSize: 32,
+  },
+  {
+    name: "negative control: the original dock loses the tap",
+    width: 320,
+    height: 568,
+    fontSize: 16,
+    oldLayout: true,
+  },
+]) {
+  test(`[sim-device] Directions survives lazy map mounting during a held pointer: ${name}`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width, height });
+    await simulateDevice(page);
+    let releaseModule!: () => void;
+    const moduleGate = new Promise<void>((resolve) => {
+      releaseModule = resolve;
+    });
+    let moduleRequests = 0;
+    await page.route(/\/src\/RideMap\.tsx(?:\?|$)/, async (route) => {
+      moduleRequests++;
+      await moduleGate;
+      await route.continue();
+    });
+    const restoreLayout = async () => {
+      if (!oldLayout) return;
+      await page.evaluate(() => {
+        const body = document.querySelector<HTMLElement>(".ride-dock-body");
+        const directions = document.querySelector(".ride-directions");
+        if (body && directions) {
+          body.append(directions);
+          body.style.removeProperty("display");
+          body.parentElement!.style.removeProperty("min-height");
+        }
+      });
+    };
+    try {
+      await planPoint(page);
+      await page.evaluate((size) => {
+        document.documentElement.style.fontSize = `${size}px`;
+      }, fontSize);
+      await page
+        .getByRole("button", { name: "Start navigation", exact: true })
+        .click();
+      await expect(
+        page.getByText("Opening ride map…", { exact: true }),
+      ).toBeVisible();
+      await expect.poll(() => moduleRequests).toBe(1);
+      await expect(page.locator(".ride-map-tools > *")).toHaveCount(0);
+
+      if (oldLayout) {
+        // TEST-ONLY NEGATIVE CONTROL. Recreate the prior layout: Directions
+        // precedes the async tools inside the bottom-anchored auto-height scroller.
+        // Production cases above do not modify app markup or CSS.
+        await page.evaluate(() => {
+          const content = document.querySelector(".ride-dock-content")!;
+          const progress = document.querySelector(".ride-progress")!;
+          const body = document.querySelector<HTMLElement>(".ride-dock-body");
+          if (body) {
+            body.style.display = "contents";
+            body.parentElement!.style.minHeight = "0";
+          }
+          progress.append(document.querySelector(".ride-directions")!);
+          content.insertBefore(
+            progress,
+            content.querySelector(".navigation-beta-note, .ride-map-tools"),
+          );
+        });
+      }
+
+      const directions = page.getByRole("button", {
+        name: "Directions",
+        exact: true,
+      });
+      await directions.scrollIntoViewIfNeeded();
+      await expect(directions).toBeInViewport({ ratio: 1 });
+      const before = (await directions.boundingBox())!;
+      const point = {
+        x: before.x + before.width / 2,
+        y: before.y + before.height / 2,
+      };
+      expect(
+        await directions.evaluate(
+          (button, p) => button.contains(document.elementFromPoint(p.x, p.y)),
+          point,
+        ),
+        "The original press point hits Directions",
+      ).toBe(true);
+      await page.mouse.move(point.x, point.y);
+      await page.mouse.down();
+      releaseModule();
+      try {
+        await expect(
+          page.locator(".ride-map-tools .ride-map-control"),
+        ).toBeVisible();
+        await expect(
+          page.locator(".ride-map-tools .ride-credit"),
+        ).toContainText("Synthetic review geometry");
+        await expect(
+          page.getByText("Opening ride map…", { exact: true }),
+        ).toHaveCount(0);
+        const after = (await directions.boundingBox())!;
+        if (oldLayout) {
+          expect(
+            before.y - after.y,
+            "The old layout moves the button beyond the held pointer",
+          ).toBeGreaterThan(before.height / 2);
+          expect(
+            await directions.evaluate(
+              (button, p) =>
+                button.contains(document.elementFromPoint(p.x, p.y)),
+              point,
+            ),
+          ).toBe(false);
+        } else {
+          for (const edge of ["x", "y", "width", "height"] as const)
+            expect
+              .soft(
+                Math.abs(after[edge] - before[edge]),
+                `Directions ${edge} stays fixed while the pointer is held`,
+              )
+              .toBeLessThanOrEqual(1);
+          expect
+            .soft(
+              await directions.evaluate(
+                (button, p) =>
+                  button.contains(document.elementFromPoint(p.x, p.y)),
+                point,
+              ),
+              "The release point still hits Directions",
+            )
+            .toBe(true);
+        }
+      } finally {
+        // No locator.click(): it would retarget the moved button and mask the race.
+        await page.mouse.up();
+      }
+      const dialog = page.getByRole("dialog", { name: "Directions" });
+      if (oldLayout) {
+        await expect(dialog).not.toBeVisible();
+        // Restore React's real parent before any further renders or unmounting.
+        await restoreLayout();
+        // Prove the negative control loses this tap, rather than breaking the dialog.
+        await directions.click();
+      }
+      await expect(dialog.locator("ol li").first()).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: /Show step/ }),
+      ).toHaveCount(0);
+      await page.getByRole("button", { name: "Close Directions" }).click();
+      await page
+        .getByRole("button", { name: "Stop navigation", exact: true })
+        .click();
+      await expect(
+        page.getByRole("button", { name: "Start navigation", exact: true }),
+      ).toBeVisible();
+      expect(errors).toEqual([]);
+    } finally {
+      releaseModule();
+      await restoreLayout();
+    }
+  });
+}
 
 test("[engine] short large-text directions reveal the selected maneuver on return", async ({
   page,

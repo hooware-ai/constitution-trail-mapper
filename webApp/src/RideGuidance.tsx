@@ -24,14 +24,16 @@ export function RideGuidance({
     };
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    for (const child of element.children) observer.observe(child);
+    // The short-portrait copy wrapper uses display: contents. Observe its
+    // actual text boxes too, including any message added by a new phase.
+    for (const child of element.querySelectorAll("*")) observer.observe(child);
     window.addEventListener("resize", measure);
     measure();
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [phase]);
   return (
     <div
       ref={ref}

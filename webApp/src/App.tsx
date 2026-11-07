@@ -3,6 +3,7 @@ import {
   Suspense,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,6 +16,7 @@ import {
 } from "./platform/browserHistory";
 import { MapView } from "./MapView";
 import { RideGuidance } from "./RideGuidance";
+import { useRideDockLayout } from "./rideDockLayout";
 import { itineraryDistances, itineraryDistanceLabel } from "./itinerary";
 import { directionGroupStarts } from "./directionGroups";
 import { ManeuverIcon } from "./ManeuverIcon";
@@ -241,6 +243,7 @@ export function App({ refresh }: AppProps = {}) {
   const panelRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const startDockRef = usePreviewDockLayout(workspaceRef, panelRef);
+  const rideDockRef = useRideDockLayout();
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const basemapNoticeRef = useRef<HTMLParagraphElement>(null);
   const canShare = typeof navigator.share === "function";
@@ -2026,11 +2029,41 @@ export function App({ refresh }: AppProps = {}) {
       announce({ kind: "error", message: errorText(e) });
     }
   }
-  useEffect(() => {
+  const focusScreenRef = useRef(screen);
+  const pendingHeadingFocus = useRef<{
+    screen: typeof screen;
+    opener: Element | null;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const screenChanged = focusScreenRef.current !== screen;
+    // Capture before a rider can interact with the newly committed panel.
+    // Keep the original opener if a network render replaces the pending frame.
+    if (screenChanged && pendingHeadingFocus.current?.screen !== screen)
+      pendingHeadingFocus.current = { screen, opener: document.activeElement };
+    const opener = pendingHeadingFocus.current?.opener;
     const frame = requestAnimationFrame(() => {
+      // Commit the screen only when its frame runs; a network update may cancel
+      // and replace this frame without losing a pending navigation announcement.
+      focusScreenRef.current = screen;
+      pendingHeadingFocus.current = null;
       const heading = panelRef.current?.querySelector<HTMLElement>("h1");
       if (heading) {
         heading.tabIndex = -1;
+        // A late boot may replace the loading panel after the rider has opened
+        // or dismissed More. Preserve that focus; actual screen changes still
+        // announce their heading, and an untouched boot focuses its new panel.
+        const active = document.activeElement;
+        if (!screenChanged && active && active !== document.body) return;
+        // Navigation announces its heading unless the rider already moved to
+        // another control in the destination panel. An unchanged Back opener
+        // must still yield focus to the new heading.
+        if (
+          screenChanged &&
+          active !== opener &&
+          active &&
+          panelRef.current?.contains(active)
+        )
+          return;
         heading.focus({ preventScroll: true });
       }
     });
@@ -3051,77 +3084,82 @@ export function App({ refresh }: AppProps = {}) {
                   )}
                 </div>
               </RideGuidance>
-              <div className="ride-dock">
-                <div className="ride-dock-content">
-                  {routeAlerts}
-                  {freshness && (
-                    <RuntimeFreshnessStatus
-                      runtime={freshness}
-                      appBuild={__TRAIL_BUILD__.commit}
-                      compact
-                    />
-                  )}
-                  {!online && (
-                    <p className="ride-safety ride-offline" role="status">
-                      Offline · live map tiles and offline navigation
-                      unavailable.
-                    </p>
-                  )}
-                  {__TRAIL_ASSUME_ESTIMATED__ && (
-                    <p className="ride-safety" role="status">
-                      PRIVATE TEST MODE
-                      {preview?.assumedConnections &&
-                        " · Estimated connection: stop and verify it on the ground."}
-                    </p>
-                  )}
-                  {nav.phase === "off-route" && (
-                    <div className="reroute-actions">
-                      <p>Stop before changing your route.</p>
-                      {preview?.kind === "ExerciseLoop" ? (
-                        <>
+              <div className="ride-dock" ref={rideDockRef}>
+                <div className="ride-dock-body">
+                  <div className="ride-dock-content">
+                    {routeAlerts}
+                    {freshness && (
+                      <RuntimeFreshnessStatus
+                        runtime={freshness}
+                        appBuild={__TRAIL_BUILD__.commit}
+                        compact
+                      />
+                    )}
+                    {!online && (
+                      <p className="ride-safety ride-offline" role="status">
+                        Offline · live map tiles and offline navigation
+                        unavailable.
+                      </p>
+                    )}
+                    {__TRAIL_ASSUME_ESTIMATED__ && (
+                      <p className="ride-safety" role="status">
+                        PRIVATE TEST MODE
+                        {preview?.assumedConnections &&
+                          " · Estimated connection: stop and verify it on the ground."}
+                      </p>
+                    )}
+                    {nav.phase === "off-route" && (
+                      <div className="reroute-actions">
+                        <p>Stop before changing your route.</p>
+                        {preview?.kind === "ExerciseLoop" ? (
+                          <>
+                            <button
+                              className="primary wide"
+                              disabled={busy}
+                              onClick={() => void reroute("rejoin")}
+                            >
+                              Rejoin the loop
+                            </button>
+                            <button
+                              className="wide"
+                              disabled={busy}
+                              onClick={() => void reroute("return")}
+                            >
+                              Return to start
+                            </button>
+                          </>
+                        ) : (
                           <button
                             className="primary wide"
                             disabled={busy}
-                            onClick={() => void reroute("rejoin")}
+                            onClick={() => void reroute("destination")}
                           >
-                            Rejoin the loop
+                            Reroute
                           </button>
-                          <button
-                            className="wide"
-                            disabled={busy}
-                            onClick={() => void reroute("return")}
-                          >
-                            Return to start
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="primary wide"
-                          disabled={busy}
-                          onClick={() => void reroute("destination")}
-                        >
-                          Reroute
-                        </button>
-                      )}
+                        )}
+                      </div>
+                    )}
+                    <div className="ride-progress">
+                      <strong>
+                        {nav.guidance
+                          ? `${miles(nav.guidance.remainingMeters)} mi`
+                          : "—"}
+                      </strong>
+                      <span>remaining</span>
                     </div>
-                  )}
-                  <div className="ride-progress">
-                    <strong>
-                      {nav.guidance
-                        ? `${miles(nav.guidance.remainingMeters)} mi`
-                        : "—"}
-                    </strong>
-                    <span>remaining</span>
-                    <button onClick={() => setPopup("directions")}>
-                      Directions
-                    </button>
+                    {nav.phase === "navigating" && (
+                      <p className="caption navigation-beta-note" role="note">
+                        Navigation is in beta and may experience issues.
+                      </p>
+                    )}
+                    <div className="ride-map-tools" ref={setRideMapToolsHost} />
                   </div>
-                  {nav.phase === "navigating" && (
-                    <p className="caption navigation-beta-note" role="note">
-                      Navigation is in beta and may experience issues.
-                    </p>
-                  )}
-                  <div className="ride-map-tools" ref={setRideMapToolsHost} />
+                  <button
+                    className="ride-directions"
+                    onClick={() => setPopup("directions")}
+                  >
+                    Directions
+                  </button>
                 </div>
                 <div className="ride-actions">
                   <details className="ride-details">
