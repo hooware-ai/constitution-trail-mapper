@@ -31,6 +31,7 @@ import { AccessConnections } from "./AccessConnections";
 import { PRIVATE_TEST_MODE_CARDS_ENABLED } from "./previewPresentation";
 import {
   type DialogNotice,
+  CustomDistance,
   EndpointField,
   DirectionControl,
   Legend,
@@ -146,6 +147,7 @@ type Popup =
   | "clear"
   | "rename"
   | "help"
+  | "more"
   | "install"
   | "install-open"
   | null;
@@ -2454,7 +2456,7 @@ export function App({ refresh }: AppProps = {}) {
             <>
               <p className="eyebrow">Your next ride</p>
               <h1>Plan a ride</h1>
-              <p className="lead">Find a way there, or make time for a loop.</p>
+              <p className="lead">Where would you like to ride?</p>
               <div className="plan-choices">
                 <button
                   className="route-choice primary"
@@ -2496,45 +2498,52 @@ export function App({ refresh }: AppProps = {}) {
                   </ul>
                 </section>
               )}
-              <p className="caption">
-                Saved routes and places stay in this browser. No sign-in or
-                cloud sync.
-              </p>
-              <Legend />
+              <details className="map-key-details home-map-key">
+                <summary>Map key</summary>
+                <Legend />
+              </details>
             </>
           )}
           {network && screen === "planner" && (
             <>
               <p className="eyebrow">Plan your ride</p>
               <h1>{isPlanner ? "Make an exercise loop" : "Go somewhere"}</h1>
-              <EndpointField
-                label="Start"
-                value={draft.start}
-                onClick={() => openPlace("start")}
-              />
-              {!isPlanner && (
-                <>
-                  <button
-                    className="swap"
-                    aria-label="Swap start and destination"
-                    onClick={() => {
-                      cancelLocation();
-                      setDraft({
-                        ...draft,
-                        start: draft.destination,
-                        destination: draft.start,
-                      });
-                    }}
-                  >
-                    ⇅ Swap
-                  </button>
-                  <EndpointField
-                    label="Destination"
-                    value={draft.destination}
-                    onClick={() => openPlace("destination")}
-                  />
-                </>
-              )}
+              <div
+                className={
+                  isPlanner
+                    ? "planner-endpoints"
+                    : "planner-endpoints point-endpoints"
+                }
+              >
+                <EndpointField
+                  label="Start"
+                  value={draft.start}
+                  onClick={() => openPlace("start")}
+                />
+                {!isPlanner && (
+                  <>
+                    <button
+                      className="swap"
+                      aria-label="Swap start and destination"
+                      onClick={() => {
+                        cancelLocation();
+                        setDraft({
+                          ...draft,
+                          start: draft.destination,
+                          destination: draft.start,
+                        });
+                      }}
+                    >
+                      ⇅<span className="visually-hidden"> Swap</span>
+                    </button>
+                    <EndpointField
+                      label="Destination"
+                      value={draft.destination}
+                      onClick={() => openPlace("destination")}
+                    />
+                  </>
+                )}
+              </div>
               {isPlanner && (
                 <fieldset>
                   <legend>Target distance</legend>
@@ -2549,42 +2558,37 @@ export function App({ refresh }: AppProps = {}) {
                       </button>
                     ))}
                   </div>
-                  <label className="field">
-                    Custom miles
-                    <input
-                      type="number"
-                      min="0.5"
-                      max="100"
-                      step="0.1"
-                      value={Number.isNaN(draft.miles) ? "" : draft.miles}
-                      onChange={(e) =>
-                        setDraft({
-                          ...draft,
-                          miles:
-                            e.target.value === ""
-                              ? NaN
-                              : Number(e.target.value),
-                        })
-                      }
-                      aria-invalid={!validMiles}
-                      aria-describedby="distance-help"
-                    />
-                  </label>
-                  <p
-                    id="distance-help"
-                    className={validMiles ? "caption" : "error"}
-                  >
-                    Choose 0.5–100 miles. The route may vary from your target.
-                  </p>
+                  <CustomDistance value={draft.miles}>
+                    <label className="field">
+                      Custom miles
+                      <input
+                        type="number"
+                        min="0.5"
+                        max="100"
+                        step="0.1"
+                        value={Number.isNaN(draft.miles) ? "" : draft.miles}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            miles:
+                              e.target.value === ""
+                                ? NaN
+                                : Number(e.target.value),
+                          })
+                        }
+                        aria-invalid={!validMiles}
+                        aria-describedby="distance-help"
+                      />
+                    </label>
+                    <p
+                      id="distance-help"
+                      className={validMiles ? "caption" : "error"}
+                    >
+                      Choose 0.5–100 miles. The route may vary from your target.
+                    </p>
+                  </CustomDistance>
                 </fieldset>
               )}
-              <ProposedChoice
-                network={network}
-                checked={draft.proposed}
-                onChange={(proposed) => setDraft({ ...draft, proposed })}
-                label="Include proposed trails"
-                description="Opt in to planned paths that may not be built or usable."
-              />
               <button
                 className="primary wide"
                 disabled={!canPlan}
@@ -2593,9 +2597,30 @@ export function App({ refresh }: AppProps = {}) {
                 {isPlanner ? "Make loop" : "Find route"}
               </button>
               <p className="caption">
-                Select a resolved start{!isPlanner ? " and destination" : ""}.
-                Unmapped access will be identified before navigation.
+                {!draft.start
+                  ? "Choose a starting point."
+                  : !isPlanner && !draft.destination
+                    ? "Choose a destination."
+                    : "Review your route before you ride."}
               </p>
+              <details
+                className="route-options"
+                open={draft.proposed || undefined}
+              >
+                <summary>
+                  Route options{draft.proposed ? " · proposed trails on" : ""}
+                </summary>
+                <ProposedChoice
+                  network={network}
+                  checked={draft.proposed}
+                  onChange={(proposed) => setDraft({ ...draft, proposed })}
+                  label="Include proposed trails"
+                  description="Opt in to planned paths that may not be built or usable."
+                />
+                <p className="caption">
+                  Unmapped access is identified before navigation.
+                </p>
+              </details>
             </>
           )}
           {screen === "map-picker" && (
@@ -3456,7 +3481,7 @@ export function App({ refresh }: AppProps = {}) {
           aria-label="Main navigation"
         >
           {topScreen &&
-            (["plan", "saved", "explore", "updates"] as const).map((tab) => (
+            (["plan", "saved"] as const).map((tab) => (
               <button
                 key={tab}
                 aria-current={screen === tab ? "page" : undefined}
@@ -3471,15 +3496,60 @@ export function App({ refresh }: AppProps = {}) {
           <button
             ref={helpButtonRef}
             aria-haspopup="dialog"
-            aria-expanded={popup === "help"}
-            onClick={() => setPopup("help")}
+            aria-expanded={popup === (topScreen ? "more" : "help")}
+            aria-current={
+              topScreen && ["explore", "updates"].includes(screen)
+                ? "page"
+                : undefined
+            }
+            onClick={() => setPopup(topScreen ? "more" : "help")}
           >
             <span aria-hidden="true">
-              <NavigationIcon name="help" />
+              <NavigationIcon name={topScreen ? "more" : "help"} />
             </span>
-            Help<span className="visually-hidden"> and about</span>
+            {topScreen ? (
+              "More"
+            ) : (
+              <>
+                Help<span className="visually-hidden"> and about</span>
+              </>
+            )}
           </button>
         </nav>
+      )}
+      {popup === "more" && (
+        <Modal
+          title="More"
+          onClose={() => setPopup(null)}
+          className="more-dialog"
+        >
+          <div className="more-menu-actions">
+            <button onClick={() => go("explore")}>
+              <NavigationIcon name="explore" />
+              <span>
+                Explore map<small>Trail layers and places to ride</small>
+              </span>
+            </button>
+            <button onClick={() => go("updates")}>
+              <NavigationIcon name="updates" />
+              <span>
+                Trail updates
+                <small>Reported closures and official notices</small>
+              </span>
+            </button>
+            <button onClick={() => setPopup("help")}>
+              <NavigationIcon name="help" />
+              <span>
+                Help and about
+                <small>How to ride, feedback, privacy and sources</small>
+              </span>
+            </button>
+          </div>
+          <p className="caption">
+            Saved routes and places stay in this browser. No sign-in or cloud
+            sync.
+          </p>
+        </Modal>
       )}
       {field && (
         <PlaceChooser

@@ -1,3 +1,4 @@
+import { openMainPage } from "./simplifiedNavigation";
 import { test, expect } from "@playwright/test";
 
 for (const [mode, width, height, fontSize] of [
@@ -15,10 +16,7 @@ for (const [mode, width, height, fontSize] of [
     await expect(
       page.getByRole("button", { name: /Go somewhere/ }),
     ).toBeVisible();
-    await page
-      .getByRole("navigation")
-      .getByRole("button", { name: "Explore", exact: true })
-      .click();
+    await openMainPage(page, "Explore");
     await expect(
       page.getByRole("heading", { name: "Trails around you" }),
     ).toBeVisible();
@@ -162,10 +160,7 @@ for (const [width, height, fontSize] of [
     await expect(
       page.getByRole("button", { name: /Go somewhere/ }),
     ).toBeVisible();
-    await page
-      .getByRole("navigation")
-      .getByRole("button", { name: "Explore", exact: true })
-      .click();
+    await openMainPage(page, "Explore");
     await expect(
       page.getByRole("heading", { name: "Trails around you" }),
     ).toBeVisible();

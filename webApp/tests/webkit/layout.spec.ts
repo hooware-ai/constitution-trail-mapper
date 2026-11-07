@@ -1,3 +1,4 @@
+import { openHelp, openMainPage } from "../support/simplifiedNavigation";
 // Layout, large text, keyboard and automated accessibility checks on WebKit (issue #41). These run on the desktop engine and
 // on iPhone-sized viewports (touch emulation, no real device). axe is an automated check, NOT VoiceOver: assistive-technology
 // use is on the operator checklist in docs/web/launch-acceptance.md.
@@ -43,13 +44,13 @@ test("[engine] no screen needs sideways scrolling, at normal and at 150% text", 
         () => (document.documentElement.style.fontSize = "24px"),
       );
     for (const tab of tabs) {
-      await nav(page, tab).click();
+      await openMainPage(page, tab);
       expect(
         await fitsWidth(page),
         `${tab}${larger ? " (150% text)" : ""}`,
       ).toBe(true);
     }
-    await page.getByRole("button", { name: /^Help/ }).first().click();
+    await openHelp(page);
     await expect(
       page.getByRole("dialog", { name: "Help and about" }),
     ).toBeVisible();
@@ -112,8 +113,7 @@ test("[engine] the primary controls are large enough to touch on a phone", async
     page.getByRole("button", { name: /Make an exercise loop/ }),
     nav(page, "Plan"),
     nav(page, "Saved"),
-    nav(page, "Explore"),
-    nav(page, "Updates"),
+    nav(page, "More"),
   ];
   for (const target of targets) {
     const box = await target.boundingBox();
@@ -195,7 +195,7 @@ test("[engine] browser Back and Forward move between screens and do not leave th
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await nav(page, "Saved").click();
+  await openMainPage(page, "Saved");
   await expect(
     page.getByRole("heading", { name: "Saved", exact: true, level: 1 }),
   ).toBeVisible();
@@ -228,7 +228,7 @@ test("[engine] no automatically detectable WCAG 2 A/AA violations on the planner
     page.getByRole("heading", { name: "Route preview", exact: true }),
   ).toBeVisible();
   await check("route preview");
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   await expect(
     page.getByRole("dialog", { name: "Help and about" }),
   ).toBeVisible();
@@ -320,19 +320,19 @@ for (const [percent, wide] of [
       size,
     );
     for (const tab of tabs) {
-      await nav(page, tab).click();
+      await openMainPage(page, tab);
       await sound(page, `${tab} at ${percent}%`);
     }
     // The tabs are still big enough to touch, and the bar does not hide the page.
     if (info.project.name.includes("iphone")) {
-      for (const tab of tabs) {
+      for (const tab of ["Plan", "Saved", "More"]) {
         const box = await nav(page, tab).boundingBox();
         expect(Math.min(box!.width, box!.height), tab).toBeGreaterThanOrEqual(
           44,
         );
       }
     }
-    await nav(page, "Plan").click();
+    await openMainPage(page, "Plan");
     await page.getByRole("button", { name: /Go somewhere/ }).click();
     await sound(page, "planner");
     await page.getByRole("button", { name: /^Start:/ }).click();
@@ -369,7 +369,7 @@ for (const [percent, wide] of [
     expect(box!.x + box!.width).toBeLessThanOrEqual(
       page.viewportSize()!.width + 1,
     );
-    await page.getByRole("button", { name: /^Help/ }).first().click();
+    await openHelp(page);
     await expect(
       page.getByRole("dialog", { name: "Help and about" }),
     ).toBeVisible();

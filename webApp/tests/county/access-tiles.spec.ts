@@ -1,3 +1,4 @@
+import { openHelp, openMainPage } from "../support/simplifiedNavigation";
 // The county build that ALSO packages SYNTHETIC ordinary-road access as base roads plus on-demand service-road tiles
 // (served on its own port by tests/support/serve-county.mjs --access; see playwright.county.config.ts). It proves, through
 // the real built artifact, that opening the planner downloads no service-road tiles, that a trip downloads and verifies
@@ -164,7 +165,7 @@ test("Help and the map credit say where the road data came from, with no accessi
     hasText: "OpenStreetMap contributors / ODbL",
   });
   await expect(credit).toBeVisible();
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   const help = page.getByRole("dialog", { name: "Help and about" });
   await expect(help).toContainText("Road access:");
   await expect(help).toContainText(
@@ -243,10 +244,7 @@ test("Explore draws the reported closure with its official notice link, and its 
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page.getByText("Layers and map key", { exact: true }).click();
   const closures = page.getByRole("checkbox", {
     name: /Reported closure areas/,
@@ -381,10 +379,7 @@ async function openExplore(page: Page) {
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
 }
 
 test("the Willow closure is drawn from the core's report at its instant, with its approximation label and a safely opened official link, and not one second earlier", async ({
@@ -466,7 +461,7 @@ test("Help on the build WITH road data says what it loads and what its requests 
   expect(urls.filter((url) => /tile\.openstreetmap\.org/.test(url))).toEqual(
     [],
   );
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   const help = page.getByRole("dialog", { name: "Help and about" });
   await expect(help).toContainText("This build also loads road data");
   await expect(help).toContainText(

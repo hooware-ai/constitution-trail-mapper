@@ -1,3 +1,4 @@
+import { openDisclosure } from "../support/simplifiedNavigation";
 // The county build that packages EVERY credited layer at once (reviewed OpenStreetMap paths, ordinary-road access with
 // OpenStreetMap service roads, and proposed trails), served on its own port by serve-county.mjs --osm --access --proposed.
 // The route image must carry every applicable credit, in full: none dropped, none cut to a fixed number of lines.
@@ -56,6 +57,7 @@ test("the route image carries the county, OpenStreetMap, access and proposed cre
   await page.getByRole("button", { name: /Go somewhere/ }).click();
   await choose(page, "Start", places[0].label as string);
   await choose(page, "Destination", places[1].label as string);
+  await openDisclosure(page, "details.route-options");
   await page.getByRole("checkbox", { name: /Include proposed trails/ }).check();
   await page.getByRole("button", { name: "Find route", exact: true }).click();
   await expect(

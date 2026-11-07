@@ -1,3 +1,4 @@
+import { openHelp } from "./simplifiedNavigation";
 import { test, expect } from "@playwright/test";
 test("[input-fault] feedback retry retains one receipt across Help sessions; no false success", async ({
   page,
@@ -21,9 +22,7 @@ test("[input-fault] feedback retry retains one receipt across Help sessions; no 
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Help and about", exact: true })
-    .click();
+  await openHelp(page);
   const dialog = page.getByRole("dialog");
   await dialog
     .getByRole("button", { name: "Send feedback", exact: true })
@@ -74,9 +73,7 @@ test("[input-fault] feature requests show bounded failures and large-text contro
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
   await page.evaluate(() => (document.documentElement.style.fontSize = "150%"));
-  await page
-    .getByRole("button", { name: "Help and about", exact: true })
-    .click();
+  await openHelp(page);
   const dialog = page.getByRole("dialog");
   for (const name of ["Send feedback", "Request a feature"]) {
     const button = dialog.getByRole("button", { name, exact: true });

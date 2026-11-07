@@ -22,6 +22,33 @@ export interface DialogNotice {
   kind: "error" | "success";
   message: string;
 }
+/** Disclosure stays open while a rider edits, including partial values such as the 5 in 50. */
+export function CustomDistance({
+  value,
+  children,
+}: {
+  value: number;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(
+    () => !Number.isFinite(value) || ![3, 5, 8, 10].includes(value),
+  );
+  return (
+    <details
+      className="custom-distance"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>
+        Custom distance
+        {Number.isFinite(value) && ![3, 5, 8, 10].includes(value)
+          ? ` · ${value} mi`
+          : ""}
+      </summary>
+      {children}
+    </details>
+  );
+}
 export function Modal({
   title,
   children,
@@ -81,9 +108,9 @@ export function Modal({
         if (e.key !== "Tab") return;
         const items = [
           ...dialog.current!.querySelectorAll<HTMLElement>(
-            'button:not(:disabled),input:not(:disabled),select,a[href],[tabindex="0"]',
+            'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,a[href],[tabindex="0"]',
           ),
-        ];
+        ].filter((element) => element.getClientRects().length > 0);
         const first = items[0],
           last = items.at(-1);
         if (e.shiftKey && document.activeElement === first) {
@@ -219,9 +246,6 @@ export function PlaceChooser({
           autoComplete="off"
         />
       </label>
-      <p className="muted">
-        Choose a result to resolve its location. Typed text is never saved.
-      </p>
       <div className="actions">
         <button onClick={onLocation}>Use current location</button>
         <button onClick={onMap}>Pick on map</button>
@@ -297,28 +321,32 @@ export function PlaceChooser({
           or a saved place instead.
         </p>
       )}
-      <p className="caption">
-        {addressSource ? (
-          <>
-            Searches {places.length} public places near Bloomington–Normal
-            {fixture ? " (plus review trailheads)" : ""} and your saved places
-            on this device. Typing a house number and street also searches
-            county address points, loaded to this device only when you do.
-            County address points are not verified trail entrances, and this is
-            not a business search.
-          </>
-        ) : (
-          <>
-            Not an address or business search: only {places.length} public
-            places near Bloomington–Normal
-            {fixture ? " (plus review trailheads)" : ""} and your saved places,
-            searched on this device.
-          </>
-        )}{" "}
-        {start
-          ? "Results near your selected start are shown first."
-          : "Start has no resolved coordinate, so results are not ordered by distance."}
-      </p>
+      <details className="search-explanation">
+        <summary>About place search</summary>
+        <p className="caption">
+          Choose a result to set its location. Typed text is never saved.{" "}
+          {addressSource ? (
+            <>
+              Searches {places.length} public places near Bloomington–Normal
+              {fixture ? " (plus review trailheads)" : ""} and your saved places
+              on this device. Typing a house number and street also searches
+              county address points, loaded to this device only when you do.
+              County address points are not verified trail entrances, and this
+              is not a business search.
+            </>
+          ) : (
+            <>
+              Not an address or business search: only {places.length} public
+              places near Bloomington–Normal
+              {fixture ? " (plus review trailheads)" : ""} and your saved
+              places, searched on this device.
+            </>
+          )}{" "}
+          {start
+            ? "Results near your selected start are shown first."
+            : "Choose a starting point to see nearby results first."}
+        </p>
+      </details>
     </Modal>
   );
 }

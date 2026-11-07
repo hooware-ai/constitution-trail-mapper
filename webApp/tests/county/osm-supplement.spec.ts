@@ -1,3 +1,4 @@
+import { openHelp, openMainPage } from "../support/simplifiedNavigation";
 // The county build that ALSO packages the synthetic reviewed OpenStreetMap supplement (served on its own port by
 // tests/support/serve-county.mjs --osm; see playwright.county.config.ts). Everything is synthetic: two self-authored
 // "ways" with real geometry hashes. It proves the packaged supplement reaches the router, the map credit and the Help
@@ -106,7 +107,7 @@ test("a destination only the reviewed OpenStreetMap path reaches can be planned,
     page.getByRole("button", { name: "Start navigation", exact: true }),
   ).toBeEnabled();
 
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   const help = page.getByRole("dialog", { name: "Help and about" });
   await expect(help).toContainText(
     "7 existing trail features (2 of them reviewed OpenStreetMap paths",
@@ -130,10 +131,7 @@ test("Explore marks the reviewed additions in the map key, as native does", asyn
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page.getByText("Layers and map key", { exact: true }).click();
   await expect(
     page.getByLabel("Map key").getByText("Verified addition"),
@@ -159,7 +157,7 @@ test("the supplement changes the data identity a saved route remembers, and no a
     LIBRARY_KEY,
   );
   expect(stored.saved[0].dataset.contentSha256).toBe(record.content.sha256);
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   await expect(
     page.getByRole("dialog", { name: "Help and about" }),
   ).toBeVisible();
@@ -222,10 +220,7 @@ test("verified additions have a distinct noncolor pattern matching the map key",
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page.getByText("Layers and map key", { exact: true }).click();
   await expect(
     page.locator('[data-map-line="verified"] .legend-cue'),

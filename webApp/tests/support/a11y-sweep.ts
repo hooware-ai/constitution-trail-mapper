@@ -1,3 +1,4 @@
+import { openHelp, openMainPage } from "./simplifiedNavigation";
 // An automated WCAG 2 A/AA sweep of every main screen and dialog of the guest journey, shared by the Chromium and WebKit
 // specs. axe is an automated check only (NOT a screen reader): assistive-technology use stays on the operator checklist in
 // docs/web/launch-acceptance.md. Fixture network, scripted location, no real tiles.
@@ -20,8 +21,6 @@ async function clean(page: Page, screen: string) {
   );
   expect(found, screen).toEqual([]);
 }
-const nav = (page: Page, name: string) =>
-  page.getByRole("navigation").getByRole("button", { name, exact: true });
 
 export const SCREENS = [
   "Plan (home)",
@@ -48,10 +47,10 @@ export async function sweepScreens(page: Page): Promise<string[]> {
   ).toBeVisible();
   await clean(page, "Plan (home)");
   for (const tab of ["Saved", "Explore", "Updates"]) {
-    await nav(page, tab).click();
+    await openMainPage(page, tab);
     await clean(page, `${tab} (empty library)`);
   }
-  await nav(page, "Plan").click();
+  await openMainPage(page, "Plan");
   await page.getByRole("button", { name: /Go somewhere/ }).click();
   await clean(page, "planner");
   await page.getByRole("button", { name: /^Start:/ }).click();
@@ -74,7 +73,7 @@ export async function sweepScreens(page: Page): Promise<string[]> {
     await clean(page, `${name} dialog`);
     await page.keyboard.press("Escape");
   }
-  await page.getByRole("button", { name: /^Help/ }).first().click();
+  await openHelp(page);
   await expect(
     page.getByRole("dialog", { name: "Help and about" }),
   ).toBeVisible();
@@ -87,13 +86,13 @@ export async function sweepScreens(page: Page): Promise<string[]> {
     .getByRole("button", { name: "Save destination as a place" })
     .click();
   await page.getByRole("button", { name: "Trail Mapper home" }).click();
-  await nav(page, "Saved").click();
+  await openMainPage(page, "Saved");
   await expect(
     page.getByRole("button", { name: /Review trailhead/ }).first(),
   ).toBeVisible();
   await clean(page, "Saved (route and place)");
   // Active foreground navigation.
-  await nav(page, "Plan").click();
+  await openMainPage(page, "Plan");
   await page.getByRole("button", { name: /Go somewhere/ }).click();
   // A saved place now repeats a catalog name, so take the first match.
   for (const [field, name] of [

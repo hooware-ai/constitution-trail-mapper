@@ -2,7 +2,7 @@
 export function NavigationIcon({
   name,
 }: {
-  name: "plan" | "saved" | "explore" | "updates" | "help";
+  name: "plan" | "saved" | "explore" | "updates" | "help" | "more";
 }) {
   return (
     <svg
@@ -17,6 +17,7 @@ export function NavigationIcon({
       strokeLinejoin="round"
     >
       {name === "plan" && <path d="M5 19 19 5M7 5h12v12" />}
+      {name === "more" && <path d="M4 6h16M4 12h16M4 18h16" />}
       {name === "saved" && (
         <path d="M12 20 4.5 12.5C-1 7 6 1 12 7c6-6 13 0 7.5 5.5Z" />
       )}

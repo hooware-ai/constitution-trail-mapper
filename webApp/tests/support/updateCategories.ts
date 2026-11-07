@@ -1,3 +1,4 @@
+import { openMainPage } from "./simplifiedNavigation";
 import { test, expect } from "@playwright/test";
 for (const [mode, width, height, font] of [
   ["portrait", 390, 844, "100%"],
@@ -27,10 +28,7 @@ for (const [mode, width, height, font] of [
     await expect(
       page.getByRole("button", { name: /Go somewhere/ }),
     ).toBeVisible();
-    await page
-      .getByRole("navigation", { name: "Main navigation" })
-      .getByRole("button", { name: "Updates", exact: true })
-      .click();
+    await openMainPage(page, "Updates");
     await page.evaluate((size) => {
       document.documentElement.style.fontSize = size;
     }, font);
@@ -185,10 +183,7 @@ test("[input-fault] unknown and missing published categories retain notices and 
   await expect(
     page.getByRole("button", { name: /Go somewhere/ }),
   ).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name: "Updates", exact: true })
-    .click();
+  await openMainPage(page, "Updates");
   await expect
     .poll(() =>
       page.evaluate(() =>

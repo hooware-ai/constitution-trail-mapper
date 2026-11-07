@@ -1,3 +1,4 @@
+import { openDisclosure, openMainPage } from "./simplifiedNavigation";
 import { test, expect } from "@playwright/test";
 import { choose, openPlanner, fitsWidth } from "../webkit/support";
 
@@ -26,6 +27,7 @@ test("[engine] a confirmed Explore pin changes only the chosen endpoint and uses
   await openPlanner(page);
   await choose(page, "Start", "Review trailhead · East");
   await choose(page, "Destination", "Review trailhead · South");
+  await openDisclosure(page, "details.route-options");
   await page.getByRole("checkbox", { name: /Include proposed trails/ }).check();
   await expect
     .poll(() =>
@@ -43,10 +45,7 @@ test("[engine] a confirmed Explore pin changes only the chosen endpoint and uses
     await page
       .getByRole("button", { name: "Trail Mapper home", exact: true })
       .click();
-    await page
-      .getByRole("navigation")
-      .getByRole("button", { name: "Explore", exact: true })
-      .click();
+    await openMainPage(page, "Explore");
   };
   const entry = () =>
     page
@@ -130,6 +129,7 @@ test("[engine] a confirmed Explore pin changes only the chosen endpoint and uses
     );
     expect(made[other]).toEqual(draftBefore[other]);
     expectedDraft = made;
+    await openDisclosure(page, "details.route-options");
     await expect(
       page.getByRole("checkbox", { name: /Include proposed trails/ }),
     ).toBeChecked();
@@ -177,10 +177,7 @@ test("[engine] Explore selection is accessible at large text and keeps empty end
   await page.goto("/");
   await page.getByRole("button", { name: /Go somewhere/ }).waitFor();
   await page.evaluate(() => (document.documentElement.style.fontSize = "150%"));
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page.getByText("Layers and map key", { exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: /Show proposed trails/ }),
@@ -210,6 +207,7 @@ test("[engine] Explore selection is accessible at large text and keeps empty end
   await expect(
     page.getByRole("button", { name: "Find route", exact: true }),
   ).toBeDisabled();
+  await openDisclosure(page, "details.route-options");
   await expect(
     page.getByRole("checkbox", { name: /Include proposed trails/ }),
   ).not.toBeChecked();
@@ -243,10 +241,7 @@ for (const cancel of ["button", "browser"] as const)
       } as typeof Worker;
     });
     await page.goto("/");
-    await page
-      .getByRole("navigation")
-      .getByRole("button", { name: "Explore", exact: true })
-      .click();
+    await openMainPage(page, "Explore");
     await page
       .getByRole("button", { name: "Choose a ride point", exact: true })
       .click();
@@ -326,10 +321,7 @@ test("[engine] an invalid real-core pick is announced and a subsequent valid pic
     } as typeof Worker;
   });
   await page.goto("/");
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page
     .getByRole("button", { name: "Choose a ride point", exact: true })
     .click();
@@ -369,14 +361,12 @@ test("[engine] Explore explicitly changes a loop draft into point planning while
   await page.getByRole("button", { name: /Make an exercise loop/ }).click();
   await choose(page, "Start", "Review trailhead · East");
   await page.getByRole("button", { name: "8 mi", exact: true }).click();
+  await openDisclosure(page, "details.route-options");
   await page.getByRole("checkbox", { name: /Include proposed trails/ }).check();
   await page
     .getByRole("button", { name: "Trail Mapper home", exact: true })
     .click();
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Explore", exact: true })
-    .click();
+  await openMainPage(page, "Explore");
   await page
     .getByRole("button", { name: "Choose a ride point", exact: true })
     .click();
@@ -393,6 +383,7 @@ test("[engine] Explore explicitly changes a loop draft into point planning while
   await expect(page.getByRole("button", { name: /^Start:/ })).toContainText(
     "Review trailhead · East",
   );
+  await openDisclosure(page, "details.route-options");
   await expect(
     page.getByRole("checkbox", { name: /Include proposed trails/ }),
   ).toBeChecked();
