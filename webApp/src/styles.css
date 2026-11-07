@@ -1948,6 +1948,11 @@ dialog::backdrop {
   box-shadow: 0 4px 22px #17382c40;
   pointer-events: auto;
 }
+.ride-dock-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .ride-dock-content {
   min-height: 0;
   overflow-y: auto;
@@ -1961,7 +1966,10 @@ dialog::backdrop {
   color: #762b00;
 }
 .ride-progress {
+  /* Loading map tools or notices must not move Directions during a tap. */
+  flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -2457,10 +2465,17 @@ dialog::backdrop {
   .navigation .ride-dock {
     min-height: min-content;
   }
-  .navigation .ride-dock-content {
+  /* Keep the original compact scroll budget: map tools are in the separate
+     right column here, so they cannot move Directions within this scroller. */
+  .navigation .ride-dock-body {
+    display: block;
     height: max(60px, 2.25rem);
     min-height: max(60px, 2.25rem);
     flex-grow: 1;
+    overflow-y: auto;
+  }
+  .navigation .ride-dock-content {
+    overflow: visible;
   }
   .navigation .ride-actions {
     display: grid;
