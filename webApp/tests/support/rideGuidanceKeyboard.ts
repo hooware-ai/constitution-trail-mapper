@@ -1,75 +1,87 @@
 import { test, expect } from "@playwright/test";
 import { simulateDevice, planPoint, startButton, fix } from "../webkit/support";
 
-test("[sim-device] clipped ride guidance can be reached and scrolled by keyboard", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 640, height: 320 });
-  await simulateDevice(page);
-  await planPoint(page);
-  await startButton(page).click();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__device.watching()))
-    .toBeGreaterThan(0);
-  await fix(page, 40.505, -88.95);
-  await expect(page.locator(".guidance.navigating")).toBeVisible();
-  await page.evaluate(() => (document.documentElement.style.fontSize = "32px"));
-  const guidance = page.locator(".ride-guidance");
-  const before = await guidance.evaluate((e) => ({
-    height: e.clientHeight,
-    content: e.scrollHeight,
-    overflow: getComputedStyle(e).overflowY,
-  }));
-  console.log(JSON.stringify({ guidance: before }));
-  expect(before.content).toBeGreaterThan(before.height + 1);
-  expect(before.overflow).toBe("auto");
-  let reached = false;
-  for (let i = 0; i < 30; i++) {
-    await page.keyboard.press("Tab");
-    if (await guidance.evaluate((e) => e === document.activeElement)) {
-      reached = true;
-      break;
+for (const [name, width, height] of [
+  ["short landscape", 640, 320],
+  ["short portrait", 375, 480],
+] as const) {
+  test(`[sim-device] clipped ride guidance can be reached and scrolled by keyboard: ${name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await simulateDevice(page);
+    await planPoint(page);
+    await startButton(page).click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__device.watching()))
+      .toBeGreaterThan(0);
+    await fix(page, 40.505, -88.95);
+    await expect(page.locator(".guidance.navigating")).toBeVisible();
+    await page.evaluate(
+      () => (document.documentElement.style.fontSize = "32px"),
+    );
+    const guidance = page.locator(".ride-guidance");
+    const before = await guidance.evaluate((e) => ({
+      height: e.clientHeight,
+      content: e.scrollHeight,
+      overflow: getComputedStyle(e).overflowY,
+    }));
+    console.log(JSON.stringify({ guidance: before }));
+    expect(before.content).toBeGreaterThan(before.height + 1);
+    expect(before.overflow).toBe("auto");
+    let reached = false;
+    for (let i = 0; i < 30; i++) {
+      await page.keyboard.press("Tab");
+      if (await guidance.evaluate((e) => e === document.activeElement)) {
+        reached = true;
+        break;
+      }
     }
-  }
-  expect(
-    reached,
-    "Keyboard must reach the clipped guidance, without programmatic focus",
-  ).toBe(true);
-  expect(await guidance.evaluate((e) => getComputedStyle(e).outlineStyle)).toBe(
-    "solid",
-  );
-  await page.keyboard.press("End");
-  await expect
-    .poll(() => guidance.evaluate((e) => e.scrollTop))
-    .toBeGreaterThan(0);
-  // WebKit animates keyboard scrolling. A positive scrollTop means it started,
-  // not that End has finished; verify the final content bounds directly.
-  await expect
-    .poll(() =>
-      guidance.evaluate((element) => {
-        const last = element.querySelector(".ride-guidance-copy > :last-child");
-        if (!last) throw new Error("Ride guidance text is missing");
-        const remaining =
-          last.getBoundingClientRect().bottom -
-          element.getBoundingClientRect().bottom;
-        console.log(JSON.stringify({ keyboardScroll: element.scrollTop, remaining }));
-        return remaining;
-      }),
-    )
-    .toBeLessThanOrEqual(1);
-  await page.keyboard.press("Tab");
-  expect(await guidance.evaluate((e) => e === document.activeElement)).toBe(
-    false,
-  );
-  const stop = page.getByRole("button", {
-    name: "Stop navigation",
-    exact: true,
+    expect(
+      reached,
+      "Keyboard must reach the clipped guidance, without programmatic focus",
+    ).toBe(true);
+    expect(
+      await guidance.evaluate((e) => getComputedStyle(e).outlineStyle),
+    ).toBe("solid");
+    await page.keyboard.press("End");
+    await expect
+      .poll(() => guidance.evaluate((e) => e.scrollTop))
+      .toBeGreaterThan(0);
+    // WebKit animates keyboard scrolling. A positive scrollTop means it started,
+    // not that End has finished; verify the final content bounds directly.
+    await expect
+      .poll(() =>
+        guidance.evaluate((element) => {
+          const text = [...element.querySelectorAll(".ride-guidance-copy > *")];
+          if (!text.length) throw new Error("Ride guidance text is missing");
+          // Short portrait visually places the heading before the distance, so
+          // DOM order cannot identify the lowest text box.
+          const remaining =
+            Math.max(
+              ...text.map((child) => child.getBoundingClientRect().bottom),
+            ) - element.getBoundingClientRect().bottom;
+          console.log(
+            JSON.stringify({ keyboardScroll: element.scrollTop, remaining }),
+          );
+          return remaining;
+        }),
+      )
+      .toBeLessThanOrEqual(1);
+    await page.keyboard.press("Tab");
+    expect(await guidance.evaluate((e) => e === document.activeElement)).toBe(
+      false,
+    );
+    const stop = page.getByRole("button", {
+      name: "Stop navigation",
+      exact: true,
+    });
+    const stopBox = await stop.boundingBox();
+    expect(stopBox!.y + stopBox!.height).toBeLessThanOrEqual(height + 1);
+    await stop.click();
+    await expect(page.locator(".ride-guidance")).toHaveCount(0);
   });
-  const stopBox = await stop.boundingBox();
-  expect(stopBox!.y + stopBox!.height).toBeLessThanOrEqual(321);
-  await stop.click();
-  await expect(page.locator(".ride-guidance")).toHaveCount(0);
-});
+}
 
 test("[sim-device] guidance enters the keyboard order only while clipped and can recover after rotation", async ({
   page,

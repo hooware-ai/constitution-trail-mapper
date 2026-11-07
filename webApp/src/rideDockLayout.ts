@@ -24,6 +24,12 @@ export function useRideDockLayout() {
       previous = next;
       dock.style.setProperty("--ride-body-min-height", `${bodyMinimum}px`);
       dock.style.setProperty("--ride-dock-min-height", `${dockMinimum}px`);
+      // Let short portrait guidance use the remaining space before the dock
+      // grows its optional scroll viewport beyond the reserved 44 pixels.
+      dock.parentElement!.style.setProperty(
+        "--ride-dock-min-height",
+        `${dockMinimum}px`,
+      );
     };
     const observer = new ResizeObserver(measure);
     observer.observe(directions);

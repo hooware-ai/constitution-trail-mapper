@@ -2163,6 +2163,32 @@ dialog::backdrop {
   }
 }
 
+/* On short portrait screens, the instruction gets the full card width and
+   comes before the secondary distance when guidance needs to scroll. */
+@media (max-width: 639px) and (max-height: 620px) {
+  .navigation .ride-guidance {
+    flex-shrink: 0;
+    max-height: min(50%, calc(100% - var(--ride-dock-min-height, 0px) - 6px));
+    grid-template-columns: 58px minmax(0, 1fr);
+    align-items: start;
+    row-gap: 4px;
+  }
+  .navigation .ride-guidance-copy {
+    display: contents;
+  }
+  .navigation .ride-guidance h2 {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .navigation .ride-turn-icon,
+  .navigation .ride-step-distance {
+    grid-row: 2;
+  }
+  .navigation .ride-guidance p {
+    grid-column: 1 / -1;
+  }
+}
+
 .directions li:has(.direction-group) {
   position: relative;
   padding-top: 1.25em;
