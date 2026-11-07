@@ -100,6 +100,9 @@ test("[engine] a confirmed Explore pin changes only the chosen endpoint and uses
     ["Plan to here", "destination", "start"],
   ] as const) {
     await entry();
+    // Earlier keyboard panning and responsive resizing can leave the center off the fixture network.
+    // Use the visible reset control before the route-dependent pick, rather than assuming that arbitrary point routes.
+    await page.getByRole("button", { name: "Reset map", exact: true }).click();
     await page
       .getByRole("button", { name: "Use map center", exact: true })
       .click();

@@ -17,7 +17,7 @@ const search = (page: Page) =>
 // The same set the dialog's Tab wrap uses: its first and last keyboard stops.
 const tabStops = (dialog: Locator) =>
   dialog.locator(
-    'button:not(:disabled),input:not(:disabled),select,a[href],[tabindex="0"]',
+    ':is(button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,a[href],[tabindex="0"]):visible',
   );
 
 const focusInside = (dialog: Locator) =>

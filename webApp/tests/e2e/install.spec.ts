@@ -1,3 +1,4 @@
+import { openHelp } from "../support/simplifiedNavigation";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { startAndHelpAreReachable } from "../support/start-help-dock";
@@ -83,7 +84,7 @@ async function detection(
   }, mode);
 }
 
-test("unknown detection offers working Chrome guidance; Help is last and returns focus", async ({
+test("unknown detection offers working Chrome guidance; More opens Help and regains focus", async ({
   page,
 }) => {
   await detection(page, "unknown");
@@ -100,20 +101,20 @@ test("unknown detection offers working Chrome guidance; Help is last and returns
   await expect(guide).toContainText("does not add offline");
   await page.keyboard.press("Escape");
   await expect(action(page)).toBeFocused();
-  const help = page
+  const more = page
     .getByRole("navigation", { name: "Main navigation" })
     .getByRole("button")
     .last();
-  await expect(help).toHaveAccessibleName("Help and about");
+  await expect(more).toHaveAccessibleName("More");
   await expect(
     page.locator(".app-header").getByRole("button", { name: /^Help/ }),
   ).toHaveCount(0);
-  await help.press("Enter");
+  await openHelp(page, true);
   await expect(
     page.getByRole("dialog", { name: "Help and about" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(help).toBeFocused();
+  await expect(more).toBeFocused();
 });
 
 test("confirmed self-PWA offers honest Open guidance with no navigation; other apps do not count", async ({
@@ -199,7 +200,9 @@ test("slow query settles to unknown and stays useful for a later prompt", async 
   expect(await page.evaluate(() => (window as any).promptCalls)).toBe(1);
 });
 
-test("standalone hides installation but keeps Help", async ({ page }) => {
+test("standalone hides installation but keeps Help through More", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     const original = window.matchMedia.bind(window);
     window.matchMedia = (query) => {
@@ -216,10 +219,11 @@ test("standalone hides installation but keeps Help", async ({ page }) => {
       .getByRole("navigation", { name: "Main navigation" })
       .getByRole("button")
       .last(),
-  ).toHaveAccessibleName("Help and about");
+  ).toHaveAccessibleName("More");
+  await openHelp(page, true);
 });
 
-test("non-Android hides installation but keeps the final Help tab", async ({
+test("non-Android hides installation but keeps Help through More", async ({
   browser,
   baseURL,
 }) => {
@@ -235,7 +239,8 @@ test("non-Android hides installation but keeps the final Help tab", async ({
       .getByRole("navigation", { name: "Main navigation" })
       .getByRole("button")
       .last(),
-  ).toHaveAccessibleName("Help and about");
+  ).toHaveAccessibleName("More");
+  await openHelp(page, true);
   await context.close();
 });
 
@@ -262,7 +267,7 @@ test("installation confirmation defeats a pending prompt's late failure", async 
   }
 });
 
-test("header and five bottom actions fit narrow, rotated and enlarged screens; guides are accessible", async ({
+test("header and three bottom actions fit narrow, rotated and enlarged screens; guides are accessible", async ({
   page,
 }) => {
   await detection(page, "unknown");
@@ -293,7 +298,7 @@ test("header and five bottom actions fit narrow, rotated and enlarged screens; g
             };
           }),
         );
-      expect(boxes).toHaveLength(5);
+      expect(boxes).toHaveLength(3);
       expect(
         boxes.every(
           (box) =>

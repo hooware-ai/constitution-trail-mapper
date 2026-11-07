@@ -87,13 +87,17 @@ test("[engine] a first opening has no prior rider data, persists only a blank Ho
   expect(Number.isSafeInteger(session.updatedAt)).toBe(true);
   expect(session.updatedAt).toBeGreaterThanOrEqual(initial.at);
   expect(session.updatedAt).toBeLessThanOrEqual(now);
-  // Truthful local-only wording, and no sign-in controls, on the first screen.
+  // Truthful local-only wording on Home, with the full storage explanation in More.
   await expect(page.locator("body")).toContainText(
     "On this browser · no account",
   );
-  await expect(page.locator("body")).toContainText(
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "More", exact: true }),
+  ).toContainText(
     "Saved routes and places stay in this browser. No sign-in or cloud sync.",
   );
+  await page.getByRole("button", { name: "Close More", exact: true }).click();
   await expect(
     page.getByRole("button", {
       name: /sign in|log in|google|apple|create an account/i,
