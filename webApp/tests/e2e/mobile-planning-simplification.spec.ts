@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { planPoint } from "../webkit/support";
 import {
   openDisclosure,
   openHelp,
@@ -100,6 +101,101 @@ for (const interaction of [
     await expect(page.locator(".panel h1")).toBeFocused();
   });
 }
+
+// Hold scheduled app frames, not the browser's keyboard implementation. The
+// queued focus callback is released while Enter is physically held down.
+for (const deliberateFocus of [false, true]) {
+  test(`deferred Explore heading respects destination focus: ${deliberateFocus}`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const request = window.requestAnimationFrame.bind(window);
+      const cancel = window.cancelAnimationFrame.bind(window);
+      let held = false;
+      let next = -1;
+      const frames = new Map<number, FrameRequestCallback>();
+      window.requestAnimationFrame = (callback) => {
+        if (!held) return request(callback);
+        const id = next--;
+        frames.set(id, callback);
+        return id;
+      };
+      window.cancelAnimationFrame = (id) => {
+        if (!frames.delete(id)) cancel(id);
+      };
+      (window as any).__holdHeadingFrames = () => {
+        held = true;
+      };
+      (window as any).__releaseHeadingFrames = () =>
+        new Promise<void>((resolve) => {
+          held = false;
+          request((time) => {
+            const queued = [...frames.values()];
+            frames.clear();
+            for (const callback of queued) callback(time);
+            resolve();
+          });
+        });
+    });
+    await page.setViewportSize({ width: 320, height: 256 });
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Plan a ride", exact: true }),
+    ).toBeFocused();
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await expect(
+      page.getByRole("dialog", { name: "More", exact: true }),
+    ).toBeVisible();
+    await page.evaluate(() => (window as any).__holdHeadingFrames());
+    await page.getByRole("button", { name: /^Explore map/ }).click();
+    const heading = page.getByRole("heading", {
+      name: "Trails around you",
+      exact: true,
+    });
+    await expect(heading).toBeVisible();
+    await expect(heading).not.toHaveAttribute("tabindex", "-1");
+    const summary = page.locator(".explore-layers > summary");
+    if (deliberateFocus) {
+      await summary.focus();
+      await expect(summary).toBeFocused();
+      await page.keyboard.down("Enter");
+    }
+    try {
+      await page.evaluate(() => (window as any).__releaseHeadingFrames());
+      await expect(heading).toHaveAttribute("tabindex", "-1");
+      if (deliberateFocus) await expect(summary).toBeFocused();
+      else await expect(heading).toBeFocused();
+    } finally {
+      if (deliberateFocus) await page.keyboard.up("Enter");
+    }
+    if (deliberateFocus) {
+      await expect(page.locator(".explore-layers")).toHaveAttribute("open", "");
+      const closures = page.getByRole("checkbox", {
+        name: /Reported closure areas/,
+      });
+      await closures.uncheck();
+      await expect(closures).not.toBeChecked();
+    }
+  });
+}
+
+test("a persistent Back opener still yields focus to the destination heading", async ({
+  page,
+}) => {
+  await planPoint(page);
+  await expect(
+    page.getByRole("heading", { name: "Route preview", exact: true }),
+  ).toBeFocused();
+  const back = page.locator(".panel > .back");
+  const opener = await back.elementHandle();
+  await back.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "Go somewhere", exact: true }),
+  ).toBeFocused();
+  expect(
+    await back.evaluate((element, previous) => element === previous, opener),
+  ).toBe(true);
+});
 
 test("reference disclosures preserve map semantics and keyboard access to search privacy", async ({
   page,

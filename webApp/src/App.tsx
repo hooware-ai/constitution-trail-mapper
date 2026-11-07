@@ -3,6 +3,7 @@ import {
   Suspense,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -2029,12 +2030,22 @@ export function App({ refresh }: AppProps = {}) {
     }
   }
   const focusScreenRef = useRef(screen);
-  useEffect(() => {
+  const pendingHeadingFocus = useRef<{
+    screen: typeof screen;
+    opener: Element | null;
+  } | null>(null);
+  useLayoutEffect(() => {
     const screenChanged = focusScreenRef.current !== screen;
+    // Capture before a rider can interact with the newly committed panel.
+    // Keep the original opener if a network render replaces the pending frame.
+    if (screenChanged && pendingHeadingFocus.current?.screen !== screen)
+      pendingHeadingFocus.current = { screen, opener: document.activeElement };
+    const opener = pendingHeadingFocus.current?.opener;
     const frame = requestAnimationFrame(() => {
       // Commit the screen only when its frame runs; a network update may cancel
       // and replace this frame without losing a pending navigation announcement.
       focusScreenRef.current = screen;
+      pendingHeadingFocus.current = null;
       const heading = panelRef.current?.querySelector<HTMLElement>("h1");
       if (heading) {
         heading.tabIndex = -1;
@@ -2043,6 +2054,16 @@ export function App({ refresh }: AppProps = {}) {
         // announce their heading, and an untouched boot focuses its new panel.
         const active = document.activeElement;
         if (!screenChanged && active && active !== document.body) return;
+        // Navigation announces its heading unless the rider already moved to
+        // another control in the destination panel. An unchanged Back opener
+        // must still yield focus to the new heading.
+        if (
+          screenChanged &&
+          active !== opener &&
+          active &&
+          panelRef.current?.contains(active)
+        )
+          return;
         heading.focus({ preventScroll: true });
       }
     });
